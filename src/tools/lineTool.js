@@ -1,6 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { getGridSpacingWorld, snapWorldToGrid } from "../core/grid.js";
+import { snapWorldToGrid } from "../core/grid.js";
 import { SNAP_PIXELS, getLineSnapPoints } from "../utils/snapping.js";
 
 export class LineTool extends BaseTool {
@@ -16,15 +16,16 @@ export class LineTool extends BaseTool {
     this.context.appState.snapDebugStatus = null;
   }
 
-  getSnappedPoint(worldPoint) {
+  getSnappedPoint(screenPoint) {
     const { appState, camera, shapeStore } = this.context;
-    const threshold = SNAP_PIXELS / camera.zoom;
+    const worldPoint = camera.screenToWorld(screenPoint);
+    const thresholdWorld = SNAP_PIXELS / camera.zoom;
     const candidates = [];
 
     if (appState.snapToGrid) {
-      const gridCandidate = snapWorldToGrid(worldPoint, getGridSpacingWorld(appState.gridSpacing));
+      const gridCandidate = snapWorldToGrid(worldPoint);
       const gridDistance = Math.hypot(worldPoint.x - gridCandidate.x, worldPoint.y - gridCandidate.y);
-      if (gridDistance <= threshold) {
+      if (gridDistance <= thresholdWorld) {
         candidates.push({ pt: gridCandidate, kind: "grid", distance: gridDistance });
       }
     }
@@ -33,7 +34,7 @@ export class LineTool extends BaseTool {
       for (const snapPoint of getLineSnapPoints(shapeStore.getShapes())) {
         const point = { x: snapPoint.x, y: snapPoint.y };
         const dist = Math.hypot(worldPoint.x - point.x, worldPoint.y - point.y);
-        if (dist <= threshold) {
+        if (dist <= thresholdWorld) {
           candidates.push({ pt: point, kind: snapPoint.type, distance: dist });
         }
       }
@@ -48,14 +49,14 @@ export class LineTool extends BaseTool {
     return { pt: winner.pt, snapped: true, kind: winner.kind };
   }
 
-  onMouseDown({ worldPoint }) {
+  onMouseDown({ screenPoint }) {
     const { appState, layerStore, historyStore, shapeStore } = this.context;
     const activeLayer = layerStore.getActiveLayer();
     if (!activeLayer || activeLayer.locked) {
       return;
     }
 
-    const snapped = this.getSnappedPoint(worldPoint);
+    const snapped = this.getSnappedPoint(screenPoint);
 
     if (!this.startPoint) {
       this.startPoint = snapped.pt;
@@ -81,9 +82,9 @@ export class LineTool extends BaseTool {
     appState.snapDebugStatus = null;
   }
 
-  onMouseMove({ worldPoint }) {
+  onMouseMove({ screenPoint }) {
     const { appState, layerStore } = this.context;
-    const snapped = this.getSnappedPoint(worldPoint);
+    const snapped = this.getSnappedPoint(screenPoint);
     appState.snapIndicator = snapped.snapped ? { point: snapped.pt, kind: snapped.kind } : null;
     appState.snapDebugStatus = snapped.kind === "grid" ? "SNAP: GRID" : "SNAP: OFF";
 
