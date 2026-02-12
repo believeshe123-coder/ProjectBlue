@@ -1,54 +1,10 @@
-const ISO_ANGLE = Math.PI / 6;
-const ISO_AXIS_A = { x: Math.cos(ISO_ANGLE), y: Math.sin(ISO_ANGLE) };
-const ISO_AXIS_B = { x: Math.cos(Math.PI - ISO_ANGLE), y: Math.sin(Math.PI - ISO_ANGLE) };
-const ISO_AXIS_C = { x: 0, y: 1 };
-const ISO_SPACING_WORLD = 32;
+const ISO_ANGLE = Math.PI / 6; // 30 degrees
+const dirA = { x: Math.cos(ISO_ANGLE), y: Math.sin(ISO_ANGLE) }; // +30°
+const dirB = { x: Math.cos(Math.PI - ISO_ANGLE), y: Math.sin(Math.PI - ISO_ANGLE) }; // 150°
+const isoSpacingWorld = 60;
 
-function getIsoBasis(spacingWorld) {
-  return {
-    e1: { x: ISO_AXIS_A.x * spacingWorld, y: ISO_AXIS_A.y * spacingWorld },
-    e2: { x: ISO_AXIS_B.x * spacingWorld, y: ISO_AXIS_B.y * spacingWorld },
-  };
-}
-
-export function getIsoSpacingWorld() {
-  return ISO_SPACING_WORLD;
-}
-
-export function snapWorldToIso(worldPt) {
-  const spacingWorld = getIsoSpacingWorld();
-  const { e1, e2 } = getIsoBasis(spacingWorld);
-  const basisCandidates = [
-    [e1, e2],
-    [e1, { x: 0, y: spacingWorld }],
-    [e2, { x: 0, y: spacingWorld }],
-  ];
-
-  let bestPoint = { ...worldPt };
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  for (const [a, b] of basisCandidates) {
-    const determinant = a.x * b.y - b.x * a.y;
-    if (Math.abs(determinant) < Number.EPSILON) {
-      continue;
-    }
-
-    const u = (worldPt.x * b.y - b.x * worldPt.y) / determinant;
-    const v = (a.x * worldPt.y - worldPt.x * a.y) / determinant;
-    const snapped = {
-      x: Math.round(u) * a.x + Math.round(v) * b.x,
-      y: Math.round(u) * a.y + Math.round(v) * b.y,
-    };
-    const distance = Math.hypot(worldPt.x - snapped.x, worldPt.y - snapped.y);
-
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestPoint = snapped;
-    }
-  }
-
-  return bestPoint;
-}
+const e1 = { x: dirA.x * isoSpacingWorld, y: dirA.y * isoSpacingWorld };
+const e2 = { x: dirB.x * isoSpacingWorld, y: dirB.y * isoSpacingWorld };
 
 function getVisibleWorldCorners(camera, canvasCssW, canvasCssH) {
   return [
@@ -59,41 +15,96 @@ function getVisibleWorldCorners(camera, canvasCssW, canvasCssH) {
   ];
 }
 
-function drawIsoFamily(ctx, camera, corners, spacingWorld, axisDir) {
-  const normal = { x: -axisDir.y, y: axisDir.x };
-  const values = corners.map((corner) => corner.x * normal.x + corner.y * normal.y);
-  const min = Math.min(...values) - spacingWorld * 2;
-  const max = Math.max(...values) + spacingWorld * 2;
-  const start = Math.floor(min / spacingWorld) * spacingWorld;
-  const end = Math.ceil(max / spacingWorld) * spacingWorld;
-  const span = 100000;
+export function getIsoSpacingWorld() {
+  return isoSpacingWorld;
+}
 
-  for (let c = start; c <= end; c += spacingWorld) {
-    const isMajor = Math.round(c / spacingWorld) % 5 === 0;
-    const base = { x: normal.x * c, y: normal.y * c };
-    const p1 = { x: base.x + axisDir.x * span, y: base.y + axisDir.y * span };
-    const p2 = { x: base.x - axisDir.x * span, y: base.y - axisDir.y * span };
-    const s1 = camera.worldToScreen(p1);
-    const s2 = camera.worldToScreen(p2);
+export function getIsoBasis() {
+  return {
+    e1: { ...e1 },
+    e2: { ...e2 },
+  };
+}
 
-    ctx.strokeStyle = isMajor ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.06)";
-    ctx.beginPath();
-    ctx.moveTo(s1.x, s1.y);
-    ctx.lineTo(s2.x, s2.y);
-    ctx.stroke();
+export function worldToIsoUV(worldPt) {
+  const a = e1.x;
+  const b = e1.y;
+  const c = e2.x;
+  const d = e2.y;
+  const det = a * d - b * c;
+
+  if (Math.abs(det) < Number.EPSILON) {
+    return { u: 0, v: 0 };
   }
+
+  return {
+    u: (worldPt.x * d - worldPt.y * c) / det,
+    v: (worldPt.y * a - worldPt.x * b) / det,
+  };
+}
+
+export function isoUVToWorld(u, v) {
+  return {
+    x: u * e1.x + v * e2.x,
+    y: u * e1.y + v * e2.y,
+  };
+}
+
+export function snapWorldToIso(worldPt) {
+  const { u, v } = worldToIsoUV(worldPt);
+  const uRounded = Math.round(u);
+  const vRounded = Math.round(v);
+
+  return {
+    point: isoUVToWorld(uRounded, vRounded),
+    u: uRounded,
+    v: vRounded,
+  };
 }
 
 export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH) {
-  const spacingWorld = getIsoSpacingWorld();
   const corners = getVisibleWorldCorners(camera, canvasCssW, canvasCssH);
+  const uvCorners = corners.map(worldToIsoUV);
+
+  const uValues = uvCorners.map((value) => value.u);
+  const vValues = uvCorners.map((value) => value.v);
+
+  const pad = 3;
+  const uMin = Math.floor(Math.min(...uValues)) - pad;
+  const uMax = Math.ceil(Math.max(...uValues)) + pad;
+  const vMin = Math.floor(Math.min(...vValues)) - pad;
+  const vMax = Math.ceil(Math.max(...vValues)) + pad;
 
   ctx.save();
   ctx.lineWidth = 1;
 
-  drawIsoFamily(ctx, camera, corners, spacingWorld, ISO_AXIS_A);
-  drawIsoFamily(ctx, camera, corners, spacingWorld, ISO_AXIS_B);
-  drawIsoFamily(ctx, camera, corners, spacingWorld, ISO_AXIS_C);
+  for (let u = uMin; u <= uMax; u += 1) {
+    const p0 = isoUVToWorld(u, vMin);
+    const p1 = isoUVToWorld(u, vMax);
+    const s0 = camera.worldToScreen(p0);
+    const s1 = camera.worldToScreen(p1);
+    const isMajor = u % 5 === 0;
+
+    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.17)" : "rgba(208, 241, 255, 0.09)";
+    ctx.beginPath();
+    ctx.moveTo(s0.x, s0.y);
+    ctx.lineTo(s1.x, s1.y);
+    ctx.stroke();
+  }
+
+  for (let v = vMin; v <= vMax; v += 1) {
+    const p0 = isoUVToWorld(uMin, v);
+    const p1 = isoUVToWorld(uMax, v);
+    const s0 = camera.worldToScreen(p0);
+    const s1 = camera.worldToScreen(p1);
+    const isMajor = v % 5 === 0;
+
+    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.17)" : "rgba(208, 241, 255, 0.09)";
+    ctx.beginPath();
+    ctx.moveTo(s0.x, s0.y);
+    ctx.lineTo(s1.x, s1.y);
+    ctx.stroke();
+  }
 
   ctx.restore();
 }

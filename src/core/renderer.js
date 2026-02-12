@@ -1,4 +1,3 @@
-import { drawGrid } from "./grid.js";
 import { drawIsoGrid } from "./isoGrid.js";
 
 export class Renderer {
@@ -16,14 +15,10 @@ export class Renderer {
     const height = this.canvas.clientHeight;
 
     this.ctx.clearRect(0, 0, width, height);
-    this.ctx.fillStyle = "#2f6f86";
+    this.ctx.fillStyle = "#2a5970";
     this.ctx.fillRect(0, 0, width, height);
 
-    if (this.appState.currentMode === "ISO") {
-      drawIsoGrid(this.ctx, this.camera, width, height);
-    } else {
-      drawGrid(this.ctx, this.camera, width, height);
-    }
+    drawIsoGrid(this.ctx, this.camera, width, height);
 
     const layers = this.layerStore.getLayers();
     const shapes = this.shapeStore.getShapes();
@@ -41,28 +36,27 @@ export class Renderer {
       this.appState.previewShape.draw(this.ctx, this.camera);
     }
 
-    if (this.appState.previewShape && this.appState.snapIndicator?.point) {
-      const p = this.camera.worldToScreen(this.appState.snapIndicator.point);
+    if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
+      const raw = this.camera.worldToScreen(this.appState.snapIndicator.rawPoint);
       this.ctx.save();
-      this.ctx.globalAlpha = 0.95;
-      this.ctx.strokeStyle = this.appState.snapIndicator.kind === "grid" ? "#ffe27a" : "#9ef4ff";
-      this.ctx.lineWidth = 1.5;
-      this.ctx.fillStyle = this.appState.snapIndicator.kind === "grid" ? "#ffe27a" : "#9ef4ff";
+      this.ctx.fillStyle = "#ff7676";
       this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      this.ctx.arc(raw.x, raw.y, 2.5, 0, Math.PI * 2);
       this.ctx.fill();
       this.ctx.restore();
     }
 
-    if (this.appState.previewShape && this.appState.snapDebugStatus) {
+    if (this.appState.debugSnap && this.appState.snapIndicator?.point) {
+      const p = this.camera.worldToScreen(this.appState.snapIndicator.point);
       this.ctx.save();
-      this.ctx.fillStyle = "rgba(14, 22, 30, 0.74)";
-      this.ctx.fillRect(width - 132, 8, 124, 28);
-      this.ctx.fillStyle = this.appState.snapDebugStatus === "SNAP: GRID" ? "#ffe27a" : "#f0f4f8";
-      this.ctx.font = "bold 13px Inter, system-ui, sans-serif";
-      this.ctx.textAlign = "right";
-      this.ctx.textBaseline = "middle";
-      this.ctx.fillText(this.appState.snapDebugStatus, width - 12, 22);
+      this.ctx.strokeStyle = "#ffe27a";
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.moveTo(p.x - 5, p.y);
+      this.ctx.lineTo(p.x + 5, p.y);
+      this.ctx.moveTo(p.x, p.y - 5);
+      this.ctx.lineTo(p.x, p.y + 5);
+      this.ctx.stroke();
       this.ctx.restore();
     }
   }

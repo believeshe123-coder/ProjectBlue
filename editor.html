@@ -17,31 +17,19 @@
       </nav>
 
       <div class="topbar" role="toolbar" aria-label="Blueprint editor toolbar">
-        <section class="tool-group" aria-label="Selection tools">
-          <div class="tool-grid">
-            <button class="tool-button" data-tool="select" type="button">Select</button>
-            <button class="tool-button" type="button">Move</button>
-            <button class="tool-button" type="button">Rotate</button>
-            <button class="tool-button" type="button">Erase</button>
-          </div>
-          <span class="group-title">Selection</span>
-        </section>
-
         <section class="tool-group" aria-label="Drawing tools">
           <div class="tool-grid">
-            <button class="tool-button" data-tool="line" type="button">Line</button>
+            <button class="tool-button" data-tool="select" type="button">Select</button>
             <button class="tool-button" data-tool="iso-line" type="button">Iso Line</button>
-            <button class="tool-button" type="button">Rectangle</button>
-            <button class="tool-button" type="button">Curve</button>
           </div>
-          <span class="group-title">Drawing</span>
+          <span class="group-title">Tools</span>
         </section>
 
         <section class="tool-group" aria-label="Snapping tools">
           <div class="tool-grid tool-grid--snap">
-            <label class="tool-toggle"><input id="snap-grid-toggle" type="checkbox" checked />Grid</label>
-            <label class="tool-toggle"><input id="snap-mid-toggle" type="checkbox" checked />Midpoint</label>
-            <label class="tool-toggle"><input type="checkbox" />Endpoint</label>
+            <label class="tool-toggle"><input id="snap-grid-toggle" type="checkbox" checked />Snap to Grid</label>
+            <label class="tool-toggle"><input id="snap-mid-toggle" type="checkbox" checked />Snap to Midpoint</label>
+            <label class="tool-toggle"><input id="debug-snap-toggle" type="checkbox" checked />Debug Snap</label>
           </div>
           <span class="group-title">Snapping</span>
         </section>
@@ -50,37 +38,14 @@
           <div class="tool-grid">
             <button class="tool-button" id="zoom-in-btn" type="button">Zoom In</button>
             <button class="tool-button" id="zoom-out-btn" type="button">Zoom Out</button>
-            <button class="tool-button" id="mode-toggle" type="button">2D / ISO</button>
             <button class="tool-button" id="reset-view-btn" type="button">Reset</button>
-          </div>
-          <span class="group-title">View</span>
-        </section>
-
-        <section class="tool-group" aria-label="Color tools">
-          <div class="tool-grid tool-grid--colors">
-            <button class="swatch swatch--primary" type="button" aria-label="Primary color"></button>
-            <button class="swatch" type="button" style="--swatch:#0a0a0a"></button>
-            <button class="swatch" type="button" style="--swatch:#d43131"></button>
-            <button class="swatch" type="button" style="--swatch:#2a64d4"></button>
-            <button class="swatch" type="button" style="--swatch:#2f8f3d"></button>
-          </div>
-          <span class="group-title">Colors</span>
-        </section>
-
-        <section class="tool-group" aria-label="Layer tools">
-          <div class="tool-grid tool-grid--layers">
-            <label class="layer-select-label" for="layer-select">Layer</label>
-            <select id="layer-select">
-              <option>Layer 1</option>
-            </select>
-            <button class="tool-button" type="button">+</button>
             <button class="tool-button" id="undo-btn" type="button">Undo</button>
             <button class="tool-button" id="redo-btn" type="button">Redo</button>
           </div>
-          <span class="group-title">Layers</span>
+          <span class="group-title">View</span>
         </section>
       </div>
-      <div class="status" id="status">Mode: 2D</div>
+      <div class="status" id="status">Mode: ISO</div>
     </header>
     <main class="canvas-shell">
       <canvas id="blueprint-canvas"></canvas>
