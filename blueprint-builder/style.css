@@ -1,0 +1,73 @@
+:root {
+  --topbar-height: 56px;
+  --bg: #0f1115;
+  --panel: #1c212a;
+  --text: #f2f4f8;
+  --accent: #59a8ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: var(--topbar-height);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--panel);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tool-group {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  background: #2a313b;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+button.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.canvas-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+#blueprint-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.status {
+  min-width: 120px;
+  text-align: right;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}

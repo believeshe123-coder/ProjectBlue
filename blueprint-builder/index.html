@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blueprint Builder</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="tool-group">
+        <button data-tool="select">Select</button>
+        <button data-tool="line">Line</button>
+        <button data-tool="iso-line">Iso Line</button>
+      </div>
+      <div class="tool-group">
+        <button id="mode-toggle">Toggle 2D / ISO</button>
+        <button id="undo-btn">Undo</button>
+        <button id="redo-btn">Redo</button>
+      </div>
+      <div class="status" id="status">Mode: 2D</div>
+    </header>
+    <main class="canvas-shell">
+      <canvas id="blueprint-canvas"></canvas>
+    </main>
+
+    <script type="module" src="./script.js"></script>
+  </body>
+</html>
