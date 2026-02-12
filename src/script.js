@@ -26,7 +26,6 @@ const historyStore = new HistoryStore();
 
 const appState = {
   currentMode: "2D",
-  gridSpacing: 32,
   previewShape: null,
   snapIndicator: null,
   snapToGrid: true,

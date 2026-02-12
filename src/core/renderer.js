@@ -20,9 +20,9 @@ export class Renderer {
     this.ctx.fillRect(0, 0, width, height);
 
     if (this.appState.currentMode === "ISO") {
-      drawIsoGrid(this.ctx, this.camera, { width, height, spacing: this.appState.gridSpacing });
+      drawIsoGrid(this.ctx, this.camera, width, height);
     } else {
-      drawGrid(this.ctx, this.camera, { width, height, spacing: this.appState.gridSpacing });
+      drawGrid(this.ctx, this.camera, width, height);
     }
 
     const layers = this.layerStore.getLayers();
@@ -47,12 +47,10 @@ export class Renderer {
       this.ctx.globalAlpha = 0.95;
       this.ctx.strokeStyle = this.appState.snapIndicator.kind === "grid" ? "#ffe27a" : "#9ef4ff";
       this.ctx.lineWidth = 1.5;
+      this.ctx.fillStyle = this.appState.snapIndicator.kind === "grid" ? "#ffe27a" : "#9ef4ff";
       this.ctx.beginPath();
-      this.ctx.moveTo(p.x - 6, p.y);
-      this.ctx.lineTo(p.x + 6, p.y);
-      this.ctx.moveTo(p.x, p.y - 6);
-      this.ctx.lineTo(p.x, p.y + 6);
-      this.ctx.stroke();
+      this.ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      this.ctx.fill();
       this.ctx.restore();
     }
 
