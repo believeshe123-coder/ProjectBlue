@@ -1,4 +1,4 @@
-import { draw2DGrid } from "./grid.js";
+import { drawGrid } from "./grid.js";
 import { drawIsoGrid } from "./isoGrid.js";
 
 export class Renderer {
@@ -20,9 +20,9 @@ export class Renderer {
     this.ctx.fillRect(0, 0, width, height);
 
     if (this.appState.currentMode === "ISO") {
-      drawIsoGrid(this.ctx, this.camera, { width, height }, this.appState.gridSpacing);
+      drawIsoGrid(this.ctx, this.camera, { width, height, spacing: this.appState.gridSpacing });
     } else {
-      draw2DGrid(this.ctx, this.camera, { width, height }, this.appState.gridSpacing);
+      drawGrid(this.ctx, this.camera, { width, height, spacing: this.appState.gridSpacing });
     }
 
     const layers = this.layerStore.getLayers();
@@ -41,14 +41,30 @@ export class Renderer {
       this.appState.previewShape.draw(this.ctx, this.camera);
     }
 
-    if (this.appState.snapIndicator?.point) {
+    if (this.appState.previewShape && this.appState.snapIndicator?.point) {
       const p = this.camera.worldToScreen(this.appState.snapIndicator.point);
       this.ctx.save();
       this.ctx.globalAlpha = 0.95;
-      this.ctx.fillStyle = this.appState.snapIndicator.kind === "grid" ? "#ffe27a" : "#9ef4ff";
+      this.ctx.strokeStyle = this.appState.snapIndicator.kind === "grid" ? "#ffe27a" : "#9ef4ff";
+      this.ctx.lineWidth = 1.5;
       this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-      this.ctx.fill();
+      this.ctx.moveTo(p.x - 6, p.y);
+      this.ctx.lineTo(p.x + 6, p.y);
+      this.ctx.moveTo(p.x, p.y - 6);
+      this.ctx.lineTo(p.x, p.y + 6);
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
+
+    if (this.appState.previewShape && this.appState.snapDebugStatus) {
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(14, 22, 30, 0.74)";
+      this.ctx.fillRect(width - 132, 8, 124, 28);
+      this.ctx.fillStyle = this.appState.snapDebugStatus === "SNAP: GRID" ? "#ffe27a" : "#f0f4f8";
+      this.ctx.font = "bold 13px Inter, system-ui, sans-serif";
+      this.ctx.textAlign = "right";
+      this.ctx.textBaseline = "middle";
+      this.ctx.fillText(this.appState.snapDebugStatus, width - 12, 22);
       this.ctx.restore();
     }
   }

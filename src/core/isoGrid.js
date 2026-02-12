@@ -1,6 +1,34 @@
-import { ISO_DIR_A, ISO_DIR_B } from "../utils/snapping.js";
+const ISO_ANGLE = Math.PI / 6;
+const ISO_DIR_A = { x: Math.cos(ISO_ANGLE), y: Math.sin(ISO_ANGLE) };
+const ISO_DIR_B = { x: Math.cos(Math.PI - ISO_ANGLE), y: Math.sin(Math.PI - ISO_ANGLE) };
 
 const ISO_DIR_C = { x: 0, y: 1 };
+const DEFAULT_ISO_SPACING_WORLD = 32;
+
+export function getIsoSpacingWorld(spacing = DEFAULT_ISO_SPACING_WORLD) {
+  return spacing;
+}
+
+export function snapWorldToIsoGrid(worldPt, spacing = DEFAULT_ISO_SPACING_WORLD) {
+  const spacingWorld = getIsoSpacingWorld(spacing);
+  const e1 = { x: ISO_DIR_A.x * spacingWorld, y: ISO_DIR_A.y * spacingWorld };
+  const e2 = { x: ISO_DIR_B.x * spacingWorld, y: ISO_DIR_B.y * spacingWorld };
+  const determinant = e1.x * e2.y - e2.x * e1.y;
+
+  if (Math.abs(determinant) < Number.EPSILON) {
+    return { ...worldPt };
+  }
+
+  const u = (worldPt.x * e2.y - e2.x * worldPt.y) / determinant;
+  const v = (e1.x * worldPt.y - worldPt.x * e1.y) / determinant;
+  const uRounded = Math.round(u);
+  const vRounded = Math.round(v);
+
+  return {
+    x: uRounded * e1.x + vRounded * e2.x,
+    y: uRounded * e1.y + vRounded * e2.y,
+  };
+}
 
 function getWorldCorners(camera, viewport) {
   return [
@@ -38,7 +66,10 @@ function drawIsoFamily(ctx, camera, corners, spacing, axisDir) {
   }
 }
 
-export function drawIsoGrid(ctx, camera, viewport, spacing = 32) {
+export function drawIsoGrid(ctx, camera, options = {}) {
+  const { width, height } = options;
+  const spacing = getIsoSpacingWorld(options.spacing);
+  const viewport = { width, height };
   const corners = getWorldCorners(camera, viewport);
 
   ctx.save();
