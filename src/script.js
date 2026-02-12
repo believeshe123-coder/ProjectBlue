@@ -7,7 +7,8 @@ import { ShapeStore } from "./state/shapeStore.js";
 import { IsoLineTool } from "./tools/isoLineTool.js";
 import { SelectTool } from "./tools/selectTool.js";
 import { MeasureTool } from "./tools/measureTool.js";
-import { PolygonTool } from "./tools/polygonTool.js";
+import { PolylineTool } from "./tools/polylineTool.js";
+import { FillTool } from "./tools/fillTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 
 const canvas = document.getElementById("blueprint-canvas");
@@ -23,6 +24,8 @@ const debugSnapToggle = document.getElementById("debug-snap-toggle");
 const unitPerCellInput = document.getElementById("unit-per-cell");
 const unitNameInput = document.getElementById("unit-name");
 const scaleDisplay = document.getElementById("scale-display");
+const showDimensionsToggle = document.getElementById("show-dimensions-toggle");
+const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
@@ -40,9 +43,12 @@ const appState = {
   unitName: "ft",
   unitPerCell: 1,
   currentFillColor: "rgba(78, 191, 255, 0.9)",
+  showDimensions: true,
+  continuePolyline: true,
 };
 
 const sharedContext = {
+  canvas,
   camera,
   shapeStore,
   layerStore,
@@ -54,7 +60,8 @@ const tools = {
   select: new SelectTool(sharedContext),
   "iso-line": new IsoLineTool(sharedContext),
   measure: new MeasureTool(sharedContext),
-  polygon: new PolygonTool(sharedContext),
+  polyline: new PolylineTool(sharedContext),
+  fill: new FillTool(sharedContext),
   erase: new EraseTool(sharedContext),
 };
 
@@ -110,9 +117,30 @@ function refreshScaleDisplay() {
   scaleDisplay.textContent = `1 grid = ${appState.unitPerCell} ${appState.unitName}`;
 }
 
+let statusMessage = null;
+let statusMessageTimeout = null;
+
 function refreshStatus() {
+  if (statusMessage) {
+    statusEl.textContent = statusMessage;
+    return;
+  }
+
   statusEl.textContent = `Mode: ISO | Zoom: ${camera.zoom.toFixed(2)}x | ${getSnapStatusLabel()}`;
 }
+
+appState.notifyStatus = (message, durationMs = 1400) => {
+  statusMessage = message;
+  refreshStatus();
+  if (statusMessageTimeout) {
+    clearTimeout(statusMessageTimeout);
+  }
+  statusMessageTimeout = window.setTimeout(() => {
+    statusMessage = null;
+    statusMessageTimeout = null;
+    refreshStatus();
+  }, durationMs);
+};
 
 function undo() {
   const previous = historyStore.undo(shapeStore.serialize());
@@ -168,6 +196,14 @@ snapMidToggle.addEventListener("change", (event) => {
 
 debugSnapToggle.addEventListener("change", (event) => {
   appState.debugSnap = event.target.checked;
+});
+
+continuePolylineToggle.addEventListener("change", (event) => {
+  appState.continuePolyline = event.target.checked;
+});
+
+showDimensionsToggle.addEventListener("change", (event) => {
+  appState.showDimensions = event.target.checked;
 });
 
 unitPerCellInput.addEventListener("input", (event) => {

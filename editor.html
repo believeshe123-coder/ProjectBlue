@@ -21,11 +21,20 @@
           <div class="tool-grid">
             <button class="tool-button" data-tool="select" type="button">Select</button>
             <button class="tool-button" data-tool="iso-line" type="button">Iso Line</button>
+            <button class="tool-button" data-tool="polyline" type="button">Polyline</button>
             <button class="tool-button" data-tool="measure" type="button">Measure</button>
-            <button class="tool-button" data-tool="polygon" type="button">Polygon</button>
+            <button class="tool-button" data-tool="fill" type="button">Fill</button>
             <button class="tool-button" data-tool="erase" type="button">Erase</button>
           </div>
           <span class="group-title">Tools</span>
+        </section>
+
+        <section class="tool-group" aria-label="Drawing options">
+          <div class="tool-grid tool-grid--snap">
+            <label class="tool-toggle"><input id="show-dimensions-toggle" type="checkbox" checked />Show Dimensions</label>
+            <label class="tool-toggle"><input id="continue-polyline-toggle" type="checkbox" checked />Continue Polyline</label>
+          </div>
+          <span class="group-title">Options</span>
         </section>
 
         <section class="tool-group" aria-label="Snapping tools">

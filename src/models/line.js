@@ -1,5 +1,6 @@
 import { Shape } from "./shape.js";
 import { distancePointToSegment } from "../utils/math.js";
+import { worldToIsoUV } from "../core/isoGrid.js";
 
 export class Line extends Shape {
   constructor({ start, end, ...rest }) {
@@ -8,7 +9,40 @@ export class Line extends Shape {
     this.end = { ...end };
   }
 
-  draw(ctx, camera) {
+  drawDimensionLabel(ctx, appState, midScreen) {
+    const { unitPerCell = 1, unitName = "ft" } = appState;
+    const isoStart = worldToIsoUV(this.start);
+    const isoEnd = worldToIsoUV(this.end);
+    const u1 = Math.round(isoStart.u);
+    const v1 = Math.round(isoStart.v);
+    const u2 = Math.round(isoEnd.u);
+    const v2 = Math.round(isoEnd.v);
+    const du = u2 - u1;
+    const dv = v2 - v1;
+    const gridLen = Math.hypot(du, dv);
+    const realLen = gridLen * unitPerCell;
+    const label = `${gridLen.toFixed(2)} grid | ${realLen.toFixed(2)} ${unitName}`;
+
+    ctx.save();
+    ctx.font = "11px Tahoma, Verdana, Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const textWidth = ctx.measureText(label).width;
+    const padX = 6;
+    const padY = 3;
+    const boxW = textWidth + padX * 2;
+    const boxH = 18;
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillRect(midScreen.x - boxW / 2, midScreen.y - boxH / 2, boxW, boxH);
+
+    ctx.fillStyle = "#ecf8ff";
+    ctx.fillText(label, midScreen.x, midScreen.y + padY * 0.15);
+    ctx.restore();
+  }
+
+  draw(ctx, camera, appState = {}) {
     const s = camera.worldToScreen(this.start);
     const e = camera.worldToScreen(this.end);
 
@@ -32,6 +66,14 @@ export class Line extends Shape {
     }
 
     ctx.restore();
+
+    if (appState.showDimensions) {
+      const midScreen = {
+        x: (s.x + e.x) / 2,
+        y: (s.y + e.y) / 2,
+      };
+      this.drawDimensionLabel(ctx, appState, midScreen);
+    }
   }
 
   containsPoint(point, toleranceWorld = 6) {
