@@ -1,6 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { snapPoint } from "../utils/snapping.js";
+import { snapWorldPoint } from "../utils/snapping.js";
 
 export class IsoLineTool extends BaseTool {
   constructor(context) {
@@ -16,14 +16,14 @@ export class IsoLineTool extends BaseTool {
 
   getSnappedPoint(worldPoint) {
     const { appState, camera, shapeStore } = this.context;
-    return snapPoint(worldPoint, {
+    return snapWorldPoint(worldPoint, {
       camera,
       mode: "ISO",
       gridSize: appState.gridSpacing,
       isoSpacing: appState.gridSpacing,
       shapes: shapeStore.getShapes(),
-      enableGridSnap: appState.snapToGrid,
-      enableMidSnap: appState.snapToMidpoints,
+      snapGridEnabled: appState.snapToGrid,
+      snapMidEnabled: appState.snapToMidpoints,
     });
   }
 
@@ -37,8 +37,8 @@ export class IsoLineTool extends BaseTool {
     const snapped = this.getSnappedPoint(worldPoint);
 
     if (!this.startPoint) {
-      this.startPoint = snapped.point;
-      appState.snapIndicator = snapped.snapped ? snapped.point : null;
+      this.startPoint = snapped.pt;
+      appState.snapIndicator = snapped.snapped ? { point: snapped.pt, kind: snapped.kind } : null;
       return;
     }
 
@@ -48,7 +48,7 @@ export class IsoLineTool extends BaseTool {
       fillColor: activeLayer.defaultFillColor,
       strokeWidth: 2,
       start: this.startPoint,
-      end: snapped.point,
+      end: snapped.pt,
     });
 
     historyStore.pushState(shapeStore.serialize());
@@ -60,11 +60,12 @@ export class IsoLineTool extends BaseTool {
 
   onMouseMove({ worldPoint }) {
     const { appState, layerStore } = this.context;
+    const snapped = this.getSnappedPoint(worldPoint);
+    appState.snapIndicator = snapped.snapped ? { point: snapped.pt, kind: snapped.kind } : null;
+
     if (!this.startPoint) {
       return;
     }
-
-    const snapped = this.getSnappedPoint(worldPoint);
     const layer = layerStore.getActiveLayer();
     appState.previewShape = new Line({
       layerId: layer?.id,
@@ -73,9 +74,7 @@ export class IsoLineTool extends BaseTool {
       strokeWidth: 1.5,
       opacity: 0.85,
       start: this.startPoint,
-      end: snapped.point,
+      end: snapped.pt,
     });
-
-    appState.snapIndicator = snapped.snapped ? snapped.point : null;
   }
 }

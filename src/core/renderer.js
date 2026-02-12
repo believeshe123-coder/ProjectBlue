@@ -41,18 +41,14 @@ export class Renderer {
       this.appState.previewShape.draw(this.ctx, this.camera);
     }
 
-    if (this.appState.snapIndicator) {
-      const p = this.camera.worldToScreen(this.appState.snapIndicator);
+    if (this.appState.snapIndicator?.point) {
+      const p = this.camera.worldToScreen(this.appState.snapIndicator.point);
       this.ctx.save();
-      this.ctx.strokeStyle = "#ffffff";
-      this.ctx.lineWidth = 1;
       this.ctx.globalAlpha = 0.95;
+      this.ctx.fillStyle = this.appState.snapIndicator.kind === "grid" ? "#ffe27a" : "#9ef4ff";
       this.ctx.beginPath();
-      this.ctx.moveTo(p.x - 6, p.y);
-      this.ctx.lineTo(p.x + 6, p.y);
-      this.ctx.moveTo(p.x, p.y - 6);
-      this.ctx.lineTo(p.x, p.y + 6);
-      this.ctx.stroke();
+      this.ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      this.ctx.fill();
       this.ctx.restore();
     }
   }
