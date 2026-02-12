@@ -1,8 +1,9 @@
 export class CanvasEngine {
-  constructor({ canvas, camera, getTool, onContextMenuPrevent }) {
+  constructor({ canvas, camera, getTool, onContextMenuPrevent, onViewChange }) {
     this.canvas = canvas;
     this.camera = camera;
     this.getTool = getTool;
+    this.onViewChange = onViewChange;
     this.isPanning = false;
     this.lastPointer = null;
 
@@ -53,8 +54,9 @@ export class CanvasEngine {
   handleWheel(event) {
     event.preventDefault();
     const pointer = this.getScreenPointFromEvent(event);
-    const factor = event.deltaY < 0 ? 1.08 : 0.92;
+    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
     this.camera.zoomAt(pointer, factor);
+    this.onViewChange?.();
   }
 
   handleMouseDown(event) {
@@ -77,6 +79,7 @@ export class CanvasEngine {
     if (this.isPanning && this.lastPointer) {
       this.camera.panBy(screenPoint.x - this.lastPointer.x, screenPoint.y - this.lastPointer.y);
       this.lastPointer = screenPoint;
+      this.onViewChange?.();
       return;
     }
 

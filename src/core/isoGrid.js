@@ -1,6 +1,6 @@
 const SQRT3_OVER_2 = Math.sqrt(3) / 2;
 
-function drawIsoFamily(ctx, camera, viewport, spacing, vector, color) {
+function drawIsoFamily(ctx, camera, viewport, spacing, vector) {
   const corners = [
     camera.screenToWorld({ x: 0, y: 0 }),
     camera.screenToWorld({ x: viewport.width, y: 0 }),
@@ -15,10 +15,12 @@ function drawIsoFamily(ctx, camera, viewport, spacing, vector, color) {
   const end = Math.ceil(max / spacing) * spacing;
 
   ctx.save();
-  ctx.strokeStyle = color;
   ctx.lineWidth = 1;
 
   for (let c = start; c <= end; c += spacing) {
+    const isMajor = Math.round(c / spacing) % 5 === 0;
+    ctx.strokeStyle = isMajor ? "rgba(255, 255, 255, 0.12)" : "rgba(255, 255, 255, 0.06)";
+
     const p1 = { x: -100000, y: (vector.y * -100000 - c) / vector.x };
     const p2 = { x: 100000, y: (vector.y * 100000 - c) / vector.x };
 
@@ -35,7 +37,7 @@ function drawIsoFamily(ctx, camera, viewport, spacing, vector, color) {
 }
 
 export function drawIsoGrid(ctx, camera, viewport, spacing = 32) {
-  drawIsoFamily(ctx, camera, viewport, spacing, { x: 1, y: 0 }, "rgba(120, 220, 180, 0.17)");
-  drawIsoFamily(ctx, camera, viewport, spacing, { x: 0.5, y: SQRT3_OVER_2 }, "rgba(120, 170, 255, 0.17)");
-  drawIsoFamily(ctx, camera, viewport, spacing, { x: 0.5, y: -SQRT3_OVER_2 }, "rgba(255, 165, 120, 0.17)");
+  drawIsoFamily(ctx, camera, viewport, spacing, { x: 1, y: 0 });
+  drawIsoFamily(ctx, camera, viewport, spacing, { x: 0.5, y: SQRT3_OVER_2 });
+  drawIsoFamily(ctx, camera, viewport, spacing, { x: 0.5, y: -SQRT3_OVER_2 });
 }

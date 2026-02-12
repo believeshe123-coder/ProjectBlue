@@ -14,7 +14,10 @@ export class Renderer {
   renderFrame() {
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
+
     this.ctx.clearRect(0, 0, width, height);
+    this.ctx.fillStyle = "#2f6f86";
+    this.ctx.fillRect(0, 0, width, height);
 
     if (this.appState.currentMode === "ISO") {
       drawIsoGrid(this.ctx, this.camera, { width, height }, this.appState.gridSpacing);
@@ -36,6 +39,21 @@ export class Renderer {
 
     if (this.appState.previewShape) {
       this.appState.previewShape.draw(this.ctx, this.camera);
+    }
+
+    if (this.appState.snapIndicator) {
+      const p = this.camera.worldToScreen(this.appState.snapIndicator);
+      this.ctx.save();
+      this.ctx.strokeStyle = "#ffffff";
+      this.ctx.lineWidth = 1;
+      this.ctx.globalAlpha = 0.95;
+      this.ctx.beginPath();
+      this.ctx.moveTo(p.x - 6, p.y);
+      this.ctx.lineTo(p.x + 6, p.y);
+      this.ctx.moveTo(p.x, p.y - 6);
+      this.ctx.lineTo(p.x, p.y + 6);
+      this.ctx.stroke();
+      this.ctx.restore();
     }
   }
 }
