@@ -24,3 +24,44 @@ export function projectPointToAxis(from, to, axis) {
     y: from.y + axis.y * t,
   };
 }
+
+export function distancePointToSegment(point, start, end) {
+  const segX = end.x - start.x;
+  const segY = end.y - start.y;
+  const lenSq = segX * segX + segY * segY;
+
+  if (lenSq <= Number.EPSILON) {
+    return distance(point, start);
+  }
+
+  const t = clamp(((point.x - start.x) * segX + (point.y - start.y) * segY) / lenSq, 0, 1);
+  const proj = {
+    x: start.x + t * segX,
+    y: start.y + t * segY,
+  };
+
+  return distance(point, proj);
+}
+
+export function isPointInPolygon(point, polygonPoints) {
+  if (!polygonPoints || polygonPoints.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+
+  for (let i = 0, j = polygonPoints.length - 1; i < polygonPoints.length; j = i, i += 1) {
+    const xi = polygonPoints[i].x;
+    const yi = polygonPoints[i].y;
+    const xj = polygonPoints[j].x;
+    const yj = polygonPoints[j].y;
+
+    const intersects = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi + Number.EPSILON) + xi;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}

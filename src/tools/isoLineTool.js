@@ -1,8 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { snapWorldToIso, worldToIsoUV } from "../core/isoGrid.js";
-
-const SNAP_PIXELS = 14;
+import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 export class IsoLineTool extends BaseTool {
   constructor(context) {
@@ -17,35 +15,6 @@ export class IsoLineTool extends BaseTool {
     this.context.appState.snapDebugStatus = "SNAP: OFF";
   }
 
-  getSnappedPoint(screenPoint) {
-    const { appState, camera } = this.context;
-    const raw = camera.screenToWorld(screenPoint);
-    const thresholdWorld = SNAP_PIXELS / camera.zoom;
-    const snappedCandidate = snapWorldToIso(raw);
-    const gridDistance = Math.hypot(raw.x - snappedCandidate.point.x, raw.y - snappedCandidate.point.y);
-
-    if (appState.snapToGrid && gridDistance <= thresholdWorld) {
-      return {
-        raw,
-        pt: snappedCandidate.point,
-        snapped: true,
-        kind: "grid",
-        u: snappedCandidate.u,
-        v: snappedCandidate.v,
-      };
-    }
-
-    const uv = worldToIsoUV(raw);
-    return {
-      raw,
-      pt: raw,
-      snapped: false,
-      kind: null,
-      u: uv.u,
-      v: uv.v,
-    };
-  }
-
   onMouseDown({ screenPoint }) {
     const { appState, layerStore, historyStore, shapeStore } = this.context;
     const activeLayer = layerStore.getActiveLayer();
@@ -53,18 +22,11 @@ export class IsoLineTool extends BaseTool {
       return;
     }
 
-    const snapped = this.getSnappedPoint(screenPoint);
+    const snapped = getSnappedPoint(this.context, screenPoint);
 
     if (!this.startPoint) {
       this.startPoint = snapped.pt;
-      appState.snapIndicator = {
-        rawPoint: snapped.raw,
-        point: snapped.snapped ? snapped.pt : null,
-        kind: snapped.kind,
-        u: snapped.snapped ? snapped.u : null,
-        v: snapped.snapped ? snapped.v : null,
-      };
-      appState.snapDebugStatus = snapped.snapped ? `SNAP: GRID (u=${snapped.u}, v=${snapped.v})` : "SNAP: OFF";
+      updateSnapIndicator(appState, snapped);
       return;
     }
 
@@ -87,15 +49,8 @@ export class IsoLineTool extends BaseTool {
 
   onMouseMove({ screenPoint }) {
     const { appState, layerStore } = this.context;
-    const snapped = this.getSnappedPoint(screenPoint);
-    appState.snapIndicator = {
-      rawPoint: snapped.raw,
-      point: snapped.snapped ? snapped.pt : null,
-      kind: snapped.kind,
-      u: snapped.snapped ? snapped.u : null,
-      v: snapped.snapped ? snapped.v : null,
-    };
-    appState.snapDebugStatus = snapped.snapped ? `SNAP: GRID (u=${snapped.u}, v=${snapped.v})` : "SNAP: OFF";
+    const snapped = getSnappedPoint(this.context, screenPoint);
+    updateSnapIndicator(appState, snapped);
 
     if (!this.startPoint) {
       return;

@@ -1,0 +1,108 @@
+import { BaseTool } from "./baseTool.js";
+import { Line } from "../models/line.js";
+import { Polygon } from "../models/polygon.js";
+import { distance } from "../utils/math.js";
+import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+
+export class PolygonTool extends BaseTool {
+  constructor(context) {
+    super(context);
+    this.points = [];
+    this.cursorPoint = null;
+  }
+
+  onDeactivate() {
+    this.points = [];
+    this.cursorPoint = null;
+    this.context.appState.previewShape = null;
+  }
+
+  tryCommitPolygon() {
+    const { layerStore, shapeStore, historyStore, appState } = this.context;
+    const layer = layerStore.getActiveLayer();
+    if (!layer || this.points.length < 3) {
+      return;
+    }
+
+    historyStore.pushState(shapeStore.serialize());
+    shapeStore.addShape(
+      new Polygon({
+        layerId: layer.id,
+        points: this.points,
+        closed: true,
+        fillColor: appState.currentFillColor,
+        strokeColor: "#ffffff",
+        strokeWidth: 2,
+        opacity: 0.25,
+      }),
+    );
+
+    this.points = [];
+    this.cursorPoint = null;
+    appState.previewShape = null;
+  }
+
+  onMouseDown({ screenPoint }) {
+    const { appState } = this.context;
+    const snapped = getSnappedPoint(this.context, screenPoint);
+    updateSnapIndicator(appState, snapped);
+
+    if (this.points.length >= 3) {
+      const closeDistance = distance(snapped.pt, this.points[0]);
+      const closeThreshold = 12 / this.context.camera.zoom;
+      if (closeDistance <= closeThreshold) {
+        this.tryCommitPolygon();
+        return;
+      }
+    }
+
+    this.points.push(snapped.pt);
+  }
+
+  onMouseMove({ screenPoint }) {
+    const snapped = getSnappedPoint(this.context, screenPoint);
+    updateSnapIndicator(this.context.appState, snapped);
+    this.cursorPoint = snapped.pt;
+
+    if (this.points.length === 0) {
+      this.context.appState.previewShape = null;
+      return;
+    }
+
+    const points = [...this.points, this.cursorPoint];
+    this.context.appState.previewShape = new Polygon({
+      layerId: this.context.layerStore.getActiveLayer()?.id,
+      points,
+      closed: false,
+      fillColor: "transparent",
+      strokeColor: "#d5ffe8",
+      strokeWidth: 1.5,
+      opacity: 0.85,
+    });
+
+    if (this.points.length === 1) {
+      this.context.appState.previewShape = new Line({
+        layerId: this.context.layerStore.getActiveLayer()?.id,
+        start: this.points[0],
+        end: this.cursorPoint,
+        strokeColor: "#d5ffe8",
+        strokeWidth: 1.5,
+        fillColor: "transparent",
+        opacity: 0.85,
+      });
+    }
+  }
+
+  onKeyDown(event) {
+    if (event.key === "Enter") {
+      this.tryCommitPolygon();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      this.points = [];
+      this.cursorPoint = null;
+      this.context.appState.previewShape = null;
+    }
+  }
+}

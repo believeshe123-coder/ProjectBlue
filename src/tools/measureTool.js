@@ -1,0 +1,73 @@
+import { BaseTool } from "./baseTool.js";
+import { Line } from "../models/line.js";
+import { Measurement } from "../models/measurement.js";
+import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+
+export class MeasureTool extends BaseTool {
+  constructor(context) {
+    super(context);
+    this.a = null;
+  }
+
+  onDeactivate() {
+    this.a = null;
+    this.context.appState.previewShape = null;
+  }
+
+  onMouseDown({ screenPoint }) {
+    const { appState, layerStore, historyStore, shapeStore } = this.context;
+    const activeLayer = layerStore.getActiveLayer();
+    if (!activeLayer || activeLayer.locked) {
+      return;
+    }
+
+    const snapped = getSnappedPoint(this.context, screenPoint);
+    updateSnapIndicator(appState, snapped);
+
+    if (!this.a) {
+      this.a = snapped.pt;
+      return;
+    }
+
+    historyStore.pushState(shapeStore.serialize());
+    shapeStore.addShape(
+      new Measurement({
+        layerId: activeLayer.id,
+        strokeColor: "#ffffff",
+        strokeWidth: 2,
+        fillColor: "transparent",
+        a: this.a,
+        b: snapped.pt,
+      }),
+    );
+
+    this.a = null;
+    appState.previewShape = null;
+  }
+
+  onMouseMove({ screenPoint }) {
+    const snapped = getSnappedPoint(this.context, screenPoint);
+    updateSnapIndicator(this.context.appState, snapped);
+
+    if (!this.a) {
+      return;
+    }
+
+    this.context.appState.previewShape = new Line({
+      layerId: this.context.layerStore.getActiveLayer()?.id,
+      start: this.a,
+      end: snapped.pt,
+      strokeColor: "#ffffff",
+      strokeWidth: 1.5,
+      opacity: 0.85,
+      fillColor: "transparent",
+    });
+  }
+
+  onKeyDown(event) {
+    if (event.key === "Escape") {
+      this.a = null;
+      this.context.appState.previewShape = null;
+    }
+  }
+}

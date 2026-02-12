@@ -3,15 +3,11 @@ import { BaseTool } from "./baseTool.js";
 export class SelectTool extends BaseTool {
   onMouseDown({ worldPoint }) {
     const { shapeStore, camera } = this.context;
-    const shapes = shapeStore.getShapes();
 
-    for (const shape of shapes) {
-      shape.selected = false;
-    }
+    shapeStore.clearSelection();
 
     const toleranceWorld = 8 / camera.zoom;
-    const hitPoint = { x: worldPoint.x, y: worldPoint.y + toleranceWorld / 2 };
-    const hit = [...shapes].reverse().find((shape) => shape.containsPoint(hitPoint));
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld);
     if (hit) {
       hit.selected = true;
     }
