@@ -1,5 +1,5 @@
 import { Shape } from "./shape.js";
-import { distance } from "../utils/math.js";
+import { distancePointToSegment } from "../utils/math.js";
 
 export class Line extends Shape {
   constructor({ start, end, ...rest }) {
@@ -34,16 +34,8 @@ export class Line extends Shape {
     ctx.restore();
   }
 
-  containsPoint(point) {
-    const length = distance(this.start, this.end);
-    if (!length) {
-      return false;
-    }
-
-    const d1 = distance(this.start, point);
-    const d2 = distance(this.end, point);
-    const tolerance = 6;
-    return Math.abs(d1 + d2 - length) <= tolerance;
+  containsPoint(point, toleranceWorld = 6) {
+    return distancePointToSegment(point, this.start, this.end) <= toleranceWorld;
   }
 
   toJSON() {

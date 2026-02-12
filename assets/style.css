@@ -223,3 +223,36 @@ body {
   width: 100%;
   height: 100%;
 }
+
+.tool-grid--scale {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.scale-label {
+  font-size: 11px;
+}
+
+.scale-input {
+  min-height: 24px;
+  border-top: 1px solid #8a8d8c;
+  border-left: 1px solid #8a8d8c;
+  border-right: 1px solid #ffffff;
+  border-bottom: 1px solid #ffffff;
+  border-radius: 0;
+  background: #f2f2f2;
+  font-size: 11px;
+  padding: 1px 4px;
+}
+
+.scale-display {
+  margin-top: 2px;
+  min-height: 22px;
+  padding: 2px 4px;
+  border-top: 1px solid #8a8d8c;
+  border-left: 1px solid #8a8d8c;
+  border-right: 1px solid #ffffff;
+  border-bottom: 1px solid #ffffff;
+  font-size: 11px;
+  background: #dadddc;
+}

@@ -1,9 +1,20 @@
 import { Line } from "../models/line.js";
+import { Polygon } from "../models/polygon.js";
+import { Measurement } from "../models/measurement.js";
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") {
     return new Line(serialized);
   }
+
+  if (serialized.type === "polygon") {
+    return new Polygon(serialized);
+  }
+
+  if (serialized.type === "measurement") {
+    return new Measurement(serialized);
+  }
+
   return null;
 }
 
@@ -24,6 +35,27 @@ export class ShapeStore {
     }
     this.shapes.splice(index, 1);
     return true;
+  }
+
+  clearSelection() {
+    for (const shape of this.shapes) {
+      shape.selected = false;
+    }
+  }
+
+  getSelectedShapes() {
+    return this.shapes.filter((shape) => shape.selected);
+  }
+
+  deleteSelectedShapes() {
+    const selectedIds = new Set(this.getSelectedShapes().map((shape) => shape.id));
+    const before = this.shapes.length;
+    this.shapes = this.shapes.filter((shape) => !selectedIds.has(shape.id));
+    return before - this.shapes.length;
+  }
+
+  getTopmostHitShape(point, toleranceWorld = 6) {
+    return [...this.shapes].reverse().find((shape) => shape.containsPoint(point, toleranceWorld)) ?? null;
   }
 
   getShapes() {

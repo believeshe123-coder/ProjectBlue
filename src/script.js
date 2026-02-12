@@ -6,6 +6,9 @@ import { LayerStore } from "./state/layerStore.js";
 import { ShapeStore } from "./state/shapeStore.js";
 import { IsoLineTool } from "./tools/isoLineTool.js";
 import { SelectTool } from "./tools/selectTool.js";
+import { MeasureTool } from "./tools/measureTool.js";
+import { PolygonTool } from "./tools/polygonTool.js";
+import { EraseTool } from "./tools/eraseTool.js";
 
 const canvas = document.getElementById("blueprint-canvas");
 const statusEl = document.getElementById("status");
@@ -17,6 +20,9 @@ const redoButton = document.getElementById("redo-btn");
 const snapGridToggle = document.getElementById("snap-grid-toggle");
 const snapMidToggle = document.getElementById("snap-mid-toggle");
 const debugSnapToggle = document.getElementById("debug-snap-toggle");
+const unitPerCellInput = document.getElementById("unit-per-cell");
+const unitNameInput = document.getElementById("unit-name");
+const scaleDisplay = document.getElementById("scale-display");
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
@@ -31,6 +37,9 @@ const appState = {
   snapToMidpoints: true,
   debugSnap: true,
   snapDebugStatus: "SNAP: OFF",
+  unitName: "ft",
+  unitPerCell: 1,
+  currentFillColor: "rgba(78, 191, 255, 0.9)",
 };
 
 const sharedContext = {
@@ -44,6 +53,9 @@ const sharedContext = {
 const tools = {
   select: new SelectTool(sharedContext),
   "iso-line": new IsoLineTool(sharedContext),
+  measure: new MeasureTool(sharedContext),
+  polygon: new PolygonTool(sharedContext),
+  erase: new EraseTool(sharedContext),
 };
 
 let currentTool = tools.select;
@@ -94,6 +106,10 @@ function getSnapStatusLabel() {
   return base;
 }
 
+function refreshScaleDisplay() {
+  scaleDisplay.textContent = `1 grid = ${appState.unitPerCell} ${appState.unitName}`;
+}
+
 function refreshStatus() {
   statusEl.textContent = `Mode: ISO | Zoom: ${camera.zoom.toFixed(2)}x | ${getSnapStatusLabel()}`;
 }
@@ -115,6 +131,16 @@ function redo() {
 function zoomBy(factor) {
   camera.zoomAt(getCanvasCenterScreenPoint(), factor);
   refreshStatus();
+}
+
+function deleteSelection() {
+  const selectedCount = shapeStore.getSelectedShapes().length;
+  if (selectedCount === 0) {
+    return;
+  }
+
+  historyStore.pushState(shapeStore.serialize());
+  shapeStore.deleteSelectedShapes();
 }
 
 for (const button of document.querySelectorAll("[data-tool]")) {
@@ -142,6 +168,20 @@ snapMidToggle.addEventListener("change", (event) => {
 
 debugSnapToggle.addEventListener("change", (event) => {
   appState.debugSnap = event.target.checked;
+});
+
+unitPerCellInput.addEventListener("input", (event) => {
+  const value = Number.parseFloat(event.target.value);
+  if (Number.isFinite(value) && value > 0) {
+    appState.unitPerCell = value;
+    refreshScaleDisplay();
+  }
+});
+
+unitNameInput.addEventListener("change", (event) => {
+  const text = event.target.value.trim();
+  appState.unitName = text || "ft";
+  refreshScaleDisplay();
 });
 
 window.addEventListener("keydown", (event) => {
@@ -179,10 +219,17 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault();
+    deleteSelection();
+    return;
+  }
+
   currentTool.onKeyDown(event);
 });
 
 setActiveTool("select");
+refreshScaleDisplay();
 refreshStatus();
 
 function frame() {

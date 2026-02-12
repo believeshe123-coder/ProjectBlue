@@ -27,13 +27,13 @@ export class Renderer {
       if (!layer.visible) continue;
       for (const shape of shapes) {
         if (shape.layerId === layer.id) {
-          shape.draw(this.ctx, this.camera);
+          shape.draw(this.ctx, this.camera, this.appState);
         }
       }
     }
 
     if (this.appState.previewShape) {
-      this.appState.previewShape.draw(this.ctx, this.camera);
+      this.appState.previewShape.draw(this.ctx, this.camera, this.appState);
     }
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {

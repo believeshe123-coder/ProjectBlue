@@ -16,7 +16,7 @@ export class Shape {
     throw new Error("Shape.draw must be implemented by subclasses.");
   }
 
-  containsPoint(_point) {
+  containsPoint(_point, _toleranceWorld = 0) {
     return false;
   }
 
