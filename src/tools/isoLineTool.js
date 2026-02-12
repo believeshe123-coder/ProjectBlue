@@ -1,7 +1,8 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { snapWorldToIso } from "../core/isoGrid.js";
-import { SNAP_PIXELS, getLineSnapPoints } from "../utils/snapping.js";
+import { snapWorldToIso, worldToIsoUV } from "../core/isoGrid.js";
+
+const SNAP_PIXELS = 14;
 
 export class IsoLineTool extends BaseTool {
   constructor(context) {
@@ -13,40 +14,36 @@ export class IsoLineTool extends BaseTool {
     this.startPoint = null;
     this.context.appState.previewShape = null;
     this.context.appState.snapIndicator = null;
-    this.context.appState.snapDebugStatus = null;
+    this.context.appState.snapDebugStatus = "SNAP: OFF";
   }
 
   getSnappedPoint(screenPoint) {
-    const { appState, camera, shapeStore } = this.context;
-    const worldPoint = camera.screenToWorld(screenPoint);
+    const { appState, camera } = this.context;
+    const raw = camera.screenToWorld(screenPoint);
     const thresholdWorld = SNAP_PIXELS / camera.zoom;
-    const candidates = [];
+    const snappedCandidate = snapWorldToIso(raw);
+    const gridDistance = Math.hypot(raw.x - snappedCandidate.point.x, raw.y - snappedCandidate.point.y);
 
-    if (appState.snapToGrid) {
-      const gridCandidate = snapWorldToIso(worldPoint);
-      const gridDistance = Math.hypot(worldPoint.x - gridCandidate.x, worldPoint.y - gridCandidate.y);
-      if (gridDistance <= thresholdWorld) {
-        candidates.push({ pt: gridCandidate, kind: "grid", distance: gridDistance });
-      }
+    if (appState.snapToGrid && gridDistance <= thresholdWorld) {
+      return {
+        raw,
+        pt: snappedCandidate.point,
+        snapped: true,
+        kind: "grid",
+        u: snappedCandidate.u,
+        v: snappedCandidate.v,
+      };
     }
 
-    if (appState.snapToMidpoints) {
-      for (const snapPoint of getLineSnapPoints(shapeStore.getShapes())) {
-        const point = { x: snapPoint.x, y: snapPoint.y };
-        const dist = Math.hypot(worldPoint.x - point.x, worldPoint.y - point.y);
-        if (dist <= thresholdWorld) {
-          candidates.push({ pt: point, kind: snapPoint.type, distance: dist });
-        }
-      }
-    }
-
-    if (!candidates.length) {
-      return { pt: worldPoint, snapped: false, kind: null };
-    }
-
-    candidates.sort((a, b) => a.distance - b.distance);
-    const winner = candidates[0];
-    return { pt: winner.pt, snapped: true, kind: winner.kind };
+    const uv = worldToIsoUV(raw);
+    return {
+      raw,
+      pt: raw,
+      snapped: false,
+      kind: null,
+      u: uv.u,
+      v: uv.v,
+    };
   }
 
   onMouseDown({ screenPoint }) {
@@ -60,8 +57,14 @@ export class IsoLineTool extends BaseTool {
 
     if (!this.startPoint) {
       this.startPoint = snapped.pt;
-      appState.snapIndicator = snapped.snapped ? { point: snapped.pt, kind: snapped.kind } : null;
-      appState.snapDebugStatus = snapped.kind === "grid" ? "SNAP: GRID" : "SNAP: OFF";
+      appState.snapIndicator = {
+        rawPoint: snapped.raw,
+        point: snapped.snapped ? snapped.pt : null,
+        kind: snapped.kind,
+        u: snapped.snapped ? snapped.u : null,
+        v: snapped.snapped ? snapped.v : null,
+      };
+      appState.snapDebugStatus = snapped.snapped ? `SNAP: GRID (u=${snapped.u}, v=${snapped.v})` : "SNAP: OFF";
       return;
     }
 
@@ -79,18 +82,25 @@ export class IsoLineTool extends BaseTool {
     this.startPoint = null;
     appState.previewShape = null;
     appState.snapIndicator = null;
-    appState.snapDebugStatus = null;
+    appState.snapDebugStatus = "SNAP: OFF";
   }
 
   onMouseMove({ screenPoint }) {
     const { appState, layerStore } = this.context;
     const snapped = this.getSnappedPoint(screenPoint);
-    appState.snapIndicator = snapped.snapped ? { point: snapped.pt, kind: snapped.kind } : null;
-    appState.snapDebugStatus = snapped.kind === "grid" ? "SNAP: GRID" : "SNAP: OFF";
+    appState.snapIndicator = {
+      rawPoint: snapped.raw,
+      point: snapped.snapped ? snapped.pt : null,
+      kind: snapped.kind,
+      u: snapped.snapped ? snapped.u : null,
+      v: snapped.snapped ? snapped.v : null,
+    };
+    appState.snapDebugStatus = snapped.snapped ? `SNAP: GRID (u=${snapped.u}, v=${snapped.v})` : "SNAP: OFF";
 
     if (!this.startPoint) {
       return;
     }
+
     const layer = layerStore.getActiveLayer();
     appState.previewShape = new Line({
       layerId: layer?.id,
