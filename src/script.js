@@ -11,8 +11,12 @@ import { SelectTool } from "./tools/selectTool.js";
 const canvas = document.getElementById("blueprint-canvas");
 const statusEl = document.getElementById("status");
 const modeToggleButton = document.getElementById("mode-toggle");
+const zoomInButton = document.getElementById("zoom-in-btn");
+const zoomOutButton = document.getElementById("zoom-out-btn");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
+const snapGridToggle = document.getElementById("snap-grid-toggle");
+const snapMidToggle = document.getElementById("snap-mid-toggle");
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
@@ -23,6 +27,9 @@ const appState = {
   currentMode: "2D",
   gridSpacing: 32,
   previewShape: null,
+  snapIndicator: null,
+  snapToGrid: true,
+  snapToMidpoints: true,
 };
 
 const sharedContext = {
@@ -46,6 +53,7 @@ const canvasEngine = new CanvasEngine({
   canvas,
   camera,
   getTool: () => currentTool,
+  onViewChange: refreshStatus,
 });
 
 const renderer = new Renderer({
@@ -59,6 +67,14 @@ const renderer = new Renderer({
 
 layerStore.createLayer("Layer 1");
 
+function getCanvasCenterScreenPoint() {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: rect.width / 2,
+    y: rect.height / 2,
+  };
+}
+
 function setActiveTool(toolName) {
   currentTool.onDeactivate();
   currentTool = tools[toolName];
@@ -70,7 +86,7 @@ function setActiveTool(toolName) {
 }
 
 function refreshStatus() {
-  statusEl.textContent = `Mode: ${appState.currentMode}`;
+  statusEl.textContent = `Mode: ${appState.currentMode} | Zoom: ${camera.zoom.toFixed(2)}x`;
 }
 
 function undo() {
@@ -87,6 +103,11 @@ function redo() {
   appState.previewShape = null;
 }
 
+function zoomBy(factor) {
+  camera.zoomAt(getCanvasCenterScreenPoint(), factor);
+  refreshStatus();
+}
+
 for (const button of document.querySelectorAll("[data-tool]")) {
   button.addEventListener("click", () => setActiveTool(button.dataset.tool));
 }
@@ -96,8 +117,18 @@ modeToggleButton.addEventListener("click", () => {
   refreshStatus();
 });
 
+zoomInButton.addEventListener("click", () => zoomBy(1.15));
+zoomOutButton.addEventListener("click", () => zoomBy(1 / 1.15));
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
+
+snapGridToggle.addEventListener("change", (event) => {
+  appState.snapToGrid = event.target.checked;
+});
+
+snapMidToggle.addEventListener("change", (event) => {
+  appState.snapToMidpoints = event.target.checked;
+});
 
 window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
@@ -112,6 +143,25 @@ window.addEventListener("keydown", (event) => {
   if (isCtrlOrMeta && key === "y") {
     event.preventDefault();
     redo();
+    return;
+  }
+
+  if (event.key === "+" || event.key === "=") {
+    event.preventDefault();
+    zoomBy(1.15);
+    return;
+  }
+
+  if (event.key === "-") {
+    event.preventDefault();
+    zoomBy(1 / 1.15);
+    return;
+  }
+
+  if (event.key === "0") {
+    event.preventDefault();
+    camera.resetView();
+    refreshStatus();
     return;
   }
 

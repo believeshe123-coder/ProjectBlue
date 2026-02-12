@@ -1,6 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { snapToEndpoint, snapToIsoAxes } from "../utils/snapping.js";
+import { snapPoint } from "../utils/snapping.js";
 
 export class IsoLineTool extends BaseTool {
   constructor(context) {
@@ -11,6 +11,20 @@ export class IsoLineTool extends BaseTool {
   onDeactivate() {
     this.startPoint = null;
     this.context.appState.previewShape = null;
+    this.context.appState.snapIndicator = null;
+  }
+
+  getSnappedPoint(worldPoint) {
+    const { appState, camera, shapeStore } = this.context;
+    return snapPoint(worldPoint, {
+      camera,
+      mode: "ISO",
+      gridSize: appState.gridSpacing,
+      isoSpacing: appState.gridSpacing,
+      shapes: shapeStore.getShapes(),
+      enableGridSnap: appState.snapToGrid,
+      enableMidSnap: appState.snapToMidpoints,
+    });
   }
 
   onMouseDown({ worldPoint }) {
@@ -20,13 +34,13 @@ export class IsoLineTool extends BaseTool {
       return;
     }
 
+    const snapped = this.getSnappedPoint(worldPoint);
+
     if (!this.startPoint) {
-      this.startPoint = snapToIsoAxes(worldPoint, worldPoint, appState.gridSpacing);
+      this.startPoint = snapped.point;
+      appState.snapIndicator = snapped.snapped ? snapped.point : null;
       return;
     }
-
-    const snapped = snapToIsoAxes(this.startPoint, worldPoint, appState.gridSpacing);
-    const withEndpoint = snapToEndpoint(snapped, shapeStore.getShapes()).point;
 
     const line = new Line({
       layerId: activeLayer.id,
@@ -34,13 +48,14 @@ export class IsoLineTool extends BaseTool {
       fillColor: activeLayer.defaultFillColor,
       strokeWidth: 2,
       start: this.startPoint,
-      end: withEndpoint,
+      end: snapped.point,
     });
 
     historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(line);
     this.startPoint = null;
     appState.previewShape = null;
+    appState.snapIndicator = null;
   }
 
   onMouseMove({ worldPoint }) {
@@ -49,16 +64,18 @@ export class IsoLineTool extends BaseTool {
       return;
     }
 
-    const snapped = snapToIsoAxes(this.startPoint, worldPoint, appState.gridSpacing);
+    const snapped = this.getSnappedPoint(worldPoint);
     const layer = layerStore.getActiveLayer();
     appState.previewShape = new Line({
       layerId: layer?.id,
-      strokeColor: "#7ce4ad",
+      strokeColor: "#d5ffe8",
       fillColor: "transparent",
       strokeWidth: 1.5,
       opacity: 0.85,
       start: this.startPoint,
-      end: snapped,
+      end: snapped.point,
     });
+
+    appState.snapIndicator = snapped.snapped ? snapped.point : null;
   }
 }

@@ -5,8 +5,8 @@ export class Camera {
     this.x = 0;
     this.y = 0;
     this.zoom = 1;
-    this.minZoom = 0.1;
-    this.maxZoom = 8;
+    this.minZoom = 0.2;
+    this.maxZoom = 6;
   }
 
   worldToScreen(point) {
@@ -34,5 +34,11 @@ export class Camera {
     const after = this.screenToWorld(screenPoint);
     this.x += before.x - after.x;
     this.y += before.y - after.y;
+  }
+
+  resetView() {
+    this.x = 0;
+    this.y = 0;
+    this.zoom = 1;
   }
 }
