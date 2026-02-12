@@ -85,8 +85,21 @@ function setActiveTool(toolName) {
   });
 }
 
+function getSnapStatusLabel() {
+  const snapKind = appState.snapIndicator?.kind;
+  if (snapKind === "grid") {
+    return "SNAP: GRID";
+  }
+
+  if (snapKind === "midpoint" || snapKind === "endpoint") {
+    return "SNAP: MID";
+  }
+
+  return `Snap: Grid ${appState.snapToGrid ? "ON" : "OFF"} | Mid ${appState.snapToMidpoints ? "ON" : "OFF"}`;
+}
+
 function refreshStatus() {
-  statusEl.textContent = `Mode: ${appState.currentMode} | Zoom: ${camera.zoom.toFixed(2)}x`;
+  statusEl.textContent = `Mode: ${appState.currentMode} | Zoom: ${camera.zoom.toFixed(2)}x | ${getSnapStatusLabel()}`;
 }
 
 function undo() {
@@ -124,10 +137,12 @@ redoButton.addEventListener("click", redo);
 
 snapGridToggle.addEventListener("change", (event) => {
   appState.snapToGrid = event.target.checked;
+  refreshStatus();
 });
 
 snapMidToggle.addEventListener("change", (event) => {
   appState.snapToMidpoints = event.target.checked;
+  refreshStatus();
 });
 
 window.addEventListener("keydown", (event) => {
