@@ -7,22 +7,78 @@
     <link rel="stylesheet" href="./assets/style.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="tool-group">
-        <button data-tool="select">Select</button>
-        <button data-tool="line">Line</button>
-        <button data-tool="iso-line">Iso Line</button>
-      </div>
-      <div class="tool-group">
-        <button id="mode-toggle">Toggle 2D / ISO</button>
-        <button id="zoom-in-btn">Zoom In (+)</button>
-        <button id="zoom-out-btn">Zoom Out (-)</button>
-        <button id="undo-btn">Undo</button>
-        <button id="redo-btn">Redo</button>
-      </div>
-      <div class="tool-group tool-group--checks">
-        <label><input id="snap-grid-toggle" type="checkbox" checked /> Snap to Grid</label>
-        <label><input id="snap-mid-toggle" type="checkbox" checked /> Snap to Midpoints</label>
+    <header class="workspace-chrome">
+      <nav class="menu-bar" aria-label="Classic menu bar">
+        <button class="menu-item" type="button">File</button>
+        <button class="menu-item" type="button">Edit</button>
+        <button class="menu-item" type="button">View</button>
+        <button class="menu-item" type="button">Tools</button>
+        <button class="menu-item" type="button">Help</button>
+      </nav>
+
+      <div class="topbar" role="toolbar" aria-label="Blueprint editor toolbar">
+        <section class="tool-group" aria-label="Selection tools">
+          <div class="tool-grid">
+            <button class="tool-button" data-tool="select" type="button">Select</button>
+            <button class="tool-button" type="button">Move</button>
+            <button class="tool-button" type="button">Rotate</button>
+            <button class="tool-button" type="button">Erase</button>
+          </div>
+          <span class="group-title">Selection</span>
+        </section>
+
+        <section class="tool-group" aria-label="Drawing tools">
+          <div class="tool-grid">
+            <button class="tool-button" data-tool="line" type="button">Line</button>
+            <button class="tool-button" data-tool="iso-line" type="button">Iso Line</button>
+            <button class="tool-button" type="button">Rectangle</button>
+            <button class="tool-button" type="button">Curve</button>
+          </div>
+          <span class="group-title">Drawing</span>
+        </section>
+
+        <section class="tool-group" aria-label="Snapping tools">
+          <div class="tool-grid tool-grid--snap">
+            <label class="tool-toggle"><input id="snap-grid-toggle" type="checkbox" checked />Grid</label>
+            <label class="tool-toggle"><input id="snap-mid-toggle" type="checkbox" checked />Midpoint</label>
+            <label class="tool-toggle"><input type="checkbox" />Endpoint</label>
+          </div>
+          <span class="group-title">Snapping</span>
+        </section>
+
+        <section class="tool-group" aria-label="View tools">
+          <div class="tool-grid">
+            <button class="tool-button" id="zoom-in-btn" type="button">Zoom In</button>
+            <button class="tool-button" id="zoom-out-btn" type="button">Zoom Out</button>
+            <button class="tool-button" id="mode-toggle" type="button">2D / ISO</button>
+            <button class="tool-button" id="reset-view-btn" type="button">Reset</button>
+          </div>
+          <span class="group-title">View</span>
+        </section>
+
+        <section class="tool-group" aria-label="Color tools">
+          <div class="tool-grid tool-grid--colors">
+            <button class="swatch swatch--primary" type="button" aria-label="Primary color"></button>
+            <button class="swatch" type="button" style="--swatch:#0a0a0a"></button>
+            <button class="swatch" type="button" style="--swatch:#d43131"></button>
+            <button class="swatch" type="button" style="--swatch:#2a64d4"></button>
+            <button class="swatch" type="button" style="--swatch:#2f8f3d"></button>
+          </div>
+          <span class="group-title">Colors</span>
+        </section>
+
+        <section class="tool-group" aria-label="Layer tools">
+          <div class="tool-grid tool-grid--layers">
+            <label class="layer-select-label" for="layer-select">Layer</label>
+            <select id="layer-select">
+              <option>Layer 1</option>
+            </select>
+            <button class="tool-button" type="button">+</button>
+            <button class="tool-button" id="undo-btn" type="button">Undo</button>
+            <button class="tool-button" id="redo-btn" type="button">Redo</button>
+          </div>
+          <span class="group-title">Layers</span>
+        </section>
       </div>
       <div class="status" id="status">Mode: 2D</div>
     </header>
