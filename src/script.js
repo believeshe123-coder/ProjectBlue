@@ -31,6 +31,7 @@ const appState = {
   snapIndicator: null,
   snapToGrid: true,
   snapToMidpoints: true,
+  snapDebugStatus: null,
 };
 
 const sharedContext = {
