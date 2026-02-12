@@ -18,21 +18,36 @@ export function getIsoSpacingWorld() {
 export function snapWorldToIso(worldPt) {
   const spacingWorld = getIsoSpacingWorld();
   const { e1, e2 } = getIsoBasis(spacingWorld);
-  const determinant = e1.x * e2.y - e2.x * e1.y;
+  const basisCandidates = [
+    [e1, e2],
+    [e1, { x: 0, y: spacingWorld }],
+    [e2, { x: 0, y: spacingWorld }],
+  ];
 
-  if (Math.abs(determinant) < Number.EPSILON) {
-    return { ...worldPt };
+  let bestPoint = { ...worldPt };
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const [a, b] of basisCandidates) {
+    const determinant = a.x * b.y - b.x * a.y;
+    if (Math.abs(determinant) < Number.EPSILON) {
+      continue;
+    }
+
+    const u = (worldPt.x * b.y - b.x * worldPt.y) / determinant;
+    const v = (a.x * worldPt.y - worldPt.x * a.y) / determinant;
+    const snapped = {
+      x: Math.round(u) * a.x + Math.round(v) * b.x,
+      y: Math.round(u) * a.y + Math.round(v) * b.y,
+    };
+    const distance = Math.hypot(worldPt.x - snapped.x, worldPt.y - snapped.y);
+
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestPoint = snapped;
+    }
   }
 
-  const u = (worldPt.x * e2.y - e2.x * worldPt.y) / determinant;
-  const v = (e1.x * worldPt.y - worldPt.x * e1.y) / determinant;
-  const uRounded = Math.round(u);
-  const vRounded = Math.round(v);
-
-  return {
-    x: uRounded * e1.x + vRounded * e2.x,
-    y: uRounded * e1.y + vRounded * e2.y,
-  };
+  return bestPoint;
 }
 
 function getVisibleWorldCorners(camera, canvasCssW, canvasCssH) {
