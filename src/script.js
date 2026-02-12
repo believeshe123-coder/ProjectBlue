@@ -13,6 +13,7 @@ const statusEl = document.getElementById("status");
 const modeToggleButton = document.getElementById("mode-toggle");
 const zoomInButton = document.getElementById("zoom-in-btn");
 const zoomOutButton = document.getElementById("zoom-out-btn");
+const resetViewButton = document.getElementById("reset-view-btn");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
 const snapGridToggle = document.getElementById("snap-grid-toggle");
@@ -132,6 +133,10 @@ modeToggleButton.addEventListener("click", () => {
 
 zoomInButton.addEventListener("click", () => zoomBy(1.15));
 zoomOutButton.addEventListener("click", () => zoomBy(1 / 1.15));
+resetViewButton?.addEventListener("click", () => {
+  camera.resetView();
+  refreshStatus();
+});
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
 
