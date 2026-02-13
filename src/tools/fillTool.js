@@ -1,6 +1,7 @@
 import { BaseTool } from "./baseTool.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { distance, isPointInPolygon } from "../utils/math.js";
+import { ensureActiveDrawableLayer } from "./toolUtils.js";
 
 const MAX_CYCLE_LENGTH = 48;
 const MIN_AREA = 1e-4;
@@ -154,10 +155,8 @@ export class FillTool extends BaseTool {
 
   onMouseDown({ event, worldPoint }) {
     const { shapeStore, layerStore, historyStore, appState, camera } = this.context;
-    const activeLayer = layerStore.getActiveLayer();
-    if (!activeLayer || activeLayer.locked) {
-      return;
-    }
+    const activeLayer = ensureActiveDrawableLayer(this.context);
+    if (!activeLayer) return;
 
     const shapes = shapeStore.getShapes();
     const clickFillColor = event?.button === 2 ? appState.currentStyle.fillColor : appState.currentStyle.strokeColor;

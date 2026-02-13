@@ -108,3 +108,21 @@ export function getFillRegionStyle(appState) {
     fillOpacity: style.fillEnabled ? style.fillOpacity : 0,
   };
 }
+
+export function ensureActiveDrawableLayer(context, { notify = true } = {}) {
+  const { layerStore, appState } = context;
+  const activeLayer = layerStore.getActiveLayer();
+  if (!activeLayer) {
+    return null;
+  }
+
+  if (activeLayer.locked !== true && activeLayer.visible !== false) {
+    return activeLayer;
+  }
+
+  if (notify) {
+    appState.notifyStatus?.("Layer is locked", 1400);
+  }
+
+  return null;
+}
