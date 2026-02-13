@@ -17,6 +17,8 @@
         <button class="menu-item" type="button">Help</button>
       </nav>
 
+      <div class="ui-drawer" data-open="true">
+        <div class="ui-drawer__full">
       <div class="topbar" role="toolbar" aria-label="Blueprint editor ribbon">
         <section class="tool-group" aria-label="Drawing tools">
           <div class="tool-grid tool-grid--tiles">
@@ -146,6 +148,21 @@
         </section>
         </div>
         <div class="status" id="status">Mode: ISO</div>
+        </div>
+
+        <div class="ui-drawer__mini" role="toolbar" aria-label="Compact toolbar">
+          <button class="mini-btn" data-tool="isoLine" type="button">Line</button>
+          <button class="mini-btn" data-tool="fill" type="button">Fill</button>
+          <button class="mini-btn" data-tool="erase" type="button">Erase</button>
+
+          <div class="mini-spacer"></div>
+
+          <button class="mini-btn" data-action="undo" type="button">Undo</button>
+          <button class="mini-btn" data-action="redo" type="button">Redo</button>
+        </div>
+
+        <button class="ui-drawer__toggle" id="ui-drawer-toggle" type="button" aria-label="Toggle settings">▲</button>
+      </div>
       </header>
       <main class="canvas-wrap">
         <canvas id="blueprint-canvas"></canvas>
