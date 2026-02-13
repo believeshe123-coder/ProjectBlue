@@ -29,9 +29,10 @@ export function formatRealDistance(value, unitName) {
   return `${safeValue.toFixed(2)} ${unit}`;
 }
 
-export function buildDistanceLabel({ startUV, endUV, unitPerCell = 1, unitName = "ft" }) {
+export function buildDistanceLabel({ startUV, endUV, unitPerCell = 1, unitName = "ft", showGridUnits = false }) {
   const gridLen = computeIsoGridSteps(startUV, endUV);
   const realLen = gridLen * unitPerCell;
   const formattedReal = formatRealDistance(realLen, unitName);
-  return `${gridLen.toFixed(2)} grid | ${formattedReal}`;
+  if (showGridUnits) return `${gridLen.toFixed(2)} grid | ${formattedReal}`;
+  return formattedReal;
 }

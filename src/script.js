@@ -27,6 +27,7 @@ const unitNameInput = document.getElementById("unit-name");
 const scaleDisplay = document.getElementById("scale-display");
 const showDimensionsToggle = document.getElementById("show-dimensions-toggle");
 const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
+const showGridUnitsToggle = document.getElementById("show-grid-units-toggle");
 
 const strokeOpacityInput = document.getElementById("stroke-opacity-input");
 const strokeWidthInput = document.getElementById("stroke-width-input");
@@ -73,6 +74,7 @@ const appState = {
   unitPerCell: 1,
   showDimensions: true,
   continuePolyline: true,
+  showGridUnits: false,
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -347,6 +349,11 @@ continuePolylineToggle.addEventListener("change", (event) => {
   appState.continuePolyline = event.target.checked;
 });
 
+showGridUnitsToggle.addEventListener("change", (event) => {
+  appState.showGridUnits = event.target.checked;
+  localStorage.setItem("showGridUnits", appState.showGridUnits ? "1" : "0");
+});
+
 showDimensionsToggle.addEventListener("change", (event) => {
   appState.showDimensions = event.target.checked;
 });
@@ -452,6 +459,8 @@ renderStyleSwatches();
 renderRecentColors();
 refreshStyleUI();
 uiOpen = localStorage.getItem("uiDrawerOpen") !== "0";
+appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
+showGridUnitsToggle.checked = appState.showGridUnits;
 applyUiDrawerState();
 setActiveTool("select");
 refreshScaleDisplay();
