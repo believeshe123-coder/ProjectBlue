@@ -18,10 +18,11 @@ export class Renderer {
 
     this.ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
     this.ctx.clearRect(0, 0, canvasCssW, canvasCssH);
-    this.ctx.fillStyle = "#244a60";
+    const useBlackAndWhite = this.appState.canvasTheme === "bw";
+    this.ctx.fillStyle = useBlackAndWhite ? "#f3f3f3" : "#3e6478";
     this.ctx.fillRect(0, 0, canvasCssW, canvasCssH);
 
-    drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH);
+    drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH, { blackAndWhite: useBlackAndWhite });
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
       const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);

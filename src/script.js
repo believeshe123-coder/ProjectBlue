@@ -25,6 +25,7 @@ const scaleDisplay = document.getElementById("scale-display");
 const showDimensionsToggle = document.getElementById("show-dimensions-toggle");
 const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 const showGridUnitsToggle = document.getElementById("show-grid-units-toggle");
+const canvasThemeSelect = document.getElementById("canvas-theme-select");
 
 const strokeOpacityInput = document.getElementById("stroke-opacity-input");
 const strokeWidthInput = document.getElementById("stroke-width-input");
@@ -72,6 +73,7 @@ const appState = {
   showDimensions: true,
   continuePolyline: true,
   showGridUnits: false,
+  canvasTheme: "light",
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -337,6 +339,11 @@ showGridUnitsToggle.addEventListener("change", (event) => {
   localStorage.setItem("showGridUnits", appState.showGridUnits ? "1" : "0");
 });
 
+canvasThemeSelect?.addEventListener("change", (event) => {
+  appState.canvasTheme = event.target.value === "bw" ? "bw" : "light";
+  localStorage.setItem("canvasTheme", appState.canvasTheme);
+});
+
 showDimensionsToggle.addEventListener("change", (event) => {
   appState.showDimensions = event.target.checked;
 });
@@ -446,6 +453,10 @@ renderStyleSwatches();
 renderRecentColors();
 refreshStyleUI();
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
+const storedCanvasTheme = localStorage.getItem("canvasTheme");
+if (storedCanvasTheme === "bw" || storedCanvasTheme === "light") {
+  appState.canvasTheme = storedCanvasTheme;
+}
 const debugSnapResetV1 = localStorage.getItem("debugSnapResetV1");
 if (debugSnapResetV1 !== "1") {
   localStorage.setItem("debugSnap", "0");
@@ -454,6 +465,9 @@ if (debugSnapResetV1 !== "1") {
 appState.debugSnap = localStorage.getItem("debugSnap") === "1";
 debugSnapToggle.checked = appState.debugSnap;
 showGridUnitsToggle.checked = appState.showGridUnits;
+if (canvasThemeSelect) {
+  canvasThemeSelect.value = appState.canvasTheme;
+}
 setActiveTool("select");
 refreshScaleDisplay();
 refreshStatus();

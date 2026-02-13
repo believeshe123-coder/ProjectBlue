@@ -62,7 +62,7 @@ export function snapWorldToIso(worldPt) {
   };
 }
 
-export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH) {
+export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH, options = {}) {
   const corners = getVisibleWorldCorners(camera, canvasCssW, canvasCssH);
   const uvCorners = corners.map(worldToIsoUV);
 
@@ -77,6 +77,9 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH) {
 
   ctx.save();
   ctx.lineWidth = 1;
+  const gridColors = options.blackAndWhite
+    ? { major: "rgba(0, 0, 0, 0.22)", minor: "rgba(0, 0, 0, 0.09)" }
+    : { major: "rgba(208, 241, 255, 0.13)", minor: "rgba(208, 241, 255, 0.05)" };
 
   for (let u = uMin; u <= uMax; u += 1) {
     const p0 = isoUVToWorld(u, vMin);
@@ -85,7 +88,7 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH) {
     const s1 = camera.worldToScreen(p1);
     const isMajor = u % 5 === 0;
 
-    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.13)" : "rgba(208, 241, 255, 0.05)";
+    ctx.strokeStyle = isMajor ? gridColors.major : gridColors.minor;
     ctx.beginPath();
     ctx.moveTo(s0.x, s0.y);
     ctx.lineTo(s1.x, s1.y);
@@ -99,7 +102,7 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH) {
     const s1 = camera.worldToScreen(p1);
     const isMajor = v % 5 === 0;
 
-    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.13)" : "rgba(208, 241, 255, 0.05)";
+    ctx.strokeStyle = isMajor ? gridColors.major : gridColors.minor;
     ctx.beginPath();
     ctx.moveTo(s0.x, s0.y);
     ctx.lineTo(s1.x, s1.y);
