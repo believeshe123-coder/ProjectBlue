@@ -44,10 +44,19 @@ export class Renderer {
     const layers = this.layerStore.getLayers();
     const shapes = this.shapeStore.getShapes();
 
+    const drawOrder = ["fill-region", "polygon", "line", "measurement"];
     for (const layer of layers) {
       if (!layer.visible) continue;
-      for (const shape of shapes) {
-        if (shape.layerId === layer.id) {
+      const layerShapes = shapes.filter((shape) => shape.layerId === layer.id);
+      for (const type of drawOrder) {
+        for (const shape of layerShapes) {
+          if (shape.type === type) {
+            shape.draw(this.ctx, this.camera, this.appState);
+          }
+        }
+      }
+      for (const shape of layerShapes) {
+        if (!drawOrder.includes(shape.type)) {
           shape.draw(this.ctx, this.camera, this.appState);
         }
       }

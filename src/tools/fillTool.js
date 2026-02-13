@@ -2,13 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { FillRegion } from "../models/fillRegion.js";
 import { getCurrentStyle } from "./toolUtils.js";
 
-const BOUNDARY_WIDTH = 3;
-const MAX_FILL_RATIO = 0.35;
-const SIMPLIFY_EPSILON = 2.25;
-
-function setPixel(mask, width, x, y, value) {
-  mask[y * width + x] = value;
-}
+const MAX_FILL_RATIO = 0.95;
 
 function getPixel(mask, width, x, y) {
   return mask[y * width + x] === 1;
@@ -100,48 +94,6 @@ function segmentsToLoop(segments) {
   return loop;
 }
 
-function perpendicularDistance(point, start, end) {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  if (dx === 0 && dy === 0) return Math.hypot(point.x - start.x, point.y - start.y);
-  const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
-  const projX = start.x + t * dx;
-  const projY = start.y + t * dy;
-  return Math.hypot(point.x - projX, point.y - projY);
-}
-
-function rdp(points, epsilon) {
-  if (points.length < 3) return points;
-
-  let maxDist = 0;
-  let index = 0;
-  const last = points.length - 1;
-
-  for (let i = 1; i < last; i += 1) {
-    const dist = perpendicularDistance(points[i], points[0], points[last]);
-    if (dist > maxDist) {
-      index = i;
-      maxDist = dist;
-    }
-  }
-
-  if (maxDist > epsilon) {
-    const left = rdp(points.slice(0, index + 1), epsilon);
-    const right = rdp(points.slice(index), epsilon);
-    return [...left.slice(0, -1), ...right];
-  }
-
-  return [points[0], points[last]];
-}
-
-function simplifyClosedLoop(points, epsilon) {
-  if (points.length < 4) return points;
-  const open = [...points, points[0]];
-  const simplified = rdp(open, epsilon);
-  simplified.pop();
-  return simplified;
-}
-
 export class FillTool extends BaseTool {
   onMouseDown({ screenPoint }) {
     const { shapeStore, layerStore, historyStore, camera, appState } = this.context;
@@ -162,16 +114,16 @@ export class FillTool extends BaseTool {
     offscreen.height = height;
     const ctx = offscreen.getContext("2d", { willReadFrequently: true });
 
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = BOUNDARY_WIDTH;
+    ctx.clearRect(0, 0, width, height);
+    ctx.strokeStyle = "#000";
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
     for (const shape of shapeStore.getShapes()) {
       if (shape.type !== "line") continue;
       const s = camera.worldToScreen(shape.start);
       const e = camera.worldToScreen(shape.end);
+      ctx.lineWidth = Math.max(1, Number(shape.strokeWidth) || 1);
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
       ctx.lineTo(e.x, e.y);
@@ -182,7 +134,7 @@ export class FillTool extends BaseTool {
     const boundaryMask = new Uint8Array(width * height);
     for (let i = 0; i < boundaryMask.length; i += 1) {
       const px = i * 4;
-      boundaryMask[i] = imageData.data[px] > 127 ? 1 : 0;
+      boundaryMask[i] = imageData.data[px + 3] > 0 ? 1 : 0;
     }
 
     const seedX = Math.max(0, Math.min(width - 1, Math.floor(screenPoint.x)));
@@ -202,8 +154,7 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    const simplified = simplifyClosedLoop(loop, SIMPLIFY_EPSILON);
-    const worldPoints = simplified.map((point) => camera.screenToWorld(point));
+    const worldPoints = loop.map((point) => camera.screenToWorld(point));
 
     const currentStyle = getCurrentStyle(appState);
 
@@ -215,9 +166,9 @@ export class FillTool extends BaseTool {
         fillEnabled: true,
         fillColor: currentStyle.fillColor,
         fillOpacity: currentStyle.fillOpacity,
-        strokeColor: currentStyle.strokeColor,
-        strokeOpacity: Math.min(currentStyle.strokeOpacity, 0.5),
-        strokeWidth: 1,
+        strokeColor: "transparent",
+        strokeOpacity: 0,
+        strokeWidth: 0,
       }),
     );
   }

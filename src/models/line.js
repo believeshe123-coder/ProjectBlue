@@ -49,6 +49,8 @@ export class Line extends Shape {
     ctx.globalAlpha = this.strokeOpacity;
     ctx.strokeStyle = this.strokeColor;
     ctx.lineWidth = this.strokeWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     ctx.beginPath();
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(e.x, e.y);

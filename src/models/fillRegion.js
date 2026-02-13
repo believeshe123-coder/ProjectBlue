@@ -31,6 +31,8 @@ export class FillRegion extends Shape {
       ctx.globalAlpha = this.strokeOpacity;
       ctx.strokeStyle = this.strokeColor;
       ctx.lineWidth = this.strokeWidth;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
       ctx.stroke();
     }
 
