@@ -4,7 +4,6 @@ export class Shape {
   constructor({
     id,
     type,
-    layerId,
     strokeColor,
     fillColor,
     strokeWidth = 1,
@@ -20,7 +19,6 @@ export class Shape {
   }) {
     this.id = id ?? `shape_${shapeCounter++}`;
     this.type = type ?? "shape";
-    this.layerId = layerId;
     this.strokeColor = strokeColor ?? "#ffffff";
     this.fillColor = fillColor ?? "transparent";
     this.strokeWidth = strokeWidth;
@@ -48,7 +46,6 @@ export class Shape {
     return {
       id: this.id,
       type: this.type,
-      layerId: this.layerId,
       strokeColor: this.strokeColor,
       fillColor: this.fillColor,
       strokeWidth: this.strokeWidth,

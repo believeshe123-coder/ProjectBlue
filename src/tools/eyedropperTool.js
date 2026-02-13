@@ -39,9 +39,9 @@ export class EyedropperTool extends BaseTool {
   }
 
   onMouseDown({ event, worldPoint }) {
-    const { shapeStore, camera, appState, layerStore } = this.context;
+    const { shapeStore, camera, appState } = this.context;
     const toleranceWorld = 8 / camera.zoom;
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: true, layerStore });
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: true });
     if (!hit) {
       return;
     }

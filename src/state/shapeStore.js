@@ -1,7 +1,6 @@
 import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
-import { DEFAULT_LAYER_ID } from "./layerStore.js";
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") return new Line(serialized);
@@ -27,15 +26,6 @@ function hydrateShape(serialized) {
   }
 
   return null;
-}
-
-export function migrateShapeLayers(shapes, layerStore) {
-  const fallbackLayerId = layerStore?.getLayerById(DEFAULT_LAYER_ID)?.id ?? layerStore?.getLayers?.()[0]?.id ?? DEFAULT_LAYER_ID;
-  for (const shape of shapes) {
-    if (!shape.layerId || !layerStore?.getLayerById?.(shape.layerId)) {
-      shape.layerId = fallbackLayerId;
-    }
-  }
 }
 
 export class ShapeStore {
@@ -70,22 +60,14 @@ export class ShapeStore {
     return before - this.shapes.length;
   }
 
-  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false, layerStore = null } = {}) {
-    const layers = layerStore?.getLayers?.() ?? [];
-    const layerOrder = new Map(layers.map((layer, index) => [layer.id, index]));
-
+  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false } = {}) {
     return this.shapes
       .map((shape, index) => ({ shape, index }))
       .filter(({ shape }) => {
-        const layer = layerStore?.getLayerById?.(shape.layerId);
-        if (layerStore && !layer) return false;
-        if (layer?.visible === false) return false;
-        if (!includeLocked && (layer?.locked === true || shape.locked === true)) return false;
+        if (!includeLocked && shape.locked === true) return false;
         return shape.visible !== false;
       })
       .sort((a, b) => {
-        const layerDiff = (layerOrder.get(a.shape.layerId) ?? 0) - (layerOrder.get(b.shape.layerId) ?? 0);
-        if (layerDiff !== 0) return layerDiff;
         const zDiff = (a.shape.zIndex ?? 0) - (b.shape.zIndex ?? 0);
         if (zDiff !== 0) return zDiff;
         return a.index - b.index;

@@ -2,7 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { snapWorldToGrid } from "../core/grid.js";
 import { SNAP_PIXELS, getLineSnapPoints } from "../utils/snapping.js";
-import { ensureActiveDrawableLayer, getLineStyle } from "./toolUtils.js";
+import { getLineStyle } from "./toolUtils.js";
 
 export class LineTool extends BaseTool {
   constructor(context) {
@@ -51,10 +51,7 @@ export class LineTool extends BaseTool {
   }
 
   onMouseDown({ screenPoint }) {
-    const { appState, layerStore, historyStore, shapeStore } = this.context;
-    const activeLayer = ensureActiveDrawableLayer(this.context);
-    if (!activeLayer) return;
-
+    const { appState, historyStore, shapeStore } = this.context;
     const snapped = this.getSnappedPoint(screenPoint);
 
     if (!this.startPoint) {
@@ -65,7 +62,6 @@ export class LineTool extends BaseTool {
     }
 
     const line = new Line({
-      layerId: activeLayer.id,
       ...getLineStyle(appState),
       start: this.startPoint,
       end: snapped.pt,
@@ -80,7 +76,7 @@ export class LineTool extends BaseTool {
   }
 
   onMouseMove({ screenPoint }) {
-    const { appState, layerStore } = this.context;
+    const { appState } = this.context;
     const snapped = this.getSnappedPoint(screenPoint);
     appState.snapIndicator = snapped.snapped ? { point: snapped.pt, kind: snapped.kind } : null;
     appState.snapDebugStatus = snapped.kind === "grid" ? "SNAP: GRID" : "SNAP: OFF";
@@ -88,14 +84,8 @@ export class LineTool extends BaseTool {
     if (!this.startPoint) {
       return;
     }
-    const layer = layerStore.getActiveLayer();
-    if (!layer || layer.visible === false || layer.locked === true) {
-      appState.previewShape = null;
-      return;
-    }
 
     appState.previewShape = new Line({
-      layerId: layer.id,
       ...getLineStyle(appState),
       strokeOpacity: Math.min(0.9, appState.currentStyle.strokeOpacity),
       start: this.startPoint,

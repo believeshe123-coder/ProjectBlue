@@ -2,7 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { Polygon } from "../models/polygon.js";
 import { distance } from "../utils/math.js";
-import { ensureActiveDrawableLayer, getCurrentStyle, getLineStyle, updateSnapIndicator, getSnappedPoint } from "./toolUtils.js";
+import { getCurrentStyle, getLineStyle, updateSnapIndicator, getSnappedPoint } from "./toolUtils.js";
 
 export class PolygonTool extends BaseTool {
   constructor(context) {
@@ -18,16 +18,14 @@ export class PolygonTool extends BaseTool {
   }
 
   tryCommitPolygon() {
-    const { layerStore, shapeStore, historyStore, appState } = this.context;
-    const layer = ensureActiveDrawableLayer(this.context);
-    if (!layer || this.points.length < 3) {
+    const { shapeStore, historyStore, appState } = this.context;
+    if (this.points.length < 3) {
       return;
     }
 
     this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(
       new Polygon({
-        layerId: layer.id,
         points: this.points,
         closed: true,
         ...getCurrentStyle(appState),
@@ -41,11 +39,6 @@ export class PolygonTool extends BaseTool {
 
   onMouseDown({ screenPoint }) {
     const { appState } = this.context;
-    const layer = ensureActiveDrawableLayer(this.context, { notify: false });
-    if (!layer) {
-      appState.notifyStatus?.("Layer is locked", 1400);
-      return;
-    }
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
 
@@ -62,12 +55,6 @@ export class PolygonTool extends BaseTool {
   }
 
   onMouseMove({ screenPoint }) {
-    const layer = this.context.layerStore.getActiveLayer();
-    if (!layer || layer.visible === false || layer.locked === true) {
-      this.context.appState.previewShape = null;
-      return;
-    }
-
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(this.context.appState, snapped);
     this.cursorPoint = snapped.pt;
@@ -79,7 +66,6 @@ export class PolygonTool extends BaseTool {
 
     const points = [...this.points, this.cursorPoint];
     this.context.appState.previewShape = new Polygon({
-      layerId: layer.id,
       points,
       closed: false,
       ...getLineStyle(this.context.appState),
@@ -88,7 +74,6 @@ export class PolygonTool extends BaseTool {
 
     if (this.points.length === 1) {
       this.context.appState.previewShape = new Line({
-        layerId: layer.id,
         start: this.points[0],
         end: this.cursorPoint,
         ...getLineStyle(this.context.appState),

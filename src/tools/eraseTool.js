@@ -2,7 +2,7 @@ import { BaseTool } from "./baseTool.js";
 
 export class EraseTool extends BaseTool {
   onMouseDown({ worldPoint }) {
-    const { shapeStore, historyStore, camera, layerStore } = this.context;
+    const { shapeStore, historyStore, camera } = this.context;
     const selectedCount = shapeStore.getSelectedShapes().length;
 
     if (selectedCount > 0) {
@@ -12,7 +12,7 @@ export class EraseTool extends BaseTool {
     }
 
     const toleranceWorld = 8 / camera.zoom;
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { layerStore });
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld);
 
     if (hit) {
       this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
