@@ -18,13 +18,8 @@ export class Renderer {
 
     this.ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
     this.ctx.clearRect(0, 0, canvasCssW, canvasCssH);
-    const usePaperGridColors = this.appState.canvasTheme === "paper";
-    const useDarkGridColors = this.appState.canvasTheme === "dark";
-
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH, {
-      blackAndWhite: usePaperGridColors,
-      darkMode: useDarkGridColors,
-      customGridColor: this.appState.canvasTheme === "custom" ? this.appState.customGridColor : null,
+      gridColor: this.appState.theme?.gridColor,
     });
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {

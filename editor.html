@@ -20,39 +20,23 @@
               <div class="menu-title">Canvas</div>
               <label class="field-block" for="canvas-theme-select">
                 <span>Theme</span>
-                <select id="canvas-theme-select" class="scale-input">
-                  <option value="light" selected>Light blueprint</option>
-                  <option value="dark">Dark blueprint</option>
-                  <option value="paper">Paper</option>
-                  <option value="custom">Custom</option>
-                </select>
+                <select id="canvas-theme-select" class="scale-input"></select>
               </label>
-              <label class="field-block" for="background-type-select">
-                <span>Background type</span>
-                <select id="background-type-select" class="scale-input">
-                  <option value="preset" selected>Preset</option>
-                  <option value="custom">Custom</option>
-                </select>
+              <label class="field-inline" for="custom-bg-color-picker">
+                <span>Background color</span>
+                <input id="custom-bg-color-picker" type="color" value="#3e6478" />
               </label>
-              <div class="custom-background-controls" id="custom-background-controls" hidden>
-                <div class="menu-row" role="radiogroup" aria-label="Custom background mode">
-                  <label><input type="radio" id="custom-bg-mode-css" name="custom-bg-mode" value="css" checked />CSS</label>
-                  <label><input type="radio" id="custom-bg-mode-image" name="custom-bg-mode" value="image" />Image URL</label>
-                </div>
-                <label class="field-block" for="custom-background-input">
-                  <span>Custom background code</span>
-                  <textarea id="custom-background-input" class="custom-bg-textarea" rows="3" placeholder="#0f3b53&#10;linear-gradient(180deg, #0f3b53 0%, #0a2b3d 100%)&#10;https://example.com/mytexture.png"></textarea>
-                </label>
-                <label class="field-inline" for="custom-bg-color-picker">
-                  <span>Background color</span>
-                  <input id="custom-bg-color-picker" type="color" value="#0f3b53" />
-                </label>
-                <label class="field-inline" for="custom-grid-color-picker">
-                  <span>Grid color</span>
-                  <input id="custom-grid-color-picker" type="color" value="#d0f1ff" />
-                </label>
-                <label class="menu-row"><input id="custom-bg-repeat-toggle" type="checkbox" checked />Repeat image</label>
-                <button id="custom-background-reset" class="menu-link-btn" type="button">Reset</button>
+              <label class="field-inline" for="custom-grid-color-picker">
+                <span>Grid color</span>
+                <input id="custom-grid-color-picker" type="color" value="#d0f1ff" />
+              </label>
+              <label class="field-block" for="theme-name-input">
+                <span>Theme name</span>
+                <input id="theme-name-input" class="scale-input" type="text" placeholder="My Theme" />
+              </label>
+              <div class="theme-actions-row">
+                <button id="save-theme-btn" class="menu-link-btn" type="button">Save Theme</button>
+                <button id="delete-theme-btn" class="menu-link-btn" type="button">Delete saved theme</button>
               </div>
             </div>
 
