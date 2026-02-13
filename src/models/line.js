@@ -19,6 +19,7 @@ export class Line extends Shape {
       endUV: isoEnd,
       unitPerCell,
       unitName,
+      showGridUnits: appState.showGridUnits,
     });
 
     ctx.save();

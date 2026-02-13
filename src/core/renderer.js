@@ -1,4 +1,4 @@
-import { drawIsoGrid } from "./isoGrid.js";
+import { drawIsoGrid, isoUVToWorld, worldToIsoUV } from "./isoGrid.js";
 
 export class Renderer {
   constructor({ ctx, camera, shapeStore, layerStore, appState, getCanvasMetrics, ensureCanvasSize }) {
@@ -22,6 +22,26 @@ export class Renderer {
     this.ctx.fillRect(0, 0, canvasCssW, canvasCssH);
 
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH);
+
+    if (this.appState.debugSnap) {
+      const centerWorld = this.camera.screenToWorld({ x: canvasCssW / 2, y: canvasCssH / 2 });
+      const centerUV = worldToIsoUV(centerWorld);
+      const centerURounded = Math.round(centerUV.u);
+      const centerVRounded = Math.round(centerUV.v);
+
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(255, 226, 122, 0.9)";
+      for (let du = -5; du <= 5; du += 1) {
+        for (let dv = -5; dv <= 5; dv += 1) {
+          const latticePoint = isoUVToWorld(centerURounded + du, centerVRounded + dv);
+          const dot = this.camera.worldToScreen(latticePoint);
+          this.ctx.beginPath();
+          this.ctx.arc(dot.x, dot.y, 1.6, 0, Math.PI * 2);
+          this.ctx.fill();
+        }
+      }
+      this.ctx.restore();
+    }
 
     const layers = this.layerStore.getLayers();
     const shapes = this.shapeStore.getShapes();

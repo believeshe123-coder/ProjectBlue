@@ -23,6 +23,7 @@ export class Measurement extends Shape {
       endUV: { u: u2, v: v2 },
       unitPerCell: appState.unitPerCell,
       unitName: appState.unitName,
+      showGridUnits: appState.showGridUnits,
     });
   }
 
