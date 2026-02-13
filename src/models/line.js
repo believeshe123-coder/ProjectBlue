@@ -1,19 +1,36 @@
 import { Shape } from "./shape.js";
 import { distancePointToSegment } from "../utils/math.js";
-import { worldToIsoUV } from "../core/isoGrid.js";
+import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
 import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class Line extends Shape {
-  constructor({ start, end, ...rest }) {
+  constructor({ start, end, startUV, endUV, ...rest }) {
     super({ ...rest, type: "line" });
-    this.start = { ...start };
-    this.end = { ...end };
+    this.startUV = startUV ? { ...startUV } : worldToIsoUV(start);
+    this.endUV = endUV ? { ...endUV } : worldToIsoUV(end);
+    this.syncWorldFromUV();
+  }
+
+  syncWorldFromUV() {
+    this.start = isoUVToWorld(this.startUV.u, this.startUV.v);
+    this.end = isoUVToWorld(this.endUV.u, this.endUV.v);
+  }
+
+  syncUVFromWorld() {
+    this.startUV = worldToIsoUV(this.start);
+    this.endUV = worldToIsoUV(this.end);
+  }
+
+  setUVPoints(startUV, endUV) {
+    this.startUV = { ...startUV };
+    this.endUV = { ...endUV };
+    this.syncWorldFromUV();
   }
 
   drawDimensionLabel(ctx, appState, midScreen) {
     const { unitPerCell = 1, unitName = "ft" } = appState;
-    const isoStart = worldToIsoUV(this.start);
-    const isoEnd = worldToIsoUV(this.end);
+    const isoStart = this.startUV;
+    const isoEnd = this.endUV;
     const label = buildDistanceLabel({
       startUV: isoStart,
       endUV: isoEnd,
@@ -102,6 +119,8 @@ export class Line extends Shape {
       ...super.toJSON(),
       start: { ...this.start },
       end: { ...this.end },
+      startUV: { ...this.startUV },
+      endUV: { ...this.endUV },
     };
   }
 }
