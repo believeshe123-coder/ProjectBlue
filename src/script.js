@@ -11,12 +11,9 @@ import { PolylineTool } from "./tools/polylineTool.js";
 import { FillTool } from "./tools/fillTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 
-const canvas = document.getElementById("blueprint-canvas");
+const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
 const statusEl = document.getElementById("status");
-const zoomInButton = document.getElementById("zoom-in-btn");
-const zoomOutButton = document.getElementById("zoom-out-btn");
-const resetViewButton = document.getElementById("reset-view-btn");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
 const snapGridToggle = document.getElementById("snap-grid-toggle");
@@ -42,10 +39,10 @@ const fillChipSwatch = document.getElementById("fill-chip-swatch");
 const paletteColorButton = document.getElementById("palette-color-btn");
 const customColorPicker = document.getElementById("customColorPicker");
 const recentRow = document.getElementById("recent-row");
-const uiDrawer = document.querySelector(".ui-drawer");
-const uiDrawerToggle = document.getElementById("ui-drawer-toggle");
-const miniToolButtons = Array.from(document.querySelectorAll('.ui-drawer__mini [data-tool]'));
-const miniActionButtons = Array.from(document.querySelectorAll('.ui-drawer__mini [data-action]'));
+
+const menuSettingsButton = document.getElementById("menuSettingsBtn");
+const menuSettingsDropdown = document.getElementById("menuSettingsDropdown");
+
 
 const calmPalette = [
   "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
@@ -220,19 +217,16 @@ function setActiveTool(toolName) {
   currentTool = tools[normalizedToolName];
   currentTool.onActivate();
 
-  document.querySelectorAll('.topbar [data-tool]').forEach((button) => {
+  document.querySelectorAll('.tool-grid [data-tool]').forEach((button) => {
     button.classList.toggle("active", button.dataset.tool === normalizedToolName);
-  });
-
-  miniToolButtons.forEach((button) => {
-    button.classList.toggle("active", normalizeToolName(button.dataset.tool) === normalizedToolName);
   });
 }
 
 function getSnapStatusLabel() {
-  const base = `Snap: Grid ${appState.snapToGrid ? "ON" : "OFF"}`;
-  if (appState.snapIndicator?.kind === "grid" && Number.isInteger(appState.snapIndicator.u) && Number.isInteger(appState.snapIndicator.v)) {
-    return `${base} | SNAP: GRID (u=${appState.snapIndicator.u}, v=${appState.snapIndicator.v})`;
+  const base = `Snap: Grid ${appState.snapToGrid ? "ON" : "OFF"} | Midpoint ${appState.snapToMidpoints ? "ON" : "OFF"}`;
+  if (appState.snapIndicator?.kind && appState.snapIndicator.u !== null && appState.snapIndicator.v !== null) {
+    const kindLabel = appState.snapIndicator.kind.toUpperCase();
+    return `${base} | SNAP: ${kindLabel} (u=${appState.snapIndicator.u}, v=${appState.snapIndicator.v})`;
   }
 
   return base;
@@ -244,7 +238,6 @@ function refreshScaleDisplay() {
 
 let statusMessage = null;
 let statusMessageTimeout = null;
-let uiOpen = true;
 
 function refreshStatus() {
   if (statusMessage) {
@@ -265,19 +258,6 @@ appState.notifyStatus = (message, durationMs = 1400) => {
     refreshStatus();
   }, durationMs);
 };
-
-function applyUiDrawerState() {
-  if (!uiDrawer) return;
-  uiDrawer.dataset.open = uiOpen ? "true" : "false";
-  if (uiDrawerToggle) uiDrawerToggle.textContent = uiOpen ? "▲" : "▼";
-  localStorage.setItem("uiDrawerOpen", uiOpen ? "1" : "0");
-  requestAnimationFrame(() => canvasEngine.resizeCanvasToContainer());
-}
-
-function toggleUiDrawer() {
-  uiOpen = !uiOpen;
-  applyUiDrawerState();
-}
 
 function undo() {
   const previous = historyStore.undo(shapeStore.serialize());
@@ -305,29 +285,30 @@ function deleteSelection() {
   shapeStore.deleteSelectedShapes();
 }
 
-for (const button of document.querySelectorAll('.topbar [data-tool]')) {
+function setSettingsMenuOpen(open) {
+  if (!menuSettingsDropdown || !menuSettingsButton) return;
+  menuSettingsDropdown.dataset.open = open ? "true" : "false";
+  menuSettingsButton.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+for (const button of document.querySelectorAll('.tool-grid [data-tool]')) {
   button.addEventListener("click", () => setActiveTool(button.dataset.tool));
 }
 
-for (const button of miniToolButtons) {
-  button.addEventListener("click", () => setActiveTool(button.dataset.tool));
-}
-
-for (const button of miniActionButtons) {
-  button.addEventListener("click", () => {
-    if (button.dataset.action === "undo") undo();
-    if (button.dataset.action === "redo") redo();
-  });
-}
-
-uiDrawerToggle?.addEventListener("click", toggleUiDrawer);
-
-zoomInButton.addEventListener("click", () => zoomBy(1.15));
-zoomOutButton.addEventListener("click", () => zoomBy(1 / 1.15));
-resetViewButton?.addEventListener("click", () => {
-  camera.resetView();
-  refreshStatus();
+menuSettingsButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setSettingsMenuOpen(menuSettingsDropdown?.dataset.open !== "true");
 });
+
+menuSettingsDropdown?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+document.addEventListener("click", () => {
+  setSettingsMenuOpen(false);
+});
+
+
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
 
@@ -414,6 +395,10 @@ unitNameInput.addEventListener("change", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    setSettingsMenuOpen(false);
+  }
+
   const key = event.key.toLowerCase();
   const isCtrlOrMeta = event.ctrlKey || event.metaKey;
 
@@ -460,7 +445,6 @@ window.addEventListener("keydown", (event) => {
 renderStyleSwatches();
 renderRecentColors();
 refreshStyleUI();
-uiOpen = localStorage.getItem("uiDrawerOpen") !== "0";
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
 const debugSnapResetV1 = localStorage.getItem("debugSnapResetV1");
 if (debugSnapResetV1 !== "1") {
@@ -470,7 +454,6 @@ if (debugSnapResetV1 !== "1") {
 appState.debugSnap = localStorage.getItem("debugSnap") === "1";
 debugSnapToggle.checked = appState.debugSnap;
 showGridUnitsToggle.checked = appState.showGridUnits;
-applyUiDrawerState();
 setActiveTool("select");
 refreshScaleDisplay();
 refreshStatus();
