@@ -32,10 +32,11 @@ export class Polygon extends Shape {
       }
     }
 
-    ctx.globalAlpha = this.strokeOpacity;
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = this.strokeColor;
     ctx.lineWidth = this.strokeWidth;
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
     if (this.selected) {
       ctx.strokeStyle = "#ffd166";

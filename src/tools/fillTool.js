@@ -112,25 +112,26 @@ export class FillTool extends BaseTool {
     const offscreen = document.createElement("canvas");
     offscreen.width = width;
     offscreen.height = height;
-    const ctx = offscreen.getContext("2d", { willReadFrequently: true });
+    const bctx = offscreen.getContext("2d", { willReadFrequently: true });
 
-    ctx.clearRect(0, 0, width, height);
-    ctx.strokeStyle = "#000";
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+    bctx.clearRect(0, 0, width, height);
+    bctx.globalAlpha = 1;
+    bctx.strokeStyle = "#000";
+    bctx.lineCap = "round";
+    bctx.lineJoin = "round";
 
     for (const shape of shapeStore.getShapes()) {
       if (shape.type !== "line") continue;
       const s = camera.worldToScreen(shape.start);
       const e = camera.worldToScreen(shape.end);
-      ctx.lineWidth = Math.max(1, Number(shape.strokeWidth) || 1);
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(e.x, e.y);
-      ctx.stroke();
+      bctx.lineWidth = Math.max(1, Number(shape.strokeWidth) || 1);
+      bctx.beginPath();
+      bctx.moveTo(s.x, s.y);
+      bctx.lineTo(e.x, e.y);
+      bctx.stroke();
     }
 
-    const imageData = ctx.getImageData(0, 0, width, height);
+    const imageData = bctx.getImageData(0, 0, width, height);
     const boundaryMask = new Uint8Array(width * height);
     for (let i = 0; i < boundaryMask.length; i += 1) {
       const px = i * 4;

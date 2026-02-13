@@ -32,7 +32,6 @@ const themeNameInput = document.getElementById("theme-name-input");
 const saveThemeButton = document.getElementById("save-theme-btn");
 const deleteThemeButton = document.getElementById("delete-theme-btn");
 
-const strokeOpacityInput = document.getElementById("stroke-opacity-input");
 const strokeWidthInput = document.getElementById("stroke-width-input");
 const fillEnabledToggle = document.getElementById("fill-enabled-toggle");
 const fillOpacityInput = document.getElementById("fill-opacity-input");
@@ -201,7 +200,6 @@ function toRgba(hex, alpha) {
 
 function refreshStyleUI() {
   const style = appState.currentStyle;
-  strokeOpacityInput.value = String(style.strokeOpacity);
   strokeWidthInput.value = String(style.strokeWidth);
   fillEnabledToggle.checked = style.fillEnabled;
   fillOpacityInput.value = String(style.fillOpacity);
@@ -215,8 +213,8 @@ function refreshStyleUI() {
 
   const fillColor = style.fillEnabled ? toRgba(style.fillColor, style.fillOpacity) : "transparent";
   stylePreviewChip.style.background = fillColor;
-  stylePreviewChip.style.color = toRgba(style.strokeColor, style.strokeOpacity);
-  stylePreviewChip.style.borderColor = toRgba(style.strokeColor, Math.max(style.strokeOpacity * 0.45, 0.22));
+  stylePreviewChip.style.color = toRgba(style.strokeColor, 1);
+  stylePreviewChip.style.borderColor = toRgba(style.strokeColor, 0.45);
   strokeChipSwatch.style.background = style.strokeColor;
   fillChipSwatch.style.background = style.fillColor;
   strokeChip.classList.toggle("color-chip--active", activeColorTarget === "primary");
@@ -225,7 +223,6 @@ function refreshStyleUI() {
 
 
 function resetStyleAlphaDefaults() {
-  appState.currentStyle.strokeOpacity = 1;
   appState.currentStyle.fillOpacity = 1;
 }
 
@@ -543,11 +540,6 @@ deleteThemeButton?.addEventListener("click", deleteSelectedSavedTheme);
 
 showDimensionsToggle.addEventListener("change", (event) => {
   appState.showDimensions = event.target.checked;
-});
-
-strokeOpacityInput.addEventListener("input", (event) => {
-  appState.currentStyle.strokeOpacity = Number.parseFloat(event.target.value);
-  refreshStyleUI();
 });
 
 strokeWidthInput.addEventListener("input", (event) => {
