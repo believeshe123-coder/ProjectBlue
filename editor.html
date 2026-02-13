@@ -8,7 +8,7 @@
   </head>
   <body>
     <header class="workspace-chrome">
-      <nav class="menu-bar" aria-label="Classic menu bar">
+      <nav class="menu-bar" aria-label="Main menu bar">
         <button class="menu-item" type="button">File</button>
         <button class="menu-item" type="button">Edit</button>
         <button class="menu-item" type="button">View</button>
@@ -29,28 +29,64 @@
           <span class="group-title">Tools</span>
         </section>
 
+        <section class="tool-group tool-group--style" aria-label="Style controls">
+          <div class="tool-grid tool-grid--style">
+            <label class="style-label" for="stroke-color-input">Stroke color</label>
+            <input id="stroke-color-input" class="color-input" type="color" value="#ffffff" />
+
+            <label class="style-label" for="stroke-opacity-input">Stroke opacity</label>
+            <input id="stroke-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" />
+
+            <label class="style-label" for="stroke-width-input">Stroke width</label>
+            <select id="stroke-width-input" class="style-select">
+              <option value="1">1</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+            </select>
+
+            <label class="tool-toggle style-fill-toggle"><input id="fill-enabled-toggle" type="checkbox" checked />Fill enabled</label>
+
+            <label class="style-label" for="fill-color-input">Fill color</label>
+            <input id="fill-color-input" class="color-input" type="color" value="#4aa3ff" />
+
+            <label class="style-label" for="fill-opacity-input">Fill opacity</label>
+            <input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="0.25" />
+
+            <div class="swatch-grid" id="style-swatches" aria-label="Quick fill swatches"></div>
+
+            <div class="style-preview-wrap">
+              <span class="style-label">Preview</span>
+              <div id="style-preview-chip" class="style-preview-chip" aria-label="Current stroke and fill preview"></div>
+            </div>
+          </div>
+          <span class="group-title">Style</span>
+        </section>
+
         <section class="tool-group" aria-label="Drawing options">
           <div class="tool-grid tool-grid--snap">
-            <label class="tool-toggle"><input id="show-dimensions-toggle" type="checkbox" checked />Show Dimensions</label>
-            <label class="tool-toggle"><input id="continue-polyline-toggle" type="checkbox" checked />Continue Polyline</label>
+            <label class="tool-toggle"><input id="show-dimensions-toggle" type="checkbox" checked />Show dimensions</label>
+            <label class="tool-toggle"><input id="continue-polyline-toggle" type="checkbox" checked />Continue polyline</label>
           </div>
           <span class="group-title">Options</span>
         </section>
 
         <section class="tool-group" aria-label="Snapping tools">
           <div class="tool-grid tool-grid--snap">
-            <label class="tool-toggle"><input id="snap-grid-toggle" type="checkbox" checked />Snap to Grid</label>
-            <label class="tool-toggle"><input id="snap-mid-toggle" type="checkbox" checked />Snap to Midpoint</label>
-            <label class="tool-toggle"><input id="debug-snap-toggle" type="checkbox" checked />Debug Snap</label>
+            <label class="tool-toggle"><input id="snap-grid-toggle" type="checkbox" checked />Snap to grid</label>
+            <label class="tool-toggle"><input id="snap-mid-toggle" type="checkbox" checked />Snap to midpoint</label>
+            <label class="tool-toggle"><input id="debug-snap-toggle" type="checkbox" checked />Debug snap</label>
           </div>
           <span class="group-title">Snapping</span>
         </section>
 
         <section class="tool-group" aria-label="Scale tools">
           <div class="tool-grid tool-grid--scale">
-            <label class="scale-label" for="unit-per-cell">Unit / Grid</label>
+            <label class="scale-label" for="unit-per-cell">Unit / grid</label>
             <input id="unit-per-cell" class="scale-input" type="number" min="0.01" step="0.01" value="1" />
-            <label class="scale-label" for="unit-name">Unit Name</label>
+            <label class="scale-label" for="unit-name">Unit name</label>
             <input id="unit-name" class="scale-input" list="unit-name-options" value="ft" />
             <datalist id="unit-name-options">
               <option value="ft"></option>
@@ -65,8 +101,8 @@
 
         <section class="tool-group" aria-label="View tools">
           <div class="tool-grid">
-            <button class="tool-button" id="zoom-in-btn" type="button">Zoom In</button>
-            <button class="tool-button" id="zoom-out-btn" type="button">Zoom Out</button>
+            <button class="tool-button" id="zoom-in-btn" type="button">Zoom in</button>
+            <button class="tool-button" id="zoom-out-btn" type="button">Zoom out</button>
             <button class="tool-button" id="reset-view-btn" type="button">Reset</button>
             <button class="tool-button" id="undo-btn" type="button">Undo</button>
             <button class="tool-button" id="redo-btn" type="button">Redo</button>

@@ -27,6 +27,30 @@ const scaleDisplay = document.getElementById("scale-display");
 const showDimensionsToggle = document.getElementById("show-dimensions-toggle");
 const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 
+const strokeColorInput = document.getElementById("stroke-color-input");
+const strokeOpacityInput = document.getElementById("stroke-opacity-input");
+const strokeWidthInput = document.getElementById("stroke-width-input");
+const fillEnabledToggle = document.getElementById("fill-enabled-toggle");
+const fillColorInput = document.getElementById("fill-color-input");
+const fillOpacityInput = document.getElementById("fill-opacity-input");
+const styleSwatches = document.getElementById("style-swatches");
+const stylePreviewChip = document.getElementById("style-preview-chip");
+
+const calmPalette = [
+  "#4aa3ff",
+  "#7fb7be",
+  "#9fc490",
+  "#f2c57c",
+  "#d39dbc",
+  "#b5b4e3",
+  "#6aa9a0",
+  "#f5f1e8",
+  "#e2e8f0",
+  "#9ca3af",
+  "#ffffff",
+  "#000000",
+];
+
 const camera = new Camera();
 const shapeStore = new ShapeStore();
 const layerStore = new LayerStore();
@@ -42,19 +66,19 @@ const appState = {
   snapDebugStatus: "SNAP: OFF",
   unitName: "ft",
   unitPerCell: 1,
-  currentFillColor: "rgba(78, 191, 255, 0.9)",
   showDimensions: true,
   continuePolyline: true,
+  currentStyle: {
+    strokeColor: "#ffffff",
+    strokeOpacity: 1,
+    strokeWidth: 2,
+    fillEnabled: true,
+    fillColor: "#4aa3ff",
+    fillOpacity: 0.25,
+  },
 };
 
-const sharedContext = {
-  canvas,
-  camera,
-  shapeStore,
-  layerStore,
-  historyStore,
-  appState,
-};
+const sharedContext = { canvas, camera, shapeStore, layerStore, historyStore, appState };
 
 const tools = {
   select: new SelectTool(sharedContext),
@@ -75,30 +99,65 @@ const canvasEngine = new CanvasEngine({
   onViewChange: refreshStatus,
 });
 
-const renderer = new Renderer({
-  canvas,
-  ctx: canvasEngine.getContext(),
-  camera,
-  shapeStore,
-  layerStore,
-  appState,
-});
+const renderer = new Renderer({ canvas, ctx: canvasEngine.getContext(), camera, shapeStore, layerStore, appState });
 
 layerStore.createLayer("Layer 1");
 
+function renderStyleSwatches() {
+  for (const color of calmPalette) {
+    const swatch = document.createElement("button");
+    swatch.type = "button";
+    swatch.className = "swatch";
+    swatch.style.setProperty("--swatch", color);
+    swatch.title = color;
+    swatch.addEventListener("click", () => {
+      appState.currentStyle.fillColor = color;
+      fillColorInput.value = color;
+      refreshStyleUI();
+    });
+    styleSwatches.appendChild(swatch);
+  }
+}
+
+function toRgba(hex, alpha) {
+  const value = hex.replace("#", "");
+  const full = value.length === 3 ? value.split("").map((c) => `${c}${c}`).join("") : value;
+  const n = Number.parseInt(full, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function refreshStyleUI() {
+  const style = appState.currentStyle;
+  strokeColorInput.value = style.strokeColor;
+  strokeOpacityInput.value = String(style.strokeOpacity);
+  strokeWidthInput.value = String(style.strokeWidth);
+  fillEnabledToggle.checked = style.fillEnabled;
+  fillColorInput.value = style.fillColor;
+  fillOpacityInput.value = String(style.fillOpacity);
+  fillColorInput.disabled = !style.fillEnabled;
+  fillOpacityInput.disabled = !style.fillEnabled;
+
+  for (const swatch of styleSwatches.querySelectorAll(".swatch")) {
+    swatch.classList.toggle("active", swatch.title.toLowerCase() === style.fillColor.toLowerCase());
+  }
+
+  const fillColor = style.fillEnabled ? toRgba(style.fillColor, style.fillOpacity) : "transparent";
+  stylePreviewChip.style.background = fillColor;
+  stylePreviewChip.style.borderColor = toRgba(style.strokeColor, style.strokeOpacity);
+}
+
 function getCanvasCenterScreenPoint() {
   const rect = canvas.getBoundingClientRect();
-  return {
-    x: rect.width / 2,
-    y: rect.height / 2,
-  };
+  return { x: rect.width / 2, y: rect.height / 2 };
 }
 
 function setActiveTool(toolName) {
   currentTool.onDeactivate();
   currentTool = tools[toolName];
   currentTool.onActivate();
-
   document.querySelectorAll("[data-tool]").forEach((button) => {
     button.classList.toggle("active", button.dataset.tool === toolName);
   });
@@ -132,9 +191,7 @@ function refreshStatus() {
 appState.notifyStatus = (message, durationMs = 1400) => {
   statusMessage = message;
   refreshStatus();
-  if (statusMessageTimeout) {
-    clearTimeout(statusMessageTimeout);
-  }
+  if (statusMessageTimeout) clearTimeout(statusMessageTimeout);
   statusMessageTimeout = window.setTimeout(() => {
     statusMessage = null;
     statusMessageTimeout = null;
@@ -163,10 +220,7 @@ function zoomBy(factor) {
 
 function deleteSelection() {
   const selectedCount = shapeStore.getSelectedShapes().length;
-  if (selectedCount === 0) {
-    return;
-  }
-
+  if (selectedCount === 0) return;
   historyStore.pushState(shapeStore.serialize());
   shapeStore.deleteSelectedShapes();
 }
@@ -204,6 +258,36 @@ continuePolylineToggle.addEventListener("change", (event) => {
 
 showDimensionsToggle.addEventListener("change", (event) => {
   appState.showDimensions = event.target.checked;
+});
+
+strokeColorInput.addEventListener("input", (event) => {
+  appState.currentStyle.strokeColor = event.target.value;
+  refreshStyleUI();
+});
+
+strokeOpacityInput.addEventListener("input", (event) => {
+  appState.currentStyle.strokeOpacity = Number.parseFloat(event.target.value);
+  refreshStyleUI();
+});
+
+strokeWidthInput.addEventListener("change", (event) => {
+  appState.currentStyle.strokeWidth = Number.parseInt(event.target.value, 10);
+  refreshStyleUI();
+});
+
+fillEnabledToggle.addEventListener("change", (event) => {
+  appState.currentStyle.fillEnabled = event.target.checked;
+  refreshStyleUI();
+});
+
+fillColorInput.addEventListener("input", (event) => {
+  appState.currentStyle.fillColor = event.target.value;
+  refreshStyleUI();
+});
+
+fillOpacityInput.addEventListener("input", (event) => {
+  appState.currentStyle.fillOpacity = Number.parseFloat(event.target.value);
+  refreshStyleUI();
 });
 
 unitPerCellInput.addEventListener("input", (event) => {
@@ -264,6 +348,8 @@ window.addEventListener("keydown", (event) => {
   currentTool.onKeyDown(event);
 });
 
+renderStyleSwatches();
+refreshStyleUI();
 setActiveTool("select");
 refreshScaleDisplay();
 refreshStatus();

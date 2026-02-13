@@ -1,5 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { FillRegion } from "../models/fillRegion.js";
+import { getCurrentStyle } from "./toolUtils.js";
 
 const BOUNDARY_WIDTH = 3;
 const MAX_FILL_RATIO = 0.35;
@@ -204,15 +205,19 @@ export class FillTool extends BaseTool {
     const simplified = simplifyClosedLoop(loop, SIMPLIFY_EPSILON);
     const worldPoints = simplified.map((point) => camera.screenToWorld(point));
 
+    const currentStyle = getCurrentStyle(appState);
+
     historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(
       new FillRegion({
         layerId: activeLayer.id,
         points: worldPoints,
-        fillColor: appState.currentFillColor,
-        opacity: 0.25,
-        strokeColor: "transparent",
-        strokeWidth: 0,
+        fillEnabled: true,
+        fillColor: currentStyle.fillColor,
+        fillOpacity: currentStyle.fillOpacity,
+        strokeColor: currentStyle.strokeColor,
+        strokeOpacity: Math.min(currentStyle.strokeOpacity, 0.5),
+        strokeWidth: 1,
       }),
     );
   }

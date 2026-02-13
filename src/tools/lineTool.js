@@ -2,6 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { snapWorldToGrid } from "../core/grid.js";
 import { SNAP_PIXELS, getLineSnapPoints } from "../utils/snapping.js";
+import { getLineStyle } from "./toolUtils.js";
 
 export class LineTool extends BaseTool {
   constructor(context) {
@@ -67,9 +68,7 @@ export class LineTool extends BaseTool {
 
     const line = new Line({
       layerId: activeLayer.id,
-      strokeColor: activeLayer.defaultStrokeColor,
-      fillColor: activeLayer.defaultFillColor,
-      strokeWidth: 2,
+      ...getLineStyle(appState),
       start: this.startPoint,
       end: snapped.pt,
     });
@@ -94,10 +93,8 @@ export class LineTool extends BaseTool {
     const layer = layerStore.getActiveLayer();
     appState.previewShape = new Line({
       layerId: layer?.id,
-      strokeColor: "#dbe9ff",
-      fillColor: "transparent",
-      strokeWidth: 1.5,
-      opacity: 0.8,
+      ...getLineStyle(appState),
+      strokeOpacity: Math.min(0.9, appState.currentStyle.strokeOpacity),
       start: this.startPoint,
       end: snapped.pt,
     });

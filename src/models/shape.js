@@ -1,14 +1,30 @@
 let shapeCounter = 0;
 
 export class Shape {
-  constructor({ id, type, layerId, strokeColor, fillColor, strokeWidth = 1, opacity = 1, selected = false }) {
+  constructor({
+    id,
+    type,
+    layerId,
+    strokeColor,
+    fillColor,
+    strokeWidth = 1,
+    opacity,
+    strokeOpacity,
+    fillOpacity,
+    fillEnabled,
+    selected = false,
+  }) {
     this.id = id ?? `shape_${shapeCounter++}`;
     this.type = type ?? "shape";
     this.layerId = layerId;
     this.strokeColor = strokeColor ?? "#ffffff";
     this.fillColor = fillColor ?? "transparent";
     this.strokeWidth = strokeWidth;
-    this.opacity = opacity;
+    const normalizedOpacity = opacity ?? 1;
+    this.strokeOpacity = strokeOpacity ?? normalizedOpacity;
+    this.fillOpacity = fillOpacity ?? normalizedOpacity;
+    this.fillEnabled = fillEnabled ?? this.fillColor !== "transparent";
+    this.opacity = normalizedOpacity;
     this.selected = selected;
   }
 
@@ -29,6 +45,9 @@ export class Shape {
       fillColor: this.fillColor,
       strokeWidth: this.strokeWidth,
       opacity: this.opacity,
+      strokeOpacity: this.strokeOpacity,
+      fillOpacity: this.fillOpacity,
+      fillEnabled: this.fillEnabled,
       selected: this.selected,
     };
   }

@@ -1,6 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 export class IsoLineTool extends BaseTool {
   constructor(context) {
@@ -30,11 +30,10 @@ export class IsoLineTool extends BaseTool {
       return;
     }
 
+    const lineStyle = getLineStyle(appState);
     const line = new Line({
       layerId: activeLayer.id,
-      strokeColor: activeLayer.defaultStrokeColor,
-      fillColor: activeLayer.defaultFillColor,
-      strokeWidth: 2,
+      ...lineStyle,
       start: this.startPoint,
       end: snapped.pt,
     });
@@ -57,12 +56,11 @@ export class IsoLineTool extends BaseTool {
     }
 
     const layer = layerStore.getActiveLayer();
+    const lineStyle = getLineStyle(appState);
     appState.previewShape = new Line({
       layerId: layer?.id,
-      strokeColor: "#d5ffe8",
-      fillColor: "transparent",
-      strokeWidth: 1.5,
-      opacity: 0.85,
+      ...lineStyle,
+      strokeOpacity: Math.min(0.9, appState.currentStyle.strokeOpacity),
       start: this.startPoint,
       end: snapped.pt,
     });
