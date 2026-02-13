@@ -75,23 +75,8 @@ export class PolygonShape extends Shape {
     return this.pointsWorld.some((polygonPoint) => distance(point, polygonPoint) <= toleranceWorld);
   }
 
-  drawFill(ctx, camera) {
-    if (this.pointsWorld.length < 3 || !this.fillEnabled || this.fillAlpha <= 0 || this.fillColor === "transparent") {
-      return;
-    }
-
-    const screenPoints = this.pointsWorld.map((point) => camera.worldToScreen(point));
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
-    for (let i = 1; i < screenPoints.length; i += 1) {
-      ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
-    }
-    ctx.closePath();
-    ctx.globalAlpha = this.fillAlpha;
-    ctx.fillStyle = this.fillColor;
-    ctx.fill();
-    ctx.restore();
+  drawFill(_ctx, _camera) {
+    return;
   }
 
   drawStroke(ctx, camera) {

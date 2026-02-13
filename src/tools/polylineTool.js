@@ -53,7 +53,7 @@ export class PolylineTool extends BaseTool {
       strokeColor: appState.currentStyle.strokeColor,
       strokeWidth: appState.currentStyle.strokeWidth,
       fillColor: appState.currentStyle.fillColor,
-      fillAlpha: appState.currentStyle.fillEnabled ? appState.currentStyle.fillOpacity : 0,
+      fillAlpha: 0,
     });
 
     this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());

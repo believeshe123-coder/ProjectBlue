@@ -7,9 +7,8 @@ import { IsoLineTool } from "./tools/isoLineTool.js";
 import { SelectTool } from "./tools/selectTool.js";
 import { MeasureTool } from "./tools/measureTool.js";
 import { PolylineTool } from "./tools/polylineTool.js";
-import { FillTool } from "./tools/fillTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
-import { EyedropperTool } from "./tools/eyedropperTool.js";
+import { GroupShape } from "./models/groupShape.js";
 
 const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
@@ -36,17 +35,16 @@ const saveThemeButton = document.getElementById("save-theme-btn");
 const deleteThemeButton = document.getElementById("delete-theme-btn");
 
 const strokeWidthInput = document.getElementById("stroke-width-input");
-const fillEnabledToggle = document.getElementById("fill-enabled-toggle");
-const fillOpacityInput = document.getElementById("fill-opacity-input");
 const styleSwatches = document.getElementById("style-swatches");
-const stylePreviewChip = document.getElementById("style-preview-chip");
-const strokeChip = document.getElementById("stroke-chip");
-const fillChip = document.getElementById("fill-chip");
-const strokeChipSwatch = document.getElementById("stroke-chip-swatch");
-const fillChipSwatch = document.getElementById("fill-chip-swatch");
 const paletteColorButton = document.getElementById("palette-color-btn");
 const customColorPicker = document.getElementById("customColorPicker");
 const recentRow = document.getElementById("recent-row");
+const selectionCountEl = document.getElementById("selection-count");
+const selectionPanel = document.getElementById("selection-panel");
+const selectionLineColor = document.getElementById("selection-line-color");
+const selectionStrokeWidth = document.getElementById("selection-stroke-width");
+const selectionFillColor = document.getElementById("selection-fill-color");
+const saveGroupButton = document.getElementById("save-group-btn");
 
 const menuFileButton = document.getElementById("menuFileBtn");
 const menuFileDropdown = document.getElementById("menuFileDropdown");
@@ -102,7 +100,10 @@ const appState = {
   measurementMode: "smart",
   continuePolyline: true,
   showGridUnits: false,
-  selected: { type: null, id: null },
+  selectionSet: new Set(),
+  lastSelectedId: null,
+  marqueeRect: null,
+  selectionPanelOpen: false,
   eraseMode: "object",
   eraserSizePx: 16,
   erasePreview: null,
@@ -113,9 +114,7 @@ const appState = {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
     strokeWidth: 2,
-    fillEnabled: true,
     fillColor: "#4aa3ff",
-    fillOpacity: 1,
   },
 };
 
@@ -126,8 +125,6 @@ const tools = {
   "iso-line": new IsoLineTool(sharedContext),
   measure: new MeasureTool(sharedContext),
   polyline: new PolylineTool(sharedContext),
-  fill: new FillTool(sharedContext),
-  eyedropper: new EyedropperTool(sharedContext),
   erase: new EraseTool(sharedContext),
 };
 
@@ -189,7 +186,8 @@ function renderRecentColors() {
     swatch.style.setProperty("--swatch", color);
     swatch.title = color;
     swatch.addEventListener("click", () => {
-      applyColorToActiveTarget(color);
+      appState.currentStyle.strokeColor = color;
+  refreshStyleUI();
     });
     recentRow.appendChild(swatch);
   }
@@ -203,7 +201,8 @@ function renderStyleSwatches() {
     swatch.style.setProperty("--swatch", color);
     swatch.title = color;
     swatch.addEventListener("click", () => {
-      applyColorToActiveTarget(color);
+      appState.currentStyle.strokeColor = color;
+  refreshStyleUI();
     });
     styleSwatches.appendChild(swatch);
   }
@@ -222,30 +221,15 @@ function toRgba(hex, alpha) {
 function refreshStyleUI() {
   const style = appState.currentStyle;
   strokeWidthInput.value = String(style.strokeWidth);
-  fillEnabledToggle.checked = style.fillEnabled;
-  fillOpacityInput.value = String(style.fillOpacity);
-  fillOpacityInput.disabled = !style.fillEnabled;
-  customColorPicker.value = activeColorTarget === "secondary" ? style.fillColor : style.strokeColor;
+  customColorPicker.value = style.strokeColor;
 
-  const activeColor = activeColorTarget === "secondary" ? style.fillColor : style.strokeColor;
   for (const swatch of document.querySelectorAll(".swatch-grid .swatch, .recent-row .swatch")) {
-    swatch.classList.toggle("active", swatch.title.toLowerCase() === activeColor.toLowerCase());
+    swatch.classList.toggle("active", swatch.title.toLowerCase() === style.strokeColor.toLowerCase());
   }
-
-  const fillColor = style.fillEnabled ? toRgba(style.fillColor, style.fillOpacity) : "transparent";
-  stylePreviewChip.style.background = fillColor;
-  stylePreviewChip.style.color = toRgba(style.strokeColor, 1);
-  stylePreviewChip.style.borderColor = toRgba(style.strokeColor, 0.45);
-  strokeChipSwatch.style.background = style.strokeColor;
-  fillChipSwatch.style.background = style.fillColor;
-  strokeChip.classList.toggle("color-chip--active", activeColorTarget === "primary");
-  fillChip.classList.toggle("color-chip--active", activeColorTarget === "secondary");
 }
 
 
-function resetStyleAlphaDefaults() {
-  appState.currentStyle.fillOpacity = 1;
-}
+function resetStyleAlphaDefaults() {}
 
 function getCanvasCenterScreenPoint() {
   const rect = canvas.getBoundingClientRect();
@@ -337,6 +321,31 @@ function refreshStatus() {
   statusEl.textContent = `Mode: ISO | Zoom: ${camera.zoom.toFixed(2)}x | ${getSnapStatusLabel()}`;
 }
 
+appState.setSelection = setSelection;
+appState.addToSelection = addToSelection;
+appState.removeFromSelection = removeFromSelection;
+appState.clearSelection = clearSelectionState;
+
+function openSelectionPanel(screenPoint) {
+  if (!selectionPanel) return;
+  selectionPanel.hidden = false;
+  appState.selectionPanelOpen = true;
+  if (screenPoint) {
+    selectionPanel.style.left = `${Math.max(12, screenPoint.x + 12)}px`;
+    selectionPanel.style.top = `${Math.max(36, screenPoint.y + 12)}px`;
+    selectionPanel.style.right = "auto";
+  }
+}
+
+function closeSelectionPanel() {
+  if (!selectionPanel) return;
+  selectionPanel.hidden = true;
+  appState.selectionPanelOpen = false;
+}
+
+appState.openSelectionPanel = openSelectionPanel;
+appState.closeSelectionPanel = closeSelectionPanel;
+
 appState.applySampledColor = applySampledColor;
 
 appState.notifyStatus = (message, durationMs = 1400) => {
@@ -385,7 +394,7 @@ function undo() {
   if (!previous) return;
   applySnapshot(previous);
   appState.previewShape = null;
-  appState.selected = { type: null, id: null };
+  clearSelectionState();
 }
 
 function redo() {
@@ -393,17 +402,12 @@ function redo() {
   if (!next) return;
   applySnapshot(next);
   appState.previewShape = null;
-  appState.selected = { type: null, id: null };
+  clearSelectionState();
 }
 
 function zoomBy(factor) {
   camera.zoomAt(getCanvasCenterScreenPoint(), factor);
   refreshStatus();
-}
-
-function clearSelectionState() {
-  shapeStore.clearSelection();
-  appState.selected = { type: null, id: null };
 }
 
 function clearAutosaveProject() {
@@ -434,61 +438,96 @@ function resetProject() {
   appState.notifyStatus?.("Project reset", 1600);
 }
 
-function setSelectedShape(shape) {
-  shapeStore.clearSelection();
-
-  if (!isShapeInteractive(shape)) {
-    appState.selected = { type: null, id: null };
-    return;
-  }
-
-  shape.selected = true;
-  appState.selected = {
-    type: shape.type === "polygon-shape" ? "polygon" : shape.type,
-    id: shape.id,
-  };
-}
-
-function getSelectedShape() {
-  if (!appState.selected.id) {
-    return null;
-  }
-
-  return shapeStore.getShapes().find((shape) => shape.id === appState.selected.id) ?? null;
-}
-
-function getSelectedMeasurableShape() {
-  const selectedShape = getSelectedShape();
-  if (!selectedShape) {
-    return null;
-  }
-
-  return (selectedShape.type === "line" || selectedShape.type === "polygon-shape") ? selectedShape : null;
-}
-
 function isShapeInteractive(shape) {
   return !!shape && shape.visible !== false && shape.locked !== true;
 }
 
+function updateSelectedFlags() {
+  const ids = appState.selectionSet;
+  for (const shape of shapeStore.getShapes()) {
+    shape.selected = ids.has(shape.id);
+  }
+  const count = ids.size;
+  selectionCountEl.textContent = count > 0 ? `${count} selected` : "";
+  if (count === 0) closeSelectionPanel();
+}
+
+function setSelection(ids = [], lastId = null) {
+  appState.selectionSet = new Set(ids);
+  appState.lastSelectedId = lastId;
+  updateSelectedFlags();
+}
+
+function addToSelection(id) {
+  appState.selectionSet.add(id);
+  appState.lastSelectedId = id;
+  updateSelectedFlags();
+}
+
+function removeFromSelection(id) {
+  appState.selectionSet.delete(id);
+  if (appState.lastSelectedId === id) appState.lastSelectedId = null;
+  updateSelectedFlags();
+}
+
+function clearSelectionState() {
+  appState.selectionSet = new Set();
+  appState.lastSelectedId = null;
+  shapeStore.clearSelection();
+  updateSelectedFlags();
+}
+
+function getSelectedShapes() {
+  return shapeStore.getShapes().filter((shape) => appState.selectionSet.has(shape.id));
+}
+
+function getSelectedMeasurableShape() {
+  if (appState.selectionSet.size !== 1) return null;
+  const shape = shapeStore.getShapeById(appState.lastSelectedId) || getSelectedShapes()[0] || null;
+  return (shape && (shape.type === "line" || shape.type === "polygon-shape")) ? shape : null;
+}
+
 function deleteSelection() {
-  const selectedShape = getSelectedShape();
-  if (!isShapeInteractive(selectedShape)) return;
-
+  const selectedShapes = getSelectedShapes();
+  if (!selectedShapes.length) return;
   pushHistoryState();
-
-  if (selectedShape.type === "polygon-shape") {
-    shapeStore.removeShape(selectedShape.id);
-
-    if (appState.deleteSourceLinesOnPolygonDelete && Array.isArray(selectedShape.sourceLineIds)) {
-      for (const lineId of selectedShape.sourceLineIds) {
-        shapeStore.removeShape(lineId);
-      }
+  for (const selectedShape of selectedShapes) {
+    if (selectedShape.type === "polygon-shape" && appState.deleteSourceLinesOnPolygonDelete && Array.isArray(selectedShape.sourceLineIds)) {
+      for (const lineId of selectedShape.sourceLineIds) shapeStore.removeShape(lineId);
     }
-  } else {
     shapeStore.removeShape(selectedShape.id);
   }
-
   clearSelectionState();
+}
+
+
+function applyToSelected(updater) {
+  const selectedShapes = getSelectedShapes();
+  if (!selectedShapes.length) return;
+  for (const shape of selectedShapes) updater(shape);
+}
+
+function createGroupFromSelection() {
+  const selectedShapes = getSelectedShapes().filter((shape) => shape.type !== "group");
+  if (!selectedShapes.length) return;
+  const name = window.prompt("Group name", "Group");
+  if (!name) return;
+  pushHistoryState();
+  const memberIds = selectedShapes.map((shape) => shape.id);
+  for (const shape of selectedShapes) {
+    shape.parentGroupId = `${Date.now()}`;
+    shape.selected = false;
+  }
+  const group = new GroupShape({
+    strokeColor: "#ffffff",
+    strokeWidth: 1,
+    fillColor: appState.currentStyle.fillColor,
+    name,
+    memberIds,
+  });
+  group.parentGroupId = null;
+  shapeStore.addShape(group);
+  setSelection([group.id], group.id);
 }
 
 function buildProjectData() {
@@ -945,25 +984,35 @@ strokeWidthInput.addEventListener("input", (event) => {
   refreshStyleUI();
 });
 
-fillEnabledToggle.addEventListener("change", (event) => {
-  appState.currentStyle.fillEnabled = event.target.checked;
+strokeWidthInput.addEventListener("change", (event) => {
+  const value = Number.parseInt(event.target.value, 10);
+  if (!Number.isFinite(value)) return;
+  pushHistoryState();
+  appState.currentStyle.strokeWidth = value;
+  applyToSelected((shape) => { if ("strokeWidth" in shape) shape.strokeWidth = value; });
   refreshStyleUI();
 });
 
-fillOpacityInput.addEventListener("input", (event) => {
-  appState.currentStyle.fillOpacity = Number.parseFloat(event.target.value);
-  refreshStyleUI();
+selectionLineColor?.addEventListener("input", (event) => {
+  const value = event.target.value;
+  applyToSelected((shape) => { if ("strokeColor" in shape) shape.strokeColor = value; });
 });
+selectionLineColor?.addEventListener("change", () => pushHistoryState());
 
-strokeChip?.addEventListener("click", () => {
-  activeColorTarget = "primary";
-  refreshStyleUI();
+selectionStrokeWidth?.addEventListener("input", (event) => {
+  const value = Number.parseInt(event.target.value, 10);
+  if (!Number.isFinite(value)) return;
+  applyToSelected((shape) => { if ("strokeWidth" in shape) shape.strokeWidth = value; });
 });
+selectionStrokeWidth?.addEventListener("change", () => pushHistoryState());
 
-fillChip?.addEventListener("click", () => {
-  activeColorTarget = "secondary";
-  refreshStyleUI();
+selectionFillColor?.addEventListener("input", (event) => {
+  const value = event.target.value;
+  applyToSelected((shape) => { shape.fillColor = value; });
 });
+selectionFillColor?.addEventListener("change", () => pushHistoryState());
+
+saveGroupButton?.addEventListener("click", createGroupFromSelection);
 
 paletteColorButton?.addEventListener("click", () => {
   customColorPicker?.click();
@@ -971,7 +1020,8 @@ paletteColorButton?.addEventListener("click", () => {
 
 customColorPicker?.addEventListener("input", (event) => {
   const color = event.target.value;
-  applyColorToActiveTarget(color);
+  appState.currentStyle.strokeColor = color;
+  refreshStyleUI();
   addRecentColor(color);
 });
 
@@ -991,6 +1041,7 @@ unitNameInput.addEventListener("change", (event) => {
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeAllMenus();
+    closeSelectionPanel();
     clearSelectionState();
   }
 

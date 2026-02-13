@@ -10,10 +10,7 @@
     <div class="app">
       <header class="menubar" aria-label="Main menu bar">
         <div class="menu-item-wrap">
-          <button class="menu-item" id="menuFileBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuFileDropdown">
-            File
-          </button>
-
+          <button class="menu-item" id="menuFileBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuFileDropdown">File</button>
           <div class="menu-dropdown" id="menuFileDropdown" role="menu" aria-label="File menu" data-open="false">
             <div class="menu-section">
               <div class="menu-title">Project</div>
@@ -25,60 +22,29 @@
           </div>
         </div>
         <div class="menu-item-wrap">
-          <button class="menu-item" id="menuEditBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuEditDropdown">
-            Edit
-          </button>
-
+          <button class="menu-item" id="menuEditBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuEditDropdown">Edit</button>
           <div class="menu-dropdown" id="menuEditDropdown" role="menu" aria-label="Edit menu" data-open="false">
             <div class="menu-section">
               <div class="menu-title">Canvas</div>
-              <label class="field-block" for="canvas-theme-select">
-                <span>Theme</span>
-                <select id="canvas-theme-select" class="scale-input"></select>
-              </label>
-              <label class="field-inline" for="custom-bg-color-picker">
-                <span>Background color</span>
-                <input id="custom-bg-color-picker" type="color" value="#3e6478" />
-              </label>
-              <label class="field-inline" for="custom-grid-color-picker">
-                <span>Grid color</span>
-                <input id="custom-grid-color-picker" type="color" value="#d0f1ff" />
-              </label>
-              <label class="field-block" for="theme-name-input">
-                <span>Theme name</span>
-                <input id="theme-name-input" class="scale-input" type="text" placeholder="My Theme" />
-              </label>
+              <label class="field-block" for="canvas-theme-select"><span>Theme</span><select id="canvas-theme-select" class="scale-input"></select></label>
+              <label class="field-inline" for="custom-bg-color-picker"><span>Background color</span><input id="custom-bg-color-picker" type="color" value="#3e6478" /></label>
+              <label class="field-inline" for="custom-grid-color-picker"><span>Grid color</span><input id="custom-grid-color-picker" type="color" value="#d0f1ff" /></label>
+              <label class="field-block" for="theme-name-input"><span>Theme name</span><input id="theme-name-input" class="scale-input" type="text" placeholder="My Theme" /></label>
               <div class="theme-actions-row">
                 <button id="save-theme-btn" class="menu-link-btn" type="button">Save Theme</button>
                 <button id="delete-theme-btn" class="menu-link-btn" type="button">Delete saved theme</button>
               </div>
             </div>
-
             <div class="menu-section">
               <div class="menu-title">Scale</div>
-              <label class="field-block" for="unit-per-cell">
-                <span>Unit / grid</span>
-                <input id="unit-per-cell" class="scale-input" type="number" min="0.01" step="0.01" value="1" />
-              </label>
-              <label class="field-block" for="unit-name">
-                <span>Unit</span>
-                <select id="unit-name" class="scale-input">
-                  <option value="ft" selected>ft</option>
-                  <option value="in">in</option>
-                  <option value="m">m</option>
-                  <option value="cm">cm</option>
-                </select>
-              </label>
+              <label class="field-block" for="unit-per-cell"><span>Unit / grid</span><input id="unit-per-cell" class="scale-input" type="number" min="0.01" step="0.01" value="1" /></label>
+              <label class="field-block" for="unit-name"><span>Unit</span><select id="unit-name" class="scale-input"><option value="ft" selected>ft</option><option value="in">in</option><option value="m">m</option><option value="cm">cm</option></select></label>
               <div class="scale-display" id="scale-display">1 grid = 1 ft</div>
             </div>
           </div>
         </div>
-
         <div class="menu-item-wrap">
-          <button class="menu-item" id="menuSettingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuSettingsDropdown">
-            Settings
-          </button>
-
+          <button class="menu-item" id="menuSettingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuSettingsDropdown">Settings</button>
           <div class="menu-dropdown" id="menuSettingsDropdown" role="menu" aria-label="Settings menu" data-open="false">
             <div class="menu-section">
               <div class="menu-title">Options</div>
@@ -86,7 +52,6 @@
               <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
               <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continus line</label>
             </div>
-
             <div class="menu-section">
               <div class="menu-title">Snapping</div>
               <label class="menu-row"><input id="snap-grid-toggle" type="checkbox" checked />Snap to grid</label>
@@ -95,7 +60,6 @@
             </div>
           </div>
         </div>
-
       </header>
 
       <div class="main">
@@ -107,73 +71,37 @@
               <button class="tool-button tool-tile" data-tool="iso-line" type="button">Line</button>
               <button class="tool-button tool-tile" data-tool="polyline" type="button">Continus line</button>
               <button class="tool-button tool-tile" data-tool="measure" type="button">Measure</button>
-              <button class="tool-button tool-tile" data-tool="fill" type="button">Fill</button>
-              <button class="tool-button tool-tile" data-tool="eyedropper" type="button">Eyedropper</button>
               <button class="tool-button tool-tile" data-tool="erase" type="button">Erase</button>
             </div>
             <div class="tool-actions">
               <button class="tool-button" id="undo-btn" type="button">Undo</button>
               <button class="tool-button" id="redo-btn" type="button">Redo</button>
             </div>
-            <label class="field-block" for="erase-mode-toggle">
-              <span>Erase mode</span>
-              <button id="erase-mode-toggle" class="style-select" type="button">Erase: Object</button>
-            </label>
-            <label class="field-block" for="eraser-size-input">
-              <span>Eraser size <span id="eraser-size-display">16px</span></span>
-              <input id="eraser-size-input" class="range-input" type="range" min="6" max="40" step="1" value="16" />
-            </label>
+            <div class="selection-count" id="selection-count"></div>
+            <label class="field-block" for="erase-mode-toggle"><span>Erase mode</span><button id="erase-mode-toggle" class="style-select" type="button">Erase: Object</button></label>
+            <label class="field-block" for="eraser-size-input"><span>Eraser size <span id="eraser-size-display">16px</span></span><input id="eraser-size-input" class="range-input" type="range" min="6" max="40" step="1" value="16" /></label>
           </section>
 
           <section class="side-section" aria-label="Color and style">
-            <h2 class="section-title">Colors / Style</h2>
-            <div class="color-chips" role="group" aria-label="Primary and secondary colors">
-              <button id="stroke-chip" class="color-chip color-chip--active" type="button" aria-label="Primary stroke color">
-                <span class="chip-label">Primary</span>
-                <span class="chip-swatch" id="stroke-chip-swatch"></span>
-              </button>
-              <button id="fill-chip" class="color-chip" type="button" aria-label="Secondary fill color">
-                <span class="chip-label">Secondary</span>
-                <span class="chip-swatch" id="fill-chip-swatch"></span>
-              </button>
-              <button id="palette-color-btn" class="palette-add" type="button" aria-label="Pick custom color">+</button>
-            </div>
-
+            <h2 class="section-title">Line Style</h2>
+            <button id="palette-color-btn" class="palette-add" type="button" aria-label="Pick custom color">Color</button>
             <input id="customColorPicker" class="color-input visually-hidden" type="color" value="#ffffff" hidden />
-
             <div class="swatch-grid" id="style-swatches" aria-label="Quick paint swatches"></div>
-            <div class="recent-colors">
-              <label>Recent</label>
-              <div class="recent-row" id="recent-row"></div>
-            </div>
-
-            <label class="field-block" for="fill-opacity-input">
-              <span>Fill α</span>
-              <input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" />
-            </label>
-            <label class="field-block" for="stroke-width-input">
-              <span>Stroke width</span>
-              <select id="stroke-width-input" class="style-select">
-                <option value="1">1</option>
-                <option value="2" selected>2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-              </select>
-            </label>
-            <label class="tool-toggle"><input id="fill-enabled-toggle" type="checkbox" checked />Fill enabled</label>
-            <div id="style-preview-chip" class="style-preview-chip" aria-label="Current stroke and fill preview"></div>
+            <div class="recent-colors"><label>Recent</label><div class="recent-row" id="recent-row"></div></div>
+            <label class="field-block" for="stroke-width-input"><span>Stroke width</span><select id="stroke-width-input" class="style-select"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select></label>
           </section>
         </aside>
 
         <div class="canvas-wrap">
           <canvas id="canvas"></canvas>
           <div class="status" id="status">Mode: ISO</div>
+          <div id="selection-panel" class="selection-panel" hidden>
+            <div class="menu-title">Selection</div>
+            <label class="field-inline"><span>Line color</span><input id="selection-line-color" type="color" value="#ffffff" /></label>
+            <label class="field-inline"><span>Stroke width</span><input id="selection-stroke-width" type="number" min="1" max="10" value="2" /></label>
+            <label class="field-inline"><span>Fill color</span><input id="selection-fill-color" type="color" value="#4aa3ff" /></label>
+            <button id="save-group-btn" class="menu-link-btn" type="button">Save Group</button>
+          </div>
         </div>
       </div>
     </div>

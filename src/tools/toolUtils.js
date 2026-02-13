@@ -97,14 +97,3 @@ export function getLineStyle(appState) {
   };
 }
 
-export function getFillRegionStyle(appState) {
-  const style = getCurrentStyle(appState);
-  return {
-    strokeColor: style.strokeColor,
-    strokeOpacity: style.strokeOpacity,
-    strokeWidth: style.strokeWidth,
-    fillEnabled: style.fillEnabled,
-    fillColor: style.fillColor,
-    fillOpacity: style.fillEnabled ? style.fillOpacity : 0,
-  };
-}
