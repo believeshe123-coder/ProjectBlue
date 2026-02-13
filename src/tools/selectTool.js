@@ -5,16 +5,29 @@ function getPolygonZIndex(shape) {
   return Number.isFinite(shape.zIndex) ? shape.zIndex : 0;
 }
 
+function isShapeSelectable(shape, layerStore) {
+  if (!shape || shape.visible === false || shape.locked === true) {
+    return false;
+  }
+
+  const layer = layerStore.getLayerById(shape.layerId);
+  if (!layer) {
+    return false;
+  }
+
+  return layer.visible !== false && layer.locked !== true;
+}
+
 export class SelectTool extends BaseTool {
   onMouseDown({ worldPoint }) {
-    const { shapeStore, camera, appState } = this.context;
+    const { shapeStore, layerStore, camera, appState } = this.context;
 
     shapeStore.clearSelection();
 
     const shapes = shapeStore.getShapes();
     const polygonsContainingPoint = shapes
       .map((shape, index) => ({ shape, index }))
-      .filter(({ shape }) => shape.type === "polygon-shape" && shape.visible !== false && shape.locked !== true && isPointInPolygon(worldPoint, shape.pointsWorld));
+      .filter(({ shape }) => shape.type === "polygon-shape" && isShapeSelectable(shape, layerStore) && isPointInPolygon(worldPoint, shape.pointsWorld));
 
     polygonsContainingPoint.sort((a, b) => {
       const zDiff = getPolygonZIndex(b.shape) - getPolygonZIndex(a.shape);
@@ -30,7 +43,7 @@ export class SelectTool extends BaseTool {
     const toleranceWorld = 8 / camera.zoom;
     const lineHit = [...shapes]
       .reverse()
-      .find((shape) => shape.type === "line" && shape.visible !== false && shape.locked !== true && shape.containsPoint(worldPoint, toleranceWorld)) ?? null;
+      .find((shape) => shape.type === "line" && isShapeSelectable(shape, layerStore) && shape.containsPoint(worldPoint, toleranceWorld)) ?? null;
 
     const hit = polygonHit ?? lineHit;
 

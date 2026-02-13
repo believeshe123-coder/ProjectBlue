@@ -1,13 +1,15 @@
-let layerCounter = 0;
+const DEFAULT_LAYER_ID = "layer-1";
 
-function createLayerEntity(name = `Layer ${layerCounter + 1}`) {
+function normalizeLayer(layer, fallbackIndex = 0) {
+  const safeIndex = Number.isFinite(layer?.zIndex) ? layer.zIndex : fallbackIndex;
+  const fallbackId = safeIndex === 0 ? DEFAULT_LAYER_ID : `layer-${safeIndex + 1}`;
   return {
-    id: `layer_${layerCounter++}`,
-    name,
-    visible: true,
-    locked: false,
-    defaultStrokeColor: "#ffffff",
-    defaultFillColor: "transparent",
+    id: typeof layer?.id === "string" && layer.id ? layer.id : fallbackId,
+    name: typeof layer?.name === "string" && layer.name.trim() ? layer.name.trim() : `Layer ${safeIndex + 1}`,
+    visible: layer?.visible !== false,
+    locked: layer?.locked === true,
+    zIndex: safeIndex,
+    createdAt: Number.isFinite(layer?.createdAt) ? layer.createdAt : Date.now(),
   };
 }
 
@@ -17,26 +19,93 @@ export class LayerStore {
     this.activeLayerId = null;
   }
 
-  createLayer(name) {
-    const layer = createLayerEntity(name);
-    this.layers.push(layer);
-    if (!this.activeLayerId) {
-      this.activeLayerId = layer.id;
+  ensureDefaultLayer() {
+    if (this.layers.length > 0) {
+      return this.layers[0];
     }
+
+    const layer = {
+      id: DEFAULT_LAYER_ID,
+      name: "Layer 1",
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      createdAt: Date.now(),
+    };
+    this.layers.push(layer);
+    this.activeLayerId = layer.id;
+    return layer;
+  }
+
+  createLayer(name) {
+    const normalizedName = typeof name === "string" && name.trim() ? name.trim() : `Layer ${this.layers.length + 1}`;
+    const layer = {
+      id: `layer-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      name: normalizedName,
+      visible: true,
+      locked: false,
+      zIndex: this.layers.length,
+      createdAt: Date.now(),
+    };
+
+    this.layers.push(layer);
+    this.reindexLayers();
+    this.activeLayerId = layer.id;
     return layer;
   }
 
   deleteLayer(id) {
-    const index = this.layers.findIndex((l) => l.id === id);
-    if (index === -1 || this.layers.length === 1) {
+    const index = this.layers.findIndex((layer) => layer.id === id);
+    if (index === -1 || this.layers.length <= 1) {
       return false;
     }
 
     this.layers.splice(index, 1);
+    this.reindexLayers();
+
     if (this.activeLayerId === id) {
-      this.activeLayerId = this.layers[0].id;
+      this.activeLayerId = this.layers[Math.max(index - 1, 0)]?.id ?? this.layers[0].id;
     }
+
     return true;
+  }
+
+  updateLayer(id, updates = {}) {
+    const layer = this.layers.find((item) => item.id === id);
+    if (!layer) return false;
+
+    if (typeof updates.name === "string" && updates.name.trim()) {
+      layer.name = updates.name.trim();
+    }
+
+    if (typeof updates.visible === "boolean") {
+      layer.visible = updates.visible;
+    }
+
+    if (typeof updates.locked === "boolean") {
+      layer.locked = updates.locked;
+    }
+
+    return true;
+  }
+
+  moveLayer(fromId, toId) {
+    const fromIndex = this.layers.findIndex((layer) => layer.id === fromId);
+    const toIndex = this.layers.findIndex((layer) => layer.id === toId);
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+      return false;
+    }
+
+    const [moved] = this.layers.splice(fromIndex, 1);
+    this.layers.splice(toIndex, 0, moved);
+    this.reindexLayers();
+    return true;
+  }
+
+  reindexLayers() {
+    this.layers.forEach((layer, index) => {
+      layer.zIndex = index;
+    });
   }
 
   setActiveLayer(id) {
@@ -51,16 +120,32 @@ export class LayerStore {
     return this.layers.find((layer) => layer.id === this.activeLayerId) ?? null;
   }
 
-  toggleVisibility(id) {
-    const layer = this.layers.find((l) => l.id === id);
-    if (!layer) {
-      return false;
-    }
-    layer.visible = !layer.visible;
-    return true;
+  getLayerById(id) {
+    return this.layers.find((layer) => layer.id === id) ?? null;
   }
 
   getLayers() {
-    return [...this.layers];
+    return [...this.layers].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  }
+
+  serialize() {
+    return this.getLayers().map((layer) => ({ ...layer }));
+  }
+
+  replaceFromSerialized(serializedLayers) {
+    if (!Array.isArray(serializedLayers) || serializedLayers.length === 0) {
+      this.layers = [];
+      this.activeLayerId = null;
+      this.ensureDefaultLayer();
+      return;
+    }
+
+    this.layers = serializedLayers.map((layer, index) => normalizeLayer(layer, index));
+    this.reindexLayers();
+
+    const activeExists = this.layers.some((layer) => layer.id === this.activeLayerId);
+    if (!activeExists) {
+      this.activeLayerId = this.layers[0].id;
+    }
   }
 }

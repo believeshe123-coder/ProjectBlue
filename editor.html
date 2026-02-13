@@ -117,21 +117,11 @@
           </section>
 
           <section class="side-section" aria-label="Layers panel">
-            <h2 class="section-title">Layers</h2>
-            <div id="layers-panel" class="layers-panel">
-              <details class="layers-group" open>
-                <summary>Polygons (<span id="layers-polygons-count">0</span>)</summary>
-                <div id="layers-polygons-list" class="layers-list"></div>
-              </details>
-              <details class="layers-group" open>
-                <summary>Lines (<span id="layers-lines-count">0</span>)</summary>
-                <div id="layers-lines-list" class="layers-list"></div>
-              </details>
-              <details class="layers-group" open>
-                <summary>Measurements (<span id="layers-measurements-count">0</span>)</summary>
-                <div id="layers-measurements-list" class="layers-list"></div>
-              </details>
+            <div class="layers-header">
+              <h2 class="section-title">Layers</h2>
+              <button id="new-layer-btn" class="tool-button layers-add-btn" type="button">New Layer</button>
             </div>
+            <div id="layers-list" class="layers-list"></div>
           </section>
 
           <section class="side-section" aria-label="Color and style">
