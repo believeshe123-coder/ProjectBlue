@@ -42,6 +42,39 @@ function floodFill(mask, width, height, seedX, seedY) {
   return { filled, count };
 }
 
+function dilateFilledMask(filled, barrierMask, width, height) {
+  const dilated = filled.slice();
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const idx = y * width + x;
+      if (filled[idx] !== 1) continue;
+
+      if (x > 0) {
+        const left = idx - 1;
+        if (barrierMask[left] === 0) dilated[left] = 1;
+      }
+
+      if (x < width - 1) {
+        const right = idx + 1;
+        if (barrierMask[right] === 0) dilated[right] = 1;
+      }
+
+      if (y > 0) {
+        const up = idx - width;
+        if (barrierMask[up] === 0) dilated[up] = 1;
+      }
+
+      if (y < height - 1) {
+        const down = idx + width;
+        if (barrierMask[down] === 0) dilated[down] = 1;
+      }
+    }
+  }
+
+  return dilated;
+}
+
 function buildSegmentsFromMask(mask, width, height) {
   const segments = [];
 
@@ -103,31 +136,42 @@ export class FillTool extends BaseTool {
     }
 
     const canvas = this.context.canvas;
-    const width = Math.floor(canvas.clientWidth);
-    const height = Math.floor(canvas.clientHeight);
-    if (width < 2 || height < 2) {
+    const viewW = Math.floor(canvas.clientWidth);
+    const viewH = Math.floor(canvas.clientHeight);
+    if (viewW < 2 || viewH < 2) {
       return;
     }
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(1, Math.round(viewW * dpr));
+    const height = Math.max(1, Math.round(viewH * dpr));
 
     const offscreen = document.createElement("canvas");
     offscreen.width = width;
     offscreen.height = height;
     const bctx = offscreen.getContext("2d", { willReadFrequently: true });
 
-    bctx.clearRect(0, 0, width, height);
+    bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bctx.imageSmoothingEnabled = false;
+    bctx.clearRect(0, 0, viewW, viewH);
     bctx.globalAlpha = 1;
     bctx.strokeStyle = "#000";
-    bctx.lineCap = "round";
-    bctx.lineJoin = "round";
+    bctx.lineCap = "butt";
+    bctx.lineJoin = "miter";
 
     for (const shape of shapeStore.getShapes()) {
       if (shape.type !== "line") continue;
       const s = camera.worldToScreen(shape.start);
       const e = camera.worldToScreen(shape.end);
-      bctx.lineWidth = Math.max(1, Number(shape.strokeWidth) || 1);
+      const x1 = Math.round(s.x * dpr) / dpr;
+      const y1 = Math.round(s.y * dpr) / dpr;
+      const x2 = Math.round(e.x * dpr) / dpr;
+      const y2 = Math.round(e.y * dpr) / dpr;
+
+      bctx.lineWidth = Math.max(1, (Number(shape.strokeWidth) || 1) + 2);
       bctx.beginPath();
-      bctx.moveTo(s.x, s.y);
-      bctx.lineTo(e.x, e.y);
+      bctx.moveTo(x1, y1);
+      bctx.lineTo(x2, y2);
       bctx.stroke();
     }
 
@@ -138,8 +182,8 @@ export class FillTool extends BaseTool {
       boundaryMask[i] = imageData.data[px + 3] > 0 ? 1 : 0;
     }
 
-    const seedX = Math.max(0, Math.min(width - 1, Math.floor(screenPoint.x)));
-    const seedY = Math.max(0, Math.min(height - 1, Math.floor(screenPoint.y)));
+    const seedX = Math.max(0, Math.min(width - 1, Math.floor(screenPoint.x * dpr)));
+    const seedY = Math.max(0, Math.min(height - 1, Math.floor(screenPoint.y * dpr)));
     const { filled } = floodFill(boundaryMask, width, height, seedX, seedY);
 
     if (!filled) {
@@ -147,7 +191,8 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    const segments = buildSegmentsFromMask(filled, width, height);
+    const dilatedFilled = dilateFilledMask(filled, boundaryMask, width, height);
+    const segments = buildSegmentsFromMask(dilatedFilled, width, height);
     const loop = segmentsToLoop(segments);
 
     if (loop.length < 3) {
@@ -155,7 +200,7 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    const worldPoints = loop.map((point) => camera.screenToWorld(point));
+    const worldPoints = loop.map((point) => camera.screenToWorld({ x: point.x / dpr, y: point.y / dpr }));
 
     const currentStyle = getCurrentStyle(appState);
 
