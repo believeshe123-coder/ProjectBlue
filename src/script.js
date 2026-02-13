@@ -68,7 +68,7 @@ const appState = {
   snapIndicator: null,
   snapToGrid: true,
   snapToMidpoints: true,
-  debugSnap: true,
+  debugSnap: false,
   snapDebugStatus: "SNAP: OFF",
   unitName: "ft",
   unitPerCell: 1,
@@ -343,6 +343,8 @@ snapMidToggle.addEventListener("change", (event) => {
 
 debugSnapToggle.addEventListener("change", (event) => {
   appState.debugSnap = event.target.checked;
+  localStorage.setItem("debugSnap", appState.debugSnap ? "1" : "0");
+  localStorage.setItem("debugSnapResetV1", "1");
 });
 
 continuePolylineToggle.addEventListener("change", (event) => {
@@ -460,6 +462,13 @@ renderRecentColors();
 refreshStyleUI();
 uiOpen = localStorage.getItem("uiDrawerOpen") !== "0";
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
+const debugSnapResetV1 = localStorage.getItem("debugSnapResetV1");
+if (debugSnapResetV1 !== "1") {
+  localStorage.setItem("debugSnap", "0");
+  localStorage.setItem("debugSnapResetV1", "1");
+}
+appState.debugSnap = localStorage.getItem("debugSnap") === "1";
+debugSnapToggle.checked = appState.debugSnap;
 showGridUnitsToggle.checked = appState.showGridUnits;
 applyUiDrawerState();
 setActiveTool("select");

@@ -23,20 +23,19 @@ export class Renderer {
 
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH);
 
-    if (this.appState.debugSnap) {
-      const centerWorld = this.camera.screenToWorld({ x: canvasCssW / 2, y: canvasCssH / 2 });
-      const centerUV = worldToIsoUV(centerWorld);
+    if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
+      const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);
       const centerURounded = Math.round(centerUV.u);
       const centerVRounded = Math.round(centerUV.v);
 
       this.ctx.save();
-      this.ctx.fillStyle = "rgba(255, 226, 122, 0.9)";
-      for (let du = -5; du <= 5; du += 1) {
-        for (let dv = -5; dv <= 5; dv += 1) {
+      this.ctx.fillStyle = "rgba(255, 226, 122, 0.35)";
+      for (let du = -4; du <= 4; du += 1) {
+        for (let dv = -4; dv <= 4; dv += 1) {
           const latticePoint = isoUVToWorld(centerURounded + du, centerVRounded + dv);
           const dot = this.camera.worldToScreen(latticePoint);
           this.ctx.beginPath();
-          this.ctx.arc(dot.x, dot.y, 1.6, 0, Math.PI * 2);
+          this.ctx.arc(dot.x, dot.y, 1.5, 0, Math.PI * 2);
           this.ctx.fill();
         }
       }
