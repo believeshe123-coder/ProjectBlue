@@ -16,13 +16,11 @@ export class PolylineTool extends BaseTool {
     super(context);
     this.chainStart = null;
     this.lastPoint = null;
-    this.committedInChain = false;
   }
 
   onDeactivate() {
     this.chainStart = null;
     this.lastPoint = null;
-    this.committedInChain = false;
     this.context.appState.previewShape = null;
     this.context.appState.snapIndicator = null;
     this.context.appState.snapDebugStatus = "SNAP: OFF";
@@ -31,7 +29,6 @@ export class PolylineTool extends BaseTool {
   finishChain() {
     this.chainStart = null;
     this.lastPoint = null;
-    this.committedInChain = false;
     this.context.appState.previewShape = null;
   }
 
@@ -48,7 +45,6 @@ export class PolylineTool extends BaseTool {
     if (!this.chainStart) {
       this.chainStart = snapped.pt;
       this.lastPoint = snapped.pt;
-      this.committedInChain = false;
       return;
     }
 
@@ -59,11 +55,7 @@ export class PolylineTool extends BaseTool {
       return;
     }
 
-    if (!this.committedInChain) {
-      historyStore.pushState(shapeStore.serialize());
-      this.committedInChain = true;
-    }
-
+    historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(createLine(activeLayer.id, this.lastPoint, snapped.pt, getLineStyle(appState)));
 
     this.lastPoint = snapped.pt;
