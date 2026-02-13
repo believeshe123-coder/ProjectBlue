@@ -1,6 +1,7 @@
 import { Shape } from "./shape.js";
 import { distancePointToSegment } from "../utils/math.js";
 import { worldToIsoUV } from "../core/isoGrid.js";
+import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class Measurement extends Shape {
   constructor({ a, b, ...rest }) {
@@ -17,12 +18,12 @@ export class Measurement extends Shape {
     const u2 = Math.round(uvB.u);
     const v2 = Math.round(uvB.v);
 
-    const du = u2 - u1;
-    const dv = v2 - v1;
-    const gridDistanceCells = Math.hypot(du, dv);
-    const realDistance = gridDistanceCells * appState.unitPerCell;
-
-    return `${gridDistanceCells.toFixed(2)} grid | ${realDistance.toFixed(2)} ${appState.unitName}`;
+    return buildDistanceLabel({
+      startUV: { u: u1, v: v1 },
+      endUV: { u: u2, v: v2 },
+      unitPerCell: appState.unitPerCell,
+      unitName: appState.unitName,
+    });
   }
 
   draw(ctx, camera, appState) {

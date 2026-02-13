@@ -5,6 +5,9 @@ export class CanvasEngine {
     this.getTool = getTool;
     this.onViewChange = onViewChange;
     this.isPanning = false;
+    this.isMiddlePanning = false;
+    this.middlePanStartScreen = null;
+    this.middlePanCameraStart = null;
     this.lastPointer = null;
 
     this.ctx = canvas.getContext("2d");
@@ -21,6 +24,11 @@ export class CanvasEngine {
     canvas.addEventListener("mousedown", this.handleMouseDown);
     canvas.addEventListener("mousemove", this.handleMouseMove);
     window.addEventListener("mouseup", this.handleMouseUp);
+    canvas.addEventListener("auxclick", (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+      }
+    });
     canvas.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       onContextMenuPrevent?.(e);
@@ -63,6 +71,14 @@ export class CanvasEngine {
     const screenPoint = this.getScreenPointFromEvent(event);
     const worldPoint = this.camera.screenToWorld(screenPoint);
 
+    if (event.button === 1) {
+      this.isMiddlePanning = true;
+      this.middlePanStartScreen = screenPoint;
+      this.middlePanCameraStart = { x: this.camera.x, y: this.camera.y };
+      event.preventDefault();
+      return;
+    }
+
     if (event.button === 2) {
       this.isPanning = true;
       this.lastPointer = screenPoint;
@@ -75,6 +91,16 @@ export class CanvasEngine {
   handleMouseMove(event) {
     const screenPoint = this.getScreenPointFromEvent(event);
     const worldPoint = this.camera.screenToWorld(screenPoint);
+
+    if (this.isMiddlePanning && this.middlePanStartScreen && this.middlePanCameraStart) {
+      const dx = screenPoint.x - this.middlePanStartScreen.x;
+      const dy = screenPoint.y - this.middlePanStartScreen.y;
+      this.camera.x = this.middlePanCameraStart.x - dx / this.camera.zoom;
+      this.camera.y = this.middlePanCameraStart.y - dy / this.camera.zoom;
+      event.preventDefault();
+      this.onViewChange?.();
+      return;
+    }
 
     if (this.isPanning && this.lastPointer) {
       this.camera.panBy(screenPoint.x - this.lastPointer.x, screenPoint.y - this.lastPointer.y);
@@ -89,6 +115,14 @@ export class CanvasEngine {
   handleMouseUp(event) {
     const screenPoint = this.getScreenPointFromEvent(event);
     const worldPoint = this.camera.screenToWorld(screenPoint);
+
+    if (event.button === 1) {
+      this.isMiddlePanning = false;
+      this.middlePanStartScreen = null;
+      this.middlePanCameraStart = null;
+      event.preventDefault();
+      return;
+    }
 
     if (event.button === 2) {
       this.isPanning = false;
