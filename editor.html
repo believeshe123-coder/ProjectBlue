@@ -62,10 +62,13 @@
               <button id="palette-color-btn" class="palette-add" type="button" aria-label="Pick custom color">+</button>
             </div>
 
-            <input id="stroke-color-input" class="color-input visually-hidden" type="color" value="#ffffff" />
-            <input id="fill-color-input" class="color-input visually-hidden" type="color" value="#4aa3ff" />
+            <input id="customColorPicker" class="color-input visually-hidden" type="color" value="#ffffff" hidden />
 
             <div class="swatch-grid" id="style-swatches" aria-label="Quick paint swatches"></div>
+            <div class="recent-colors">
+              <label>Recent</label>
+              <div class="recent-row" id="recent-row"></div>
+            </div>
 
             <div class="style-controls-inline">
               <label class="style-inline-item" for="stroke-opacity-input">

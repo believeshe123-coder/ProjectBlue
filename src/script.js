@@ -28,11 +28,9 @@ const scaleDisplay = document.getElementById("scale-display");
 const showDimensionsToggle = document.getElementById("show-dimensions-toggle");
 const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 
-const strokeColorInput = document.getElementById("stroke-color-input");
 const strokeOpacityInput = document.getElementById("stroke-opacity-input");
 const strokeWidthInput = document.getElementById("stroke-width-input");
 const fillEnabledToggle = document.getElementById("fill-enabled-toggle");
-const fillColorInput = document.getElementById("fill-color-input");
 const fillOpacityInput = document.getElementById("fill-opacity-input");
 const styleSwatches = document.getElementById("style-swatches");
 const stylePreviewChip = document.getElementById("style-preview-chip");
@@ -41,6 +39,8 @@ const fillChip = document.getElementById("fill-chip");
 const strokeChipSwatch = document.getElementById("stroke-chip-swatch");
 const fillChipSwatch = document.getElementById("fill-chip-swatch");
 const paletteColorButton = document.getElementById("palette-color-btn");
+const customColorPicker = document.getElementById("customColorPicker");
+const recentRow = document.getElementById("recent-row");
 
 const calmPalette = [
   "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
@@ -49,7 +49,8 @@ const calmPalette = [
   "#8f8ad5", "#b79bc8", "#e7d6be", "#c5ced9", "#888f99", "#3a3f48",
 ];
 
-let activeColorTarget = "stroke";
+let activeColorTarget = "primary";
+let recentColors = [];
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
@@ -113,19 +114,39 @@ const renderer = new Renderer({
 layerStore.createLayer("Layer 1");
 
 function applyColorToTarget(target, color) {
-  if (target === "fill") {
+  if (target === "secondary") {
     appState.currentStyle.fillColor = color;
-    fillColorInput.value = color;
     return;
   }
 
   appState.currentStyle.strokeColor = color;
-  strokeColorInput.value = color;
 }
 
 function applyColorToActiveTarget(color) {
   applyColorToTarget(activeColorTarget, color);
   refreshStyleUI();
+}
+
+function addRecentColor(color) {
+  recentColors = [color, ...recentColors.filter((recentColor) => recentColor.toLowerCase() !== color.toLowerCase())].slice(0, 8);
+  renderRecentColors();
+  refreshStyleUI();
+}
+
+function renderRecentColors() {
+  if (!recentRow) return;
+  recentRow.textContent = "";
+  for (const color of recentColors) {
+    const swatch = document.createElement("button");
+    swatch.type = "button";
+    swatch.className = "swatch";
+    swatch.style.setProperty("--swatch", color);
+    swatch.title = color;
+    swatch.addEventListener("click", () => {
+      applyColorToActiveTarget(color);
+    });
+    recentRow.appendChild(swatch);
+  }
 }
 
 function renderStyleSwatches() {
@@ -154,17 +175,15 @@ function toRgba(hex, alpha) {
 
 function refreshStyleUI() {
   const style = appState.currentStyle;
-  strokeColorInput.value = style.strokeColor;
   strokeOpacityInput.value = String(style.strokeOpacity);
   strokeWidthInput.value = String(style.strokeWidth);
   fillEnabledToggle.checked = style.fillEnabled;
-  fillColorInput.value = style.fillColor;
   fillOpacityInput.value = String(style.fillOpacity);
-  fillColorInput.disabled = false;
   fillOpacityInput.disabled = !style.fillEnabled;
+  customColorPicker.value = activeColorTarget === "secondary" ? style.fillColor : style.strokeColor;
 
-  const activeColor = activeColorTarget === "fill" ? style.fillColor : style.strokeColor;
-  for (const swatch of styleSwatches.querySelectorAll(".swatch")) {
+  const activeColor = activeColorTarget === "secondary" ? style.fillColor : style.strokeColor;
+  for (const swatch of document.querySelectorAll(".swatch-grid .swatch, .recent-row .swatch")) {
     swatch.classList.toggle("active", swatch.title.toLowerCase() === activeColor.toLowerCase());
   }
 
@@ -174,8 +193,8 @@ function refreshStyleUI() {
   stylePreviewChip.style.borderColor = toRgba(style.strokeColor, Math.max(style.strokeOpacity * 0.45, 0.22));
   strokeChipSwatch.style.background = style.strokeColor;
   fillChipSwatch.style.background = style.fillColor;
-  strokeChip.classList.toggle("color-chip--active", activeColorTarget === "stroke");
-  fillChip.classList.toggle("color-chip--active", activeColorTarget === "fill");
+  strokeChip.classList.toggle("color-chip--active", activeColorTarget === "primary");
+  fillChip.classList.toggle("color-chip--active", activeColorTarget === "secondary");
 }
 
 function getCanvasCenterScreenPoint() {
@@ -289,11 +308,6 @@ showDimensionsToggle.addEventListener("change", (event) => {
   appState.showDimensions = event.target.checked;
 });
 
-strokeColorInput.addEventListener("input", (event) => {
-  applyColorToTarget("stroke", event.target.value);
-  refreshStyleUI();
-});
-
 strokeOpacityInput.addEventListener("input", (event) => {
   appState.currentStyle.strokeOpacity = Number.parseFloat(event.target.value);
   refreshStyleUI();
@@ -309,32 +323,29 @@ fillEnabledToggle.addEventListener("change", (event) => {
   refreshStyleUI();
 });
 
-fillColorInput.addEventListener("input", (event) => {
-  applyColorToTarget("fill", event.target.value);
-  refreshStyleUI();
-});
-
 fillOpacityInput.addEventListener("input", (event) => {
   appState.currentStyle.fillOpacity = Number.parseFloat(event.target.value);
   refreshStyleUI();
 });
 
 strokeChip?.addEventListener("click", () => {
-  activeColorTarget = "stroke";
+  activeColorTarget = "primary";
   refreshStyleUI();
 });
 
 fillChip?.addEventListener("click", () => {
-  activeColorTarget = "fill";
+  activeColorTarget = "secondary";
   refreshStyleUI();
 });
 
 paletteColorButton?.addEventListener("click", () => {
-  if (activeColorTarget === "fill") {
-    fillColorInput.click();
-  } else {
-    strokeColorInput.click();
-  }
+  customColorPicker?.click();
+});
+
+customColorPicker?.addEventListener("input", (event) => {
+  const color = event.target.value;
+  applyColorToActiveTarget(color);
+  addRecentColor(color);
 });
 
 unitPerCellInput.addEventListener("input", (event) => {
@@ -395,6 +406,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 renderStyleSwatches();
+renderRecentColors();
 refreshStyleUI();
 setActiveTool("select");
 refreshScaleDisplay();
