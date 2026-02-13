@@ -1,10 +1,10 @@
 import { Shape } from "./shape.js";
 import { distance, isPointInPolygon } from "../utils/math.js";
-import { worldToIsoUV } from "../core/isoGrid.js";
+import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
 import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class PolygonShape extends Shape {
-  constructor({ id, pointsWorld = [], sourceLineIds = [], strokeColor, strokeWidth = 1, fillColor, fillAlpha = 1, zIndex = 0, createdAt, ...rest }) {
+  constructor({ id, pointsWorld = [], pointsUV = [], sourceLineIds = [], strokeColor, strokeWidth = 1, fillColor, fillAlpha = 1, zIndex = 0, createdAt, ...rest }) {
     super({
       id,
       ...rest,
@@ -16,11 +16,27 @@ export class PolygonShape extends Shape {
       fillEnabled: fillAlpha > 0 && fillColor !== "transparent",
     });
 
-    this.pointsWorld = pointsWorld.map((point) => ({ ...point }));
+    this.pointsUV = (pointsUV.length ? pointsUV : pointsWorld.map((point) => worldToIsoUV(point))).map((point) => ({ ...point }));
+    this.syncWorldFromUV();
     this.sourceLineIds = Array.isArray(sourceLineIds) ? [...sourceLineIds] : [];
     this.fillAlpha = Number.isFinite(fillAlpha) ? fillAlpha : 1;
     this.zIndex = zIndex;
     this.createdAt = createdAt ?? Date.now();
+  }
+
+
+
+  syncWorldFromUV() {
+    this.pointsWorld = this.pointsUV.map((point) => isoUVToWorld(point.u, point.v));
+  }
+
+  syncUVFromWorld() {
+    this.pointsUV = this.pointsWorld.map((point) => worldToIsoUV(point));
+  }
+
+  setUVPoints(pointsUV) {
+    this.pointsUV = pointsUV.map((point) => ({ ...point }));
+    this.syncWorldFromUV();
   }
 
   get isClosed() {
@@ -138,8 +154,8 @@ export class PolygonShape extends Shape {
       };
 
       const label = buildDistanceLabel({
-        startUV: worldToIsoUV(start),
-        endUV: worldToIsoUV(end),
+        startUV: this.pointsUV[i],
+        endUV: this.pointsUV[(i + 1) % this.pointsUV.length],
         unitPerCell,
         unitName,
         showGridUnits: appState.showGridUnits,
@@ -173,6 +189,7 @@ export class PolygonShape extends Shape {
       ...super.toJSON(),
       type: "polygon-shape",
       pointsWorld: this.pointsWorld.map((point) => ({ ...point })),
+      pointsUV: this.pointsUV.map((point) => ({ ...point })),
       sourceLineIds: [...this.sourceLineIds],
       fillAlpha: this.fillAlpha,
       zIndex: this.zIndex,
