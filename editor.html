@@ -10,37 +10,50 @@
     <div class="app">
       <header class="menubar" aria-label="Main menu bar">
         <button class="menu-item" type="button">File</button>
-        <button class="menu-item" type="button">Edit</button>
-
         <div class="menu-item-wrap">
-          <button class="menu-item" id="menuSettingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuSettingsDropdown">
-            Settings
+          <button class="menu-item" id="menuEditBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuEditDropdown">
+            Edit
           </button>
 
-          <div class="menu-dropdown" id="menuSettingsDropdown" role="menu" aria-label="Settings menu" data-open="false">
-            <div class="menu-section">
-              <div class="menu-title">Options</div>
-              <label class="menu-row"><input id="show-dimensions-toggle" type="checkbox" checked />Show dimensions</label>
-              <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
-              <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continue polyline</label>
-            </div>
-
+          <div class="menu-dropdown" id="menuEditDropdown" role="menu" aria-label="Edit menu" data-open="false">
             <div class="menu-section">
               <div class="menu-title">Canvas</div>
               <label class="field-block" for="canvas-theme-select">
                 <span>Theme</span>
                 <select id="canvas-theme-select" class="scale-input">
                   <option value="light" selected>Light blueprint</option>
-                  <option value="bw">Black &amp; white</option>
+                  <option value="dark">Dark blueprint</option>
+                  <option value="paper">Paper</option>
+                  <option value="custom">Custom</option>
                 </select>
               </label>
-            </div>
-
-            <div class="menu-section">
-              <div class="menu-title">Snapping</div>
-              <label class="menu-row"><input id="snap-grid-toggle" type="checkbox" checked />Snap to grid</label>
-              <label class="menu-row"><input id="snap-mid-toggle" type="checkbox" checked />Snap to midpoint</label>
-              <label class="menu-row"><input id="debug-snap-toggle" type="checkbox" />Debug snap</label>
+              <label class="field-block" for="background-type-select">
+                <span>Background type</span>
+                <select id="background-type-select" class="scale-input">
+                  <option value="preset" selected>Preset</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <div class="custom-background-controls" id="custom-background-controls" hidden>
+                <div class="menu-row" role="radiogroup" aria-label="Custom background mode">
+                  <label><input type="radio" id="custom-bg-mode-css" name="custom-bg-mode" value="css" checked />CSS</label>
+                  <label><input type="radio" id="custom-bg-mode-image" name="custom-bg-mode" value="image" />Image URL</label>
+                </div>
+                <label class="field-block" for="custom-background-input">
+                  <span>Custom background code</span>
+                  <textarea id="custom-background-input" class="custom-bg-textarea" rows="3" placeholder="#0f3b53&#10;linear-gradient(180deg, #0f3b53 0%, #0a2b3d 100%)&#10;https://example.com/mytexture.png"></textarea>
+                </label>
+                <label class="field-inline" for="custom-bg-color-picker">
+                  <span>Background color</span>
+                  <input id="custom-bg-color-picker" type="color" value="#0f3b53" />
+                </label>
+                <label class="field-inline" for="custom-grid-color-picker">
+                  <span>Grid color</span>
+                  <input id="custom-grid-color-picker" type="color" value="#d0f1ff" />
+                </label>
+                <label class="menu-row"><input id="custom-bg-repeat-toggle" type="checkbox" checked />Repeat image</label>
+                <button id="custom-background-reset" class="menu-link-btn" type="button">Reset</button>
+              </div>
             </div>
 
             <div class="menu-section">
@@ -59,6 +72,28 @@
                 </select>
               </label>
               <div class="scale-display" id="scale-display">1 grid = 1 ft</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="menu-item-wrap">
+          <button class="menu-item" id="menuSettingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuSettingsDropdown">
+            Settings
+          </button>
+
+          <div class="menu-dropdown" id="menuSettingsDropdown" role="menu" aria-label="Settings menu" data-open="false">
+            <div class="menu-section">
+              <div class="menu-title">Options</div>
+              <label class="menu-row"><input id="show-dimensions-toggle" type="checkbox" checked />Show dimensions</label>
+              <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
+              <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continue polyline</label>
+            </div>
+
+            <div class="menu-section">
+              <div class="menu-title">Snapping</div>
+              <label class="menu-row"><input id="snap-grid-toggle" type="checkbox" checked />Snap to grid</label>
+              <label class="menu-row"><input id="snap-mid-toggle" type="checkbox" checked />Snap to midpoint</label>
+              <label class="menu-row"><input id="debug-snap-toggle" type="checkbox" />Debug snap</label>
             </div>
           </div>
         </div>
