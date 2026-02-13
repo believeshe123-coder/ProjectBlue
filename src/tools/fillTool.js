@@ -1,7 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { distance, isPointInPolygon } from "../utils/math.js";
-import { ensureActiveDrawableLayer } from "./toolUtils.js";
 
 const MAX_CYCLE_LENGTH = 48;
 const MIN_AREA = 1e-4;
@@ -154,15 +153,13 @@ export class FillTool extends BaseTool {
   }
 
   onMouseDown({ event, worldPoint }) {
-    const { shapeStore, layerStore, historyStore, appState, camera } = this.context;
-    const activeLayer = ensureActiveDrawableLayer(this.context);
-    if (!activeLayer) return;
+    const { shapeStore, historyStore, appState, camera } = this.context;
 
     const shapes = shapeStore.getShapes();
     const clickFillColor = event?.button === 2 ? appState.currentStyle.fillColor : appState.currentStyle.strokeColor;
     const target = [...shapes]
       .reverse()
-      .find((shape) => shape.layerId === activeLayer.id && shape.visible !== false && shape.locked !== true && isPolygonShape(shape) && shape.containsPoint(worldPoint));
+      .find((shape) => shape.visible !== false && shape.locked !== true && isPolygonShape(shape) && shape.containsPoint(worldPoint));
 
     if (target) {
       this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
@@ -173,7 +170,7 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    const lines = shapes.filter((shape) => shape.layerId === activeLayer.id && shape.visible !== false && shape.locked !== true && isLineShape(shape));
+    const lines = shapes.filter((shape) => shape.visible !== false && shape.locked !== true && isLineShape(shape));
     const eps = 2 / Math.max(camera.zoom, 1e-6);
     const graph = buildLineGraph(lines, eps);
     const cycles = findCycles(graph);
@@ -198,7 +195,6 @@ export class FillTool extends BaseTool {
     this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
 
     const polygon = new PolygonShape({
-      layerId: activeLayer.id,
       pointsWorld: selected.pointsWorld,
       strokeColor: appState.currentStyle.strokeColor,
       strokeWidth: appState.currentStyle.strokeWidth,

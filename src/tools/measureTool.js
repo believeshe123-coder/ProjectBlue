@@ -1,7 +1,7 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { Measurement } from "../models/measurement.js";
-import { ensureActiveDrawableLayer, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 export class MeasureTool extends BaseTool {
   constructor(context) {
@@ -15,9 +15,7 @@ export class MeasureTool extends BaseTool {
   }
 
   onMouseDown({ screenPoint }) {
-    const { appState, layerStore, historyStore, shapeStore } = this.context;
-    const activeLayer = ensureActiveDrawableLayer(this.context);
-    if (!activeLayer) return;
+    const { appState, historyStore, shapeStore } = this.context;
 
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
@@ -30,7 +28,6 @@ export class MeasureTool extends BaseTool {
     this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(
       new Measurement({
-        layerId: activeLayer.id,
         strokeColor: "#f8fcff",
         strokeOpacity: 1,
         strokeWidth: 2,
@@ -54,14 +51,7 @@ export class MeasureTool extends BaseTool {
       return;
     }
 
-    const layer = this.context.layerStore.getActiveLayer();
-    if (!layer || layer.visible === false || layer.locked === true) {
-      this.context.appState.previewShape = null;
-      return;
-    }
-
     this.context.appState.previewShape = new Line({
-      layerId: layer.id,
       start: this.a,
       end: snapped.pt,
       strokeColor: "#f8fcff",

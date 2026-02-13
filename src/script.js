@@ -2,8 +2,7 @@ import { CanvasEngine } from "./core/canvasEngine.js";
 import { Camera } from "./core/camera.js";
 import { Renderer } from "./core/renderer.js";
 import { HistoryStore } from "./state/history.js";
-import { LayerStore } from "./state/layerStore.js";
-import { ShapeStore, migrateShapeLayers } from "./state/shapeStore.js";
+import { ShapeStore } from "./state/shapeStore.js";
 import { IsoLineTool } from "./tools/isoLineTool.js";
 import { SelectTool } from "./tools/selectTool.js";
 import { MeasureTool } from "./tools/measureTool.js";
@@ -59,10 +58,6 @@ const menuEditButton = document.getElementById("menuEditBtn");
 const menuEditDropdown = document.getElementById("menuEditDropdown");
 
 
-const newLayerButton = document.getElementById("new-layer-btn");
-const layersList = document.getElementById("layers-list");
-const layersPanel = layersList;
-
 const calmPalette = [
   "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
   "#6aa9a0", "#f5f1e8", "#e2e8f0", "#9ca3af", "#ffffff", "#000000",
@@ -89,7 +84,6 @@ let savedThemes = [];
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
-const layerStore = new LayerStore();
 const historyStore = new HistoryStore();
 
 const appState = {
@@ -109,7 +103,6 @@ const appState = {
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
   activeThemeId: "builtin:light",
-  activeLayerId: null,
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -120,7 +113,7 @@ const appState = {
   },
 };
 
-const sharedContext = { canvas, camera, shapeStore, layerStore, historyStore, appState, pushHistoryState: () => pushHistoryState() };
+const sharedContext = { canvas, camera, shapeStore, historyStore, appState, pushHistoryState: () => pushHistoryState() };
 
 const tools = {
   select: new SelectTool(sharedContext),
@@ -147,14 +140,11 @@ const renderer = new Renderer({
   ctx: canvasEngine.getContext(),
   camera,
   shapeStore,
-  layerStore,
   appState,
   getCanvasMetrics: () => canvasEngine.getCanvasMetrics(),
   ensureCanvasSize: () => canvasEngine.resizeCanvasToContainer(),
 });
 
-layerStore.ensureDefaultLayer();
-appState.activeLayerId = layerStore.getActiveLayer()?.id ?? null;
 
 function applyColorToTarget(target, color) {
   if (target === "secondary") {
@@ -317,23 +307,18 @@ appState.notifyStatus = (message, durationMs = 1400) => {
   }, durationMs);
 };
 
-function migrateLayeredSnapshot(snapshot = {}) {
-  const serializedLayers = snapshot.layers ?? snapshot.layerState ?? null;
-  const requestedActiveLayerId = snapshot.activeLayerId ?? snapshot.currentActiveLayerId ?? null;
-  layerStore.hydrate(serializedLayers, requestedActiveLayerId);
-
-  shapeStore.replaceFromSerialized(snapshot.shapes ?? []);
-  migrateShapeLayers(shapeStore.getShapes(), layerStore);
-
-  const activeLayer = layerStore.getActiveLayer() ?? layerStore.ensureActiveLayer();
-  appState.activeLayerId = activeLayer?.id ?? null;
+function normalizeShapePayload(shapes = []) {
+  if (!Array.isArray(shapes)) return [];
+  return shapes.map((shape) => {
+    if (!shape || typeof shape !== "object") return shape;
+    const { layerId, ...rest } = shape;
+    return rest;
+  });
 }
 
 function getSnapshot() {
   return {
-    shapes: shapeStore.serialize(),
-    layers: layerStore.serialize(),
-    activeLayerId: appState.activeLayerId,
+    shapes: shapeStore.serialize().map(({ layerId, ...shape }) => shape),
   };
 }
 
@@ -341,11 +326,11 @@ function applySnapshot(snapshot) {
   if (!snapshot) return;
 
   if (Array.isArray(snapshot)) {
-    migrateLayeredSnapshot({ shapes: snapshot, layers: layerStore.serialize(), activeLayerId: layerStore.getActiveLayer()?.id });
+    shapeStore.replaceFromSerialized(normalizeShapePayload(snapshot));
     return;
   }
 
-  migrateLayeredSnapshot(snapshot);
+  shapeStore.replaceFromSerialized(normalizeShapePayload(snapshot.shapes ?? []));
 }
 
 function pushHistoryState() {
@@ -395,8 +380,6 @@ function resetProject() {
   }
 
   shapeStore.clear();
-  layerStore.hydrate();
-  appState.activeLayerId = layerStore.getActiveLayer()?.id ?? null;
   camera.resetView();
   setActiveTool("select");
   historyStore.undoStack = [];
@@ -440,149 +423,9 @@ function getSelectedMeasurableShape() {
   return (selectedShape.type === "line" || selectedShape.type === "polygon-shape") ? selectedShape : null;
 }
 
-function getLayerForShape(shape) {
-  return layerStore.getLayerById(shape.layerId);
-}
-
 function isShapeInteractive(shape) {
-  if (!shape || shape.visible === false || shape.locked === true) {
-    return false;
-  }
-
-  const layer = getLayerForShape(shape);
-  if (!layer) {
-    return false;
-  }
-
-  return layer.visible !== false && layer.locked !== true;
+  return !!shape && shape.visible !== false && shape.locked !== true;
 }
-
-function enforceLayerInvariants() {
-  layerStore.ensureDefaultLayer();
-  layerStore.ensureActiveLayer();
-  appState.activeLayerId = layerStore.getActiveLayer()?.id ?? null;
-  migrateShapeLayers(shapeStore.getShapes(), layerStore);
-
-  const selectedShape = getSelectedShape();
-  if (selectedShape && !isShapeInteractive(selectedShape)) {
-    clearSelectionState();
-  }
-}
-
-function moveShapesToLayer(sourceLayerId, targetLayerId) {
-  for (const shape of shapeStore.getShapes()) {
-    if (shape.layerId === sourceLayerId) {
-      shape.layerId = targetLayerId;
-    }
-  }
-}
-
-function renderLayerNameCell(layer, row) {
-  const nameButton = document.createElement("button");
-  nameButton.type = "button";
-  nameButton.className = "layer-name";
-  nameButton.textContent = layer.name;
-  nameButton.title = "Double-click to rename";
-
-  nameButton.addEventListener("dblclick", (event) => {
-    event.stopPropagation();
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = layer.name;
-    input.className = "layer-name-input";
-
-    const commit = () => {
-      const nextName = input.value.trim();
-      if (nextName && nextName !== layer.name) {
-        pushHistoryState();
-        layerStore.renameLayer(layer.id, nextName);
-      }
-      input.replaceWith(nameButton);
-      requestAnimationFrame(renderLayersPanel);
-    };
-
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") commit();
-      if (event.key === "Escape") {
-        input.replaceWith(nameButton);
-        requestAnimationFrame(renderLayersPanel);
-      }
-    });
-    input.addEventListener("blur", commit);
-    nameButton.replaceWith(input);
-    input.focus();
-    input.select();
-  });
-
-  row.appendChild(nameButton);
-}
-
-
-function renderLayersPanel() {
-  if (!layersList) return;
-
-  const layers = layerStore.getLayers();
-  layersList.textContent = "";
-
-  for (let index = layers.length - 1; index >= 0; index -= 1) {
-    const layer = layers[index];
-    const row = document.createElement("div");
-    row.className = `layer-row${appState.activeLayerId === layer.id ? " is-active" : ""}`;
-    row.dataset.layerId = layer.id;
-
-    const visibleBtn = document.createElement("button");
-    visibleBtn.type = "button";
-    visibleBtn.className = "layer-icon-btn";
-    visibleBtn.dataset.action = "toggle-visible";
-    visibleBtn.dataset.layerId = layer.id;
-    visibleBtn.textContent = layer.visible ? "👁" : "🙈";
-    visibleBtn.title = layer.visible ? "Hide layer" : "Show layer";
-
-    const lockBtn = document.createElement("button");
-    lockBtn.type = "button";
-    lockBtn.className = "layer-icon-btn";
-    lockBtn.dataset.action = "toggle-lock";
-    lockBtn.dataset.layerId = layer.id;
-    lockBtn.textContent = layer.locked ? "🔒" : "🔓";
-    lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
-
-    const upBtn = document.createElement("button");
-    upBtn.type = "button";
-    upBtn.className = "layer-icon-btn";
-    upBtn.dataset.action = "move-up";
-    upBtn.dataset.layerId = layer.id;
-    upBtn.textContent = "↑";
-    upBtn.title = "Move layer up";
-    upBtn.disabled = index >= layers.length - 1;
-
-    const downBtn = document.createElement("button");
-    downBtn.type = "button";
-    downBtn.className = "layer-icon-btn";
-    downBtn.dataset.action = "move-down";
-    downBtn.dataset.layerId = layer.id;
-    downBtn.textContent = "↓";
-    downBtn.title = "Move layer down";
-    downBtn.disabled = index <= 0;
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "layer-delete-btn";
-    deleteBtn.dataset.action = "delete-layer";
-    deleteBtn.dataset.layerId = layer.id;
-    deleteBtn.textContent = "🗑";
-    deleteBtn.title = "Delete layer";
-    deleteBtn.disabled = layers.length <= 1 || layer.id === "layer-1";
-
-    row.appendChild(visibleBtn);
-    row.appendChild(lockBtn);
-    renderLayerNameCell(layer, row);
-    row.appendChild(upBtn);
-    row.appendChild(downBtn);
-    row.appendChild(deleteBtn);
-    layersList.appendChild(row);
-  }
-}
-
 
 function deleteSelection() {
   const selectedShape = getSelectedShape();
@@ -622,8 +465,6 @@ function buildProjectData() {
       builtInSelectedId: appState.activeThemeId,
       savedThemes: savedThemes,
     },
-    layers: layerStore.serialize(),
-    activeLayerId: appState.activeLayerId,
     shapes: shapeStore.serialize(),
   };
 }
@@ -664,11 +505,7 @@ function applyProjectData(project, { announce = true } = {}) {
   populateThemeSelect();
   applyTheme(fallbackTheme, fallbackTheme.id);
 
-  migrateLayeredSnapshot({
-    layers: project.layers,
-    activeLayerId: project.activeLayerId ?? project.currentActiveLayerId,
-    shapes: project.shapes,
-  });
+  shapeStore.replaceFromSerialized(normalizeShapePayload(project.shapes));
 
   historyStore.undoStack = [];
   historyStore.redoStack = [];
@@ -986,88 +823,6 @@ document.addEventListener("click", () => {
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
 
-layersPanel?.addEventListener("click", (event) => {
-  const actionButton = event.target.closest("button[data-action]");
-  if (actionButton && layersPanel.contains(actionButton)) {
-    const layerId = actionButton.dataset.layerId;
-    const action = actionButton.dataset.action;
-    if (!layerId || !action) return;
-
-    const layer = layerStore.getLayerById(layerId);
-    if (!layer) return;
-
-    if (action === "toggle-visible") {
-      pushHistoryState();
-      layerStore.toggleVisible(layerId);
-      if (layerStore.getActiveLayerId() === layerId && layerStore.getLayerById(layerId)?.visible === false) {
-        appState.notifyStatus?.("Active layer is hidden", 1400);
-      }
-      const selected = getSelectedShape();
-      if (selected && selected.layerId === layerId) clearSelectionState();
-      return;
-    }
-
-    if (action === "toggle-lock") {
-      pushHistoryState();
-      layerStore.toggleLocked(layerId);
-      const selected = getSelectedShape();
-      if (selected && selected.layerId === layerId && layerStore.getLayerById(layerId)?.locked === true) clearSelectionState();
-      return;
-    }
-
-    if (action === "move-up") {
-      pushHistoryState();
-      layerStore.moveUp(layerId);
-      return;
-    }
-
-    if (action === "move-down") {
-      pushHistoryState();
-      layerStore.moveDown(layerId);
-      return;
-    }
-
-    if (action === "delete-layer") {
-      const layers = layerStore.getLayers();
-      if (layers.length <= 1) return;
-      const defaultLayerId = layers[0]?.id;
-      if (!defaultLayerId || layerId === defaultLayerId) {
-        appState.notifyStatus?.("Default layer cannot be deleted", 1400);
-        return;
-      }
-
-      const confirmed = window.confirm(`Delete "${layer.name}"? Shapes will be moved to Layer 1.`);
-      if (!confirmed) return;
-
-      pushHistoryState();
-      moveShapesToLayer(layerId, defaultLayerId);
-      layerStore.deleteLayer(layerId);
-      appState.activeLayerId = layerStore.getActiveLayerId();
-      clearSelectionState();
-    }
-    return;
-  }
-
-  if (event.target.closest("button") || event.target.closest("input.layer-name-input")) {
-    return;
-  }
-
-  const row = event.target.closest(".layer-row");
-  if (!row || !layersPanel.contains(row)) return;
-  const layerId = row.dataset.layerId;
-  if (!layerId) return;
-
-  pushHistoryState();
-  layerStore.setActiveLayer(layerId);
-  appState.activeLayerId = layerStore.getActiveLayerId();
-});
-
-newLayerButton?.addEventListener("click", () => {
-  pushHistoryState();
-  const layer = layerStore.addLayer();
-  appState.activeLayerId = layer.id;
-});
-
 snapGridToggle.addEventListener("change", (event) => {
   appState.snapToGrid = event.target.checked;
   refreshStatus();
@@ -1257,14 +1012,6 @@ restoreAutosaveIfAvailable();
 updateControlsFromState();
 
 function frame() {
-  // Quick sanity checklist:
-// - Layer row click activates layer; icon buttons toggle visibility/lock/move/delete.
-// - Hidden layers are not rendered or hit-testable.
-// - Locked layers render but cannot be modified by editing tools.
-// - Deleting a layer moves its shapes to Layer 1 and keeps Layer 1 present.
-// - Undo/redo replays add/rename/visibility/lock/reorder/delete/active layer.
-enforceLayerInvariants();
-  renderLayersPanel();
   queueAutosave();
   renderer.renderFrame();
   requestAnimationFrame(frame);

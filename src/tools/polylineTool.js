@@ -2,13 +2,12 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { distance } from "../utils/math.js";
-import { ensureActiveDrawableLayer, getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 const CLOSURE_THRESHOLD_PX = 12;
 
-function createLine(layerId, start, end, lineStyle) {
+function createLine(start, end, lineStyle) {
   return new Line({
-    layerId,
     ...lineStyle,
     start,
     end,
@@ -42,14 +41,13 @@ export class PolylineTool extends BaseTool {
     this.context.appState.previewShape = null;
   }
 
-  commitClosedPolygon(activeLayerId, appState, historyStore, shapeStore) {
+  commitClosedPolygon(appState, historyStore, shapeStore) {
     if (this.chainPoints.length < 3) {
       this.finishChain();
       return;
     }
 
     const polygon = new PolygonShape({
-      layerId: activeLayerId,
       pointsWorld: this.chainPoints,
       sourceLineIds: [...this.chainLineIds],
       strokeColor: appState.currentStyle.strokeColor,
@@ -64,9 +62,7 @@ export class PolylineTool extends BaseTool {
   }
 
   onMouseDown({ event, screenPoint }) {
-    const { appState, layerStore, historyStore, shapeStore, camera } = this.context;
-    const activeLayer = ensureActiveDrawableLayer(this.context);
-    if (!activeLayer) return;
+    const { appState, historyStore, shapeStore, camera } = this.context;
 
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
@@ -82,7 +78,7 @@ export class PolylineTool extends BaseTool {
     const thresholdWorld = CLOSURE_THRESHOLD_PX / camera.zoom;
     const shouldClose = this.chainPoints.length >= 3 && distance(snapped.pt, this.chainStart) <= thresholdWorld;
     if (shouldClose) {
-      this.commitClosedPolygon(activeLayer.id, appState, historyStore, shapeStore);
+      this.commitClosedPolygon(appState, historyStore, shapeStore);
       return;
     }
 
@@ -94,7 +90,7 @@ export class PolylineTool extends BaseTool {
     }
 
     this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
-    const segment = createLine(activeLayer.id, this.lastPoint, snapped.pt, getLineStyle(appState));
+    const segment = createLine(this.lastPoint, snapped.pt, getLineStyle(appState));
     shapeStore.addShape(segment);
     this.chainLineIds.push(segment.id);
     this.lastPoint = snapped.pt;
@@ -106,7 +102,7 @@ export class PolylineTool extends BaseTool {
   }
 
   onMouseMove({ screenPoint }) {
-    const { appState, layerStore } = this.context;
+    const { appState } = this.context;
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
 
@@ -115,13 +111,7 @@ export class PolylineTool extends BaseTool {
       return;
     }
 
-    const layer = layerStore.getActiveLayer();
-    if (!layer || layer.visible === false || layer.locked === true) {
-      appState.previewShape = null;
-      return;
-    }
-
-    appState.previewShape = createLine(layer.id, this.lastPoint, snapped.pt, getLineStyle(appState));
+    appState.previewShape = createLine(this.lastPoint, snapped.pt, getLineStyle(appState));
     appState.previewShape.strokeOpacity = Math.min(0.9, appState.currentStyle.strokeOpacity);
   }
 

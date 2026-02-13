@@ -5,11 +5,10 @@ function zSorted(shapes) {
 }
 
 export class Renderer {
-  constructor({ ctx, camera, shapeStore, layerStore, appState, getCanvasMetrics, ensureCanvasSize }) {
+  constructor({ ctx, camera, shapeStore, appState, getCanvasMetrics, ensureCanvasSize }) {
     this.ctx = ctx;
     this.camera = camera;
     this.shapeStore = shapeStore;
-    this.layerStore = layerStore;
     this.appState = appState;
     this.getCanvasMetrics = getCanvasMetrics;
     this.ensureCanvasSize = ensureCanvasSize;
@@ -45,44 +44,38 @@ export class Renderer {
       this.ctx.restore();
     }
 
-    const layers = this.layerStore.getLayers();
-    const shapes = this.shapeStore.getShapes();
+    const shapes = zSorted(this.shapeStore.getShapes().filter((shape) => shape.visible !== false));
     const selectedId = this.appState.selected?.id;
     const smartMeasurements = this.appState.smartMeasurements !== false;
 
-    for (const layer of layers) {
-      if (!layer.visible) continue;
+    const polygons = shapes.filter((shape) => shape.type === "polygon-shape");
+    const lines = shapes.filter((shape) => shape.type === "line");
+    const measurements = shapes.filter((shape) => shape.type === "measurement");
+    const others = shapes.filter((shape) => !["polygon-shape", "line", "measurement"].includes(shape.type));
 
-      const layerShapes = zSorted(shapes.filter((shape) => shape.layerId === layer.id && shape.visible !== false));
-      const polygons = layerShapes.filter((shape) => shape.type === "polygon-shape");
-      const lines = layerShapes.filter((shape) => shape.type === "line");
-      const measurements = layerShapes.filter((shape) => shape.type === "measurement");
-      const others = layerShapes.filter((shape) => !["polygon-shape", "line", "measurement"].includes(shape.type));
+    for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
+    for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
+    for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
 
-      for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
-      for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
-      for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
-
-      if (smartMeasurements) {
-        for (const polygon of polygons) {
-          if (polygon.id === selectedId || polygon.pinnedMeasure === true) {
-            polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
-          }
-        }
-
-        for (const line of lines) {
-          if (line.id === selectedId || line.pinnedMeasure === true) {
-            line.drawDimensions?.(this.ctx, this.camera, this.appState);
-          }
+    if (smartMeasurements) {
+      for (const polygon of polygons) {
+        if (polygon.id === selectedId || polygon.pinnedMeasure === true) {
+          polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
         }
       }
 
-      for (const measurement of measurements) measurement.draw(this.ctx, this.camera, this.appState);
-      for (const other of others) other.draw(this.ctx, this.camera, this.appState);
-
-      for (const polygon of polygons) polygon.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
-      for (const line of lines) line.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
+      for (const line of lines) {
+        if (line.id === selectedId || line.pinnedMeasure === true) {
+          line.drawDimensions?.(this.ctx, this.camera, this.appState);
+        }
+      }
     }
+
+    for (const measurement of measurements) measurement.draw(this.ctx, this.camera, this.appState);
+    for (const other of others) other.draw(this.ctx, this.camera, this.appState);
+
+    for (const polygon of polygons) polygon.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
+    for (const line of lines) line.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
 
     if (this.appState.previewShape) {
       this.appState.previewShape.draw(this.ctx, this.camera, {
