@@ -2,9 +2,10 @@ import { Shape } from "./shape.js";
 import { isPointInPolygon } from "../utils/math.js";
 
 export class FillRegion extends Shape {
-  constructor({ points = [], ...rest }) {
+  constructor({ points = [], holes = [], ...rest }) {
     super({ ...rest, type: "fill-region" });
     this.points = points.map((point) => ({ ...point }));
+    this.holes = holes.map((hole) => hole.map((point) => ({ ...point })));
   }
 
   draw(ctx, camera) {
@@ -21,10 +22,20 @@ export class FillRegion extends Shape {
       ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
     }
     ctx.closePath();
+    for (const hole of this.holes) {
+      if (hole.length < 3) continue;
+      const screenHole = hole.map((point) => camera.worldToScreen(point));
+      ctx.moveTo(screenHole[0].x, screenHole[0].y);
+      for (let i = 1; i < screenHole.length; i += 1) {
+        ctx.lineTo(screenHole[i].x, screenHole[i].y);
+      }
+      ctx.closePath();
+    }
+
     if (this.fillEnabled && this.fillColor && this.fillColor !== "transparent") {
       ctx.globalAlpha = this.fillOpacity;
       ctx.fillStyle = this.fillColor;
-      ctx.fill();
+      ctx.fill("evenodd");
       ctx.globalAlpha = 1;
     }
 
@@ -50,13 +61,15 @@ export class FillRegion extends Shape {
   }
 
   containsPoint(point) {
-    return isPointInPolygon(point, this.points);
+    if (!isPointInPolygon(point, this.points)) return false;
+    return !this.holes.some((hole) => hole.length >= 3 && isPointInPolygon(point, hole));
   }
 
   toJSON() {
     return {
       ...super.toJSON(),
       points: this.points.map((point) => ({ ...point })),
+      holes: this.holes.map((hole) => hole.map((point) => ({ ...point }))),
     };
   }
 }
