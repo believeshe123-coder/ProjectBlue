@@ -101,7 +101,7 @@ const appState = {
     strokeWidth: 2,
     fillEnabled: true,
     fillColor: "#4aa3ff",
-    fillOpacity: 0.25,
+    fillOpacity: 1,
   },
 };
 
@@ -221,6 +221,12 @@ function refreshStyleUI() {
   fillChipSwatch.style.background = style.fillColor;
   strokeChip.classList.toggle("color-chip--active", activeColorTarget === "primary");
   fillChip.classList.toggle("color-chip--active", activeColorTarget === "secondary");
+}
+
+
+function resetStyleAlphaDefaults() {
+  appState.currentStyle.strokeOpacity = 1;
+  appState.currentStyle.fillOpacity = 1;
 }
 
 function getCanvasCenterScreenPoint() {
@@ -544,7 +550,7 @@ strokeOpacityInput.addEventListener("input", (event) => {
   refreshStyleUI();
 });
 
-strokeWidthInput.addEventListener("change", (event) => {
+strokeWidthInput.addEventListener("input", (event) => {
   appState.currentStyle.strokeWidth = Number.parseInt(event.target.value, 10);
   refreshStyleUI();
 });
@@ -642,6 +648,7 @@ window.addEventListener("keydown", (event) => {
 
 renderStyleSwatches();
 renderRecentColors();
+resetStyleAlphaDefaults();
 refreshStyleUI();
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
 savedThemes = loadSavedThemes();
