@@ -15,7 +15,7 @@ export class Renderer {
     const height = this.canvas.clientHeight;
 
     this.ctx.clearRect(0, 0, width, height);
-    this.ctx.fillStyle = "#2a5970";
+    this.ctx.fillStyle = "#244a60";
     this.ctx.fillRect(0, 0, width, height);
 
     drawIsoGrid(this.ctx, this.camera, width, height);

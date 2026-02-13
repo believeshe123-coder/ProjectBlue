@@ -32,7 +32,7 @@ export class Measurement extends Shape {
     const label = this.buildLabel(appState);
 
     ctx.save();
-    ctx.globalAlpha = this.opacity;
+    ctx.globalAlpha = this.strokeOpacity;
     ctx.strokeStyle = this.strokeColor;
     ctx.lineWidth = this.strokeWidth;
     ctx.beginPath();

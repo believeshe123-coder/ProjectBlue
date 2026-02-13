@@ -33,9 +33,12 @@ export class MeasureTool extends BaseTool {
     shapeStore.addShape(
       new Measurement({
         layerId: activeLayer.id,
-        strokeColor: "#ffffff",
+        strokeColor: "#f8fcff",
+        strokeOpacity: 1,
         strokeWidth: 2,
         fillColor: "transparent",
+        fillEnabled: false,
+        fillOpacity: 0,
         a: this.a,
         b: snapped.pt,
       }),
@@ -57,10 +60,12 @@ export class MeasureTool extends BaseTool {
       layerId: this.context.layerStore.getActiveLayer()?.id,
       start: this.a,
       end: snapped.pt,
-      strokeColor: "#ffffff",
+      strokeColor: "#f8fcff",
+      strokeOpacity: 0.9,
       strokeWidth: 1.5,
-      opacity: 0.85,
       fillColor: "transparent",
+      fillEnabled: false,
+      fillOpacity: 0,
     });
   }
 

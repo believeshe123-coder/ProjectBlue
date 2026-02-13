@@ -16,7 +16,7 @@ export class Polygon extends Shape {
     const screenPoints = this.points.map((point) => camera.worldToScreen(point));
 
     ctx.save();
-    ctx.globalAlpha = this.opacity;
+    ctx.globalAlpha = this.fillOpacity;
     ctx.beginPath();
     ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
 
@@ -26,10 +26,13 @@ export class Polygon extends Shape {
 
     if (this.closed) {
       ctx.closePath();
-      ctx.fillStyle = this.fillColor;
-      ctx.fill();
+      if (this.fillEnabled && this.fillColor !== "transparent") {
+        ctx.fillStyle = this.fillColor;
+        ctx.fill();
+      }
     }
 
+    ctx.globalAlpha = this.strokeOpacity;
     ctx.strokeStyle = this.strokeColor;
     ctx.lineWidth = this.strokeWidth;
     ctx.stroke();

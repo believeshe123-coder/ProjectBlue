@@ -41,3 +41,38 @@ export function updateSnapIndicator(appState, snapped) {
   };
   appState.snapDebugStatus = snapped.snapped ? `SNAP: GRID (u=${snapped.u}, v=${snapped.v})` : "SNAP: OFF";
 }
+
+export function getCurrentStyle(appState) {
+  return {
+    strokeColor: appState.currentStyle.strokeColor,
+    strokeOpacity: appState.currentStyle.strokeOpacity,
+    strokeWidth: appState.currentStyle.strokeWidth,
+    fillEnabled: appState.currentStyle.fillEnabled,
+    fillColor: appState.currentStyle.fillColor,
+    fillOpacity: appState.currentStyle.fillOpacity,
+  };
+}
+
+export function getLineStyle(appState) {
+  const style = getCurrentStyle(appState);
+  return {
+    strokeColor: style.strokeColor,
+    strokeOpacity: style.strokeOpacity,
+    strokeWidth: style.strokeWidth,
+    fillColor: "transparent",
+    fillOpacity: 0,
+    fillEnabled: false,
+  };
+}
+
+export function getFillRegionStyle(appState) {
+  const style = getCurrentStyle(appState);
+  return {
+    strokeColor: style.strokeColor,
+    strokeOpacity: style.strokeOpacity,
+    strokeWidth: style.strokeWidth,
+    fillEnabled: style.fillEnabled,
+    fillColor: style.fillColor,
+    fillOpacity: style.fillEnabled ? style.fillOpacity : 0,
+  };
+}

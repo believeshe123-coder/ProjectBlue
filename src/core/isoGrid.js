@@ -85,7 +85,7 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH) {
     const s1 = camera.worldToScreen(p1);
     const isMajor = u % 5 === 0;
 
-    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.17)" : "rgba(208, 241, 255, 0.09)";
+    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.13)" : "rgba(208, 241, 255, 0.05)";
     ctx.beginPath();
     ctx.moveTo(s0.x, s0.y);
     ctx.lineTo(s1.x, s1.y);
@@ -99,7 +99,7 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH) {
     const s1 = camera.worldToScreen(p1);
     const isMajor = v % 5 === 0;
 
-    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.17)" : "rgba(208, 241, 255, 0.09)";
+    ctx.strokeStyle = isMajor ? "rgba(208, 241, 255, 0.13)" : "rgba(208, 241, 255, 0.05)";
     ctx.beginPath();
     ctx.moveTo(s0.x, s0.y);
     ctx.lineTo(s1.x, s1.y);

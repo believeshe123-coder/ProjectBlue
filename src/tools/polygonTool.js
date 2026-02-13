@@ -2,7 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { Polygon } from "../models/polygon.js";
 import { distance } from "../utils/math.js";
-import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { getCurrentStyle, getLineStyle, updateSnapIndicator, getSnappedPoint } from "./toolUtils.js";
 
 export class PolygonTool extends BaseTool {
   constructor(context) {
@@ -30,10 +30,7 @@ export class PolygonTool extends BaseTool {
         layerId: layer.id,
         points: this.points,
         closed: true,
-        fillColor: appState.currentFillColor,
-        strokeColor: "#ffffff",
-        strokeWidth: 2,
-        opacity: 0.25,
+        ...getCurrentStyle(appState),
       }),
     );
 
@@ -74,10 +71,8 @@ export class PolygonTool extends BaseTool {
       layerId: this.context.layerStore.getActiveLayer()?.id,
       points,
       closed: false,
-      fillColor: "transparent",
-      strokeColor: "#d5ffe8",
-      strokeWidth: 1.5,
-      opacity: 0.85,
+      ...getLineStyle(this.context.appState),
+      strokeOpacity: Math.min(0.9, this.context.appState.currentStyle.strokeOpacity),
     });
 
     if (this.points.length === 1) {
@@ -85,10 +80,8 @@ export class PolygonTool extends BaseTool {
         layerId: this.context.layerStore.getActiveLayer()?.id,
         start: this.points[0],
         end: this.cursorPoint,
-        strokeColor: "#d5ffe8",
-        strokeWidth: 1.5,
-        fillColor: "transparent",
-        opacity: 0.85,
+        ...getLineStyle(this.context.appState),
+        strokeOpacity: Math.min(0.9, this.context.appState.currentStyle.strokeOpacity),
       });
     }
   }

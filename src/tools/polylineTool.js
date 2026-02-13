@@ -1,13 +1,11 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
-function createLine(layerId, start, end, strokeColor, fillColor, strokeWidth = 2) {
+function createLine(layerId, start, end, lineStyle) {
   return new Line({
     layerId,
-    strokeColor,
-    fillColor,
-    strokeWidth,
+    ...lineStyle,
     start,
     end,
   });
@@ -66,18 +64,11 @@ export class PolylineTool extends BaseTool {
       this.committedInChain = true;
     }
 
-    shapeStore.addShape(
-      createLine(activeLayer.id, this.lastPoint, snapped.pt, activeLayer.defaultStrokeColor, activeLayer.defaultFillColor, 2),
-    );
+    shapeStore.addShape(createLine(activeLayer.id, this.lastPoint, snapped.pt, getLineStyle(appState)));
 
     this.lastPoint = snapped.pt;
 
-    if (!appState.continuePolyline) {
-      this.finishChain();
-      return;
-    }
-
-    if (event.detail >= 2) {
+    if (!appState.continuePolyline || event.detail >= 2) {
       this.finishChain();
     }
   }
@@ -93,8 +84,8 @@ export class PolylineTool extends BaseTool {
     }
 
     const layer = layerStore.getActiveLayer();
-    appState.previewShape = createLine(layer?.id, this.lastPoint, snapped.pt, "#d5ffe8", "transparent", 1.5);
-    appState.previewShape.opacity = 0.85;
+    appState.previewShape = createLine(layer?.id, this.lastPoint, snapped.pt, getLineStyle(appState));
+    appState.previewShape.strokeOpacity = Math.min(0.9, appState.currentStyle.strokeOpacity);
   }
 
   onKeyDown(event) {
