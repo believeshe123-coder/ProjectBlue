@@ -1,6 +1,7 @@
 import { Shape } from "./shape.js";
 import { distancePointToSegment } from "../utils/math.js";
 import { worldToIsoUV } from "../core/isoGrid.js";
+import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class Line extends Shape {
   constructor({ start, end, ...rest }) {
@@ -13,15 +14,12 @@ export class Line extends Shape {
     const { unitPerCell = 1, unitName = "ft" } = appState;
     const isoStart = worldToIsoUV(this.start);
     const isoEnd = worldToIsoUV(this.end);
-    const u1 = Math.round(isoStart.u);
-    const v1 = Math.round(isoStart.v);
-    const u2 = Math.round(isoEnd.u);
-    const v2 = Math.round(isoEnd.v);
-    const du = u2 - u1;
-    const dv = v2 - v1;
-    const gridLen = Math.hypot(du, dv);
-    const realLen = gridLen * unitPerCell;
-    const label = `${gridLen.toFixed(2)} grid | ${realLen.toFixed(2)} ${unitName}`;
+    const label = buildDistanceLabel({
+      startUV: isoStart,
+      endUV: isoEnd,
+      unitPerCell,
+      unitName,
+    });
 
     ctx.save();
     ctx.font = "11px Tahoma, Verdana, Arial, sans-serif";

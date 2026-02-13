@@ -346,8 +346,7 @@ unitPerCellInput.addEventListener("input", (event) => {
 });
 
 unitNameInput.addEventListener("change", (event) => {
-  const text = event.target.value.trim();
-  appState.unitName = text || "ft";
+  appState.unitName = event.target.value || "ft";
   refreshScaleDisplay();
 });
 

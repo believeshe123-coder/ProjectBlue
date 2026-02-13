@@ -46,7 +46,7 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 30px;
+  min-height: 26px;
   padding: 4px 10px;
   background: rgba(255, 255, 255, 0.45);
   border-bottom: 1px solid var(--panel-border);
@@ -56,7 +56,7 @@ body {
   border: 1px solid transparent;
   background: transparent;
   color: #334155;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 5px 10px;
   font-size: 12px;
   cursor: default;
@@ -70,20 +70,20 @@ body {
 .topbar {
   display: flex;
   align-items: stretch;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 7px 9px;
   background: linear-gradient(to bottom, #f8f6f1, #f3f0ea);
   border-bottom: 1px solid var(--panel-border);
   flex-wrap: wrap;
 }
 
 .tool-group {
-  min-height: 88px;
+  min-height: 68px;
   min-width: 126px;
-  padding: 8px 8px 18px;
+  padding: 6px 6px 14px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  border-radius: 10px;
   position: relative;
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.06);
 }
@@ -106,24 +106,24 @@ body {
 
 .tool-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(56px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(52px, 1fr));
+  gap: 4px;
 }
 
 .tool-grid--tiles {
-  gap: 8px;
+  gap: 4px;
 }
 
 .tool-button,
 .style-select,
 .scale-input {
-  min-height: 28px;
+  min-height: 24px;
   border: 1px solid var(--soft-border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--button-bg);
   color: #1f2937;
   font-size: 12px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
   box-shadow: 0 1px 1px rgba(17, 24, 39, 0.06);
@@ -150,17 +150,17 @@ body {
 }
 
 .tool-tile {
-  min-height: 46px;
+  min-height: 38px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   text-align: left;
   font-weight: 500;
 }
 
 .tool-tile svg {
-  width: 16px;
-  height: 16px;
+  width: 21px;
+  height: 21px;
   stroke: currentColor;
   stroke-width: 1.8;
   fill: none;
@@ -174,33 +174,33 @@ body {
 }
 
 .tool-toggle {
-  min-height: 28px;
+  min-height: 20px;
   border: 1px solid var(--soft-border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: #f9f8f5;
   font-size: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
+  gap: 4px;
+  padding: 4px 6px;
 }
 
 .tool-toggle input {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   margin: 0;
   accent-color: #6d94d9;
 }
 
 .style-tray {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .color-chips {
   display: flex;
   align-items: stretch;
-  gap: 6px;
+  gap: 4px;
 }
 
 .color-chip,
@@ -208,13 +208,13 @@ body {
   border: 1px solid var(--soft-border);
   border-radius: 9px;
   background: var(--button-bg);
-  padding: 4px 7px;
+  padding: 4px 6px;
 }
 
 .color-chip {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   flex: 1;
   text-align: left;
 }
@@ -232,14 +232,14 @@ body {
 .chip-swatch {
   width: 16px;
   height: 16px;
-  border-radius: 5px;
+  border-radius: 7px;
   border: 1px solid rgba(0, 0, 0, 0.16);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 .palette-add {
   width: 28px;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   color: #475569;
 }
@@ -257,7 +257,7 @@ body {
 
 .swatch-grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(8, 1fr);
   gap: 4px;
 }
 
@@ -266,7 +266,9 @@ body {
   aspect-ratio: 1 / 1;
   min-height: 14px;
   border: 1px solid rgba(0, 0, 0, 0.18);
-  border-radius: 5px;
+  border-radius: 6px;
+  min-width: 38px;
+  min-height: 38px;
   background: var(--swatch, #f4f4f4);
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -284,8 +286,8 @@ body {
 
 .style-controls-inline {
   display: grid;
-  grid-template-columns: repeat(3, minmax(78px, 1fr)) auto;
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(70px, 1fr)) auto;
+  gap: 4px;
   align-items: end;
 }
 
@@ -299,30 +301,30 @@ body {
 .range-input {
   width: 100%;
   appearance: none;
-  height: 4px;
+  height: 3px;
   border-radius: 99px;
   background: #d9dde6;
 }
 
 .range-input::-webkit-slider-thumb {
   appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   border: 1px solid #7f8aa0;
   background: #fff;
 }
 
 .range-input::-moz-range-thumb {
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   border: 1px solid #7f8aa0;
   background: #fff;
 }
 
 .compact-select {
-  min-height: 30px;
+  min-height: 20px;
   padding-inline: 8px;
 }
 
@@ -339,14 +341,14 @@ body {
 .style-preview-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .style-preview-chip {
-  width: 52px;
-  height: 24px;
+  width: 44px;
+  height: 20px;
   border: 1px solid var(--soft-border);
-  border-radius: 8px;
+  border-radius: 6px;
   position: relative;
   overflow: hidden;
 }
@@ -363,12 +365,12 @@ body {
 .status {
   margin-left: auto;
   align-self: flex-end;
-  min-height: 24px;
+  min-height: 20px;
   min-width: 260px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: 6px;
+  font-size: 11px;
   background: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -406,10 +408,10 @@ body {
 
 .scale-display {
   margin-top: 2px;
-  min-height: 22px;
+  min-height: 18px;
   padding: 4px 6px;
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: 6px;
+  font-size: 11px;
   background: rgba(255, 255, 255, 0.75);
 }
