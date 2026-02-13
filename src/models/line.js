@@ -106,7 +106,11 @@ export class Line extends Shape {
 
   draw(ctx, camera, appState = {}) {
     this.drawStroke(ctx, camera, appState);
-    this.drawDimensions(ctx, camera, appState);
+    const measurementMode = appState.measurementMode ?? "smart";
+    const shouldDrawDimensions = appState.forceMeasurements === true || measurementMode === "on";
+    if (shouldDrawDimensions) {
+      this.drawDimensions(ctx, camera, appState);
+    }
     this.drawSelectionOverlay(ctx, camera, appState);
   }
 

@@ -25,6 +25,7 @@ export class Renderer {
       gridColor: this.appState.theme?.gridColor,
     });
 
+
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
       const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);
       const centerURounded = Math.round(centerUV.u);
@@ -46,7 +47,9 @@ export class Renderer {
 
     const shapes = zSorted(this.shapeStore.getShapes().filter((shape) => shape.visible !== false));
     const selectedId = this.appState.selected?.id;
-    const smartMeasurements = this.appState.smartMeasurements !== false;
+    const measurementMode = this.appState.measurementMode ?? "smart";
+    const currentlyDrawing = !!this.appState.previewShape;
+    const shouldHideMeasurements = measurementMode === "off";
 
     const polygons = shapes.filter((shape) => shape.type === "polygon-shape");
     const lines = shapes.filter((shape) => shape.type === "line");
@@ -57,18 +60,57 @@ export class Renderer {
     for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
     for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
 
-    if (smartMeasurements) {
-      for (const polygon of polygons) {
-        if (polygon.id === selectedId || polygon.pinnedMeasure === true) {
-          polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
+    if (!shouldHideMeasurements) {
+      if (measurementMode === "on") {
+        for (const polygon of polygons) polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
+        for (const line of lines) line.drawDimensions?.(this.ctx, this.camera, this.appState);
+      } else if (measurementMode === "smart" && selectedId) {
+        for (const polygon of polygons) {
+          if (polygon.id === selectedId) {
+            polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
+          }
         }
-      }
 
-      for (const line of lines) {
-        if (line.id === selectedId || line.pinnedMeasure === true) {
-          line.drawDimensions?.(this.ctx, this.camera, this.appState);
+        for (const line of lines) {
+          if (line.id === selectedId) {
+            line.drawDimensions?.(this.ctx, this.camera, this.appState);
+          }
         }
       }
+    }
+
+
+
+    const erasePreview = this.appState.erasePreview;
+    if (erasePreview?.affectedLineIds?.length) {
+      const affected = new Set(erasePreview.affectedLineIds);
+      this.ctx.save();
+      this.ctx.strokeStyle = "rgba(255, 118, 118, 0.9)";
+      this.ctx.lineWidth = 3;
+      this.ctx.setLineDash([6, 4]);
+      for (const line of lines) {
+        if (!affected.has(line.id)) continue;
+        const s = this.camera.worldToScreen(line.start);
+        const e = this.camera.worldToScreen(line.end);
+        this.ctx.beginPath();
+        this.ctx.moveTo(s.x, s.y);
+        this.ctx.lineTo(e.x, e.y);
+        this.ctx.stroke();
+      }
+      this.ctx.restore();
+    }
+
+    if (erasePreview?.point && Number.isFinite(erasePreview.sizePx)) {
+      const center = this.camera.worldToScreen(erasePreview.point);
+      this.ctx.save();
+      this.ctx.strokeStyle = "rgba(255, 118, 118, 0.95)";
+      this.ctx.fillStyle = "rgba(255, 118, 118, 0.16)";
+      this.ctx.lineWidth = 1.5;
+      this.ctx.beginPath();
+      this.ctx.arc(center.x, center.y, erasePreview.sizePx, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.stroke();
+      this.ctx.restore();
     }
 
     for (const measurement of measurements) measurement.draw(this.ctx, this.camera, this.appState);
@@ -80,7 +122,8 @@ export class Renderer {
     if (this.appState.previewShape) {
       this.appState.previewShape.draw(this.ctx, this.camera, {
         ...this.appState,
-        smartMeasurements: true,
+        currentlyDrawing,
+        forceMeasurements: measurementMode !== "off",
       });
     }
 

@@ -180,7 +180,11 @@ export class PolygonShape extends Shape {
   draw(ctx, camera, appState = {}) {
     this.drawFill(ctx, camera);
     this.drawStroke(ctx, camera);
-    this.drawDimensions(ctx, camera, appState);
+    const measurementMode = appState.measurementMode ?? "smart";
+    const shouldDrawDimensions = appState.forceMeasurements === true || measurementMode === "on";
+    if (shouldDrawDimensions) {
+      this.drawDimensions(ctx, camera, appState);
+    }
     this.drawSelectionOverlay(ctx, camera);
   }
 

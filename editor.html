@@ -82,7 +82,7 @@
           <div class="menu-dropdown" id="menuSettingsDropdown" role="menu" aria-label="Settings menu" data-open="false">
             <div class="menu-section">
               <div class="menu-title">Options</div>
-              <label class="menu-row"><input id="show-dimensions-toggle" type="checkbox" checked />Smart measurements</label>
+              <button class="menu-row menu-row-button" id="measurement-mode-toggle" type="button">Measurements: SMART</button>
               <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
               <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continus line</label>
             </div>
@@ -115,6 +115,14 @@
               <button class="tool-button" id="undo-btn" type="button">Undo</button>
               <button class="tool-button" id="redo-btn" type="button">Redo</button>
             </div>
+            <label class="field-block" for="erase-mode-toggle">
+              <span>Erase mode</span>
+              <button id="erase-mode-toggle" class="style-select" type="button">Erase: Object</button>
+            </label>
+            <label class="field-block" for="eraser-size-input">
+              <span>Eraser size <span id="eraser-size-display">16px</span></span>
+              <input id="eraser-size-input" class="range-input" type="range" min="6" max="40" step="1" value="16" />
+            </label>
           </section>
 
           <section class="side-section" aria-label="Color and style">
