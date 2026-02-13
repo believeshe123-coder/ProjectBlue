@@ -51,6 +51,7 @@ const menuFileDropdown = document.getElementById("menuFileDropdown");
 const projectSaveButton = document.getElementById("project-save-btn");
 const projectLoadButton = document.getElementById("project-load-btn");
 const projectLoadInput = document.getElementById("project-load-input");
+const projectResetButton = document.getElementById("project-reset-btn");
 
 const menuSettingsButton = document.getElementById("menuSettingsBtn");
 const menuSettingsDropdown = document.getElementById("menuSettingsDropdown");
@@ -328,13 +329,14 @@ function applySnapshot(snapshot) {
 
   if (Array.isArray(snapshot)) {
     shapeStore.replaceFromSerialized(snapshot);
-    const fallbackLayer = layerStore.getActiveLayer() ?? layerStore.ensureDefaultLayer();
+    const defaultLayer = layerStore.getLayers()[0] ?? layerStore.ensureDefaultLayer();
     for (const shape of shapeStore.getShapes()) {
       if (!shape.layerId || !layerStore.getLayerById(shape.layerId)) {
-        shape.layerId = fallbackLayer.id;
+        shape.layerId = defaultLayer.id;
       }
     }
-    appState.currentActiveLayerId = fallbackLayer.id;
+    layerStore.setActiveLayer(defaultLayer.id);
+    appState.currentActiveLayerId = defaultLayer.id;
     return;
   }
 
@@ -375,6 +377,37 @@ function zoomBy(factor) {
 function clearSelectionState() {
   shapeStore.clearSelection();
   appState.selected = { type: null, id: null };
+}
+
+function clearAutosaveProject() {
+  if (autosaveTimeout) {
+    clearTimeout(autosaveTimeout);
+    autosaveTimeout = null;
+  }
+  autosaveSignature = "";
+  pendingAutosaveSignature = "";
+  localStorage.removeItem(STORAGE_KEYS.autosaveProject);
+}
+
+function resetProject() {
+  const confirmed = window.confirm("Reset project? This will erase all shapes and settings.");
+  if (!confirmed) {
+    return;
+  }
+
+  shapeStore.clear();
+  layerStore.replaceFromSerialized([{ id: "layer-1", name: "Layer 1", visible: true, locked: false, zIndex: 0 }]);
+  layerStore.setActiveLayer("layer-1");
+  appState.currentActiveLayerId = "layer-1";
+  camera.resetView();
+  setActiveTool("select");
+  historyStore.undoStack = [];
+  historyStore.redoStack = [];
+  appState.previewShape = null;
+  appState.snapIndicator = null;
+  clearSelectionState();
+  clearAutosaveProject();
+  appState.notifyStatus?.("Project reset", 1600);
 }
 
 function setSelectedShape(shape) {
@@ -441,6 +474,10 @@ function renderLayerNameCell(layer, row) {
   nameButton.textContent = layer.name;
   nameButton.title = "Double-click to rename";
   nameButton.addEventListener("click", () => {
+    if (layer.visible === false) {
+      appState.notifyStatus?.("Cannot set hidden layer active", 1400);
+      return;
+    }
     layerStore.setActiveLayer(layer.id);
     appState.currentActiveLayerId = layer.id;
   });
@@ -504,6 +541,10 @@ function renderLayersPanel() {
     handle.textContent = "⋮⋮";
     handle.title = "Drag to reorder";
     handle.addEventListener("click", () => {
+      if (layer.visible === false) {
+        appState.notifyStatus?.("Cannot set hidden layer active", 1400);
+        return;
+      }
       layerStore.setActiveLayer(layer.id);
       appState.currentActiveLayerId = layer.id;
     });
@@ -515,8 +556,9 @@ function renderLayersPanel() {
     visibleBtn.title = layer.visible ? "Hide layer" : "Show layer";
     visibleBtn.addEventListener("click", () => {
       pushHistoryState();
-      layerStore.updateLayer(layer.id, { visible: !layer.visible });
-      if (layer.visible && appState.selected.id) {
+      const nextVisible = !layer.visible;
+      layerStore.updateLayer(layer.id, { visible: nextVisible });
+      if (!nextVisible && appState.selected.id) {
         const selectedShape = getSelectedShape();
         if (selectedShape && selectedShape.layerId === layer.id) {
           clearSelectionState();
@@ -531,8 +573,9 @@ function renderLayersPanel() {
     lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
     lockBtn.addEventListener("click", () => {
       pushHistoryState();
-      layerStore.updateLayer(layer.id, { locked: !layer.locked });
-      if (!layer.locked && appState.selected.id) {
+      const nextLocked = !layer.locked;
+      layerStore.updateLayer(layer.id, { locked: nextLocked });
+      if (nextLocked && appState.selected.id) {
         const selectedShape = getSelectedShape();
         if (selectedShape && selectedShape.layerId === layer.id) {
           clearSelectionState();
@@ -559,6 +602,10 @@ function renderLayersPanel() {
     });
 
     row.addEventListener("click", () => {
+      if (layer.visible === false) {
+        appState.notifyStatus?.("Cannot set hidden layer active", 1400);
+        return;
+      }
       layerStore.setActiveLayer(layer.id);
       appState.currentActiveLayerId = layer.id;
     });
@@ -675,13 +722,14 @@ function applyProjectData(project, { announce = true } = {}) {
     layerStore.setActiveLayer(project.currentActiveLayerId);
   }
 
-  const activeLayer = layerStore.getActiveLayer() ?? layerStore.ensureDefaultLayer();
+  const defaultLayer = layerStore.getLayers()[0] ?? layerStore.ensureDefaultLayer();
+  const activeLayer = layerStore.getActiveLayer() ?? defaultLayer;
   appState.currentActiveLayerId = activeLayer.id;
 
   shapeStore.replaceFromSerialized(project.shapes);
   for (const shape of shapeStore.getShapes()) {
     if (!shape.layerId || !layerStore.getLayerById(shape.layerId)) {
-      shape.layerId = activeLayer.id;
+      shape.layerId = defaultLayer.id;
     }
   }
 
@@ -957,6 +1005,11 @@ projectSaveButton?.addEventListener("click", () => {
 
 projectLoadButton?.addEventListener("click", () => {
   projectLoadInput?.click();
+});
+
+projectResetButton?.addEventListener("click", () => {
+  resetProject();
+  closeAllMenus();
 });
 
 projectLoadInput?.addEventListener("change", (event) => {

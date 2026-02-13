@@ -75,6 +75,7 @@ export class ShapeStore {
       .reverse()
       .find((shape) => {
         const layer = layerStore?.getLayerById?.(shape.layerId);
+        if (layerStore && !layer) return false;
         if (layer && layer.visible === false) return false;
         if (layer && !includeLocked && layer.locked === true) return false;
         return shape.visible !== false && (includeLocked || shape.locked !== true) && shape.containsPoint(point, toleranceWorld);

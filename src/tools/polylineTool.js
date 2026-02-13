@@ -2,7 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { distance } from "../utils/math.js";
-import { getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { ensureActiveDrawableLayer, getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 const CLOSURE_THRESHOLD_PX = 12;
 
@@ -65,10 +65,8 @@ export class PolylineTool extends BaseTool {
 
   onMouseDown({ event, screenPoint }) {
     const { appState, layerStore, historyStore, shapeStore, camera } = this.context;
-    const activeLayer = layerStore.getActiveLayer();
-    if (!activeLayer || activeLayer.locked) {
-      return;
-    }
+    const activeLayer = ensureActiveDrawableLayer(this.context);
+    if (!activeLayer) return;
 
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
@@ -118,7 +116,12 @@ export class PolylineTool extends BaseTool {
     }
 
     const layer = layerStore.getActiveLayer();
-    appState.previewShape = createLine(layer?.id, this.lastPoint, snapped.pt, getLineStyle(appState));
+    if (!layer || layer.visible === false) {
+      appState.previewShape = null;
+      return;
+    }
+
+    appState.previewShape = createLine(layer.id, this.lastPoint, snapped.pt, getLineStyle(appState));
     appState.previewShape.strokeOpacity = Math.min(0.9, appState.currentStyle.strokeOpacity);
   }
 
