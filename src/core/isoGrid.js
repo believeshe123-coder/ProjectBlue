@@ -85,15 +85,9 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH, options = {}) {
 
   ctx.save();
   ctx.lineWidth = 1;
-  const customMajor = hexToRgba(options.customGridColor, 0.24);
-  const customMinor = hexToRgba(options.customGridColor, 0.1);
-  const gridColors = customMajor && customMinor
-    ? { major: customMajor, minor: customMinor }
-    : options.blackAndWhite
-      ? { major: "rgba(0, 0, 0, 0.22)", minor: "rgba(0, 0, 0, 0.09)" }
-      : options.darkMode
-        ? { major: "rgba(179, 215, 255, 0.18)", minor: "rgba(179, 215, 255, 0.08)" }
-        : { major: "rgba(208, 241, 255, 0.13)", minor: "rgba(208, 241, 255, 0.05)" };
+  const major = hexToRgba(options.gridColor, 0.24) || "rgba(208, 241, 255, 0.13)";
+  const minor = hexToRgba(options.gridColor, 0.1) || "rgba(208, 241, 255, 0.05)";
+  const gridColors = { major, minor };
 
   for (let u = uMin; u <= uMax; u += 1) {
     const p0 = isoUVToWorld(u, vMin);

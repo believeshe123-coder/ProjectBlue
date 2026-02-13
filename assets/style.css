@@ -358,33 +358,25 @@ body {
   font-size: 11px;
 }
 
-.custom-background-controls {
-  display: grid;
-  gap: 8px;
-  padding-top: 4px;
-}
-
-.custom-bg-textarea {
-  width: 100%;
-  min-height: 72px;
+.menu-link-btn {
+  justify-self: start;
   border: 1px solid var(--soft-border);
   border-radius: 8px;
   background: #fff;
   color: #1f2937;
   font-size: 12px;
-  padding: 8px;
-  resize: vertical;
+  padding: 6px 10px;
+  cursor: pointer;
 }
 
-.menu-link-btn {
-  justify-self: start;
-  border: none;
-  background: transparent;
-  color: #2563eb;
-  font-size: 12px;
-  text-decoration: underline;
-  padding: 0;
-  cursor: pointer;
+.menu-link-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.theme-actions-row {
+  display: flex;
+  gap: 8px;
 }
 
 .canvas-wrap {

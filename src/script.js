@@ -26,15 +26,11 @@ const showDimensionsToggle = document.getElementById("show-dimensions-toggle");
 const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 const showGridUnitsToggle = document.getElementById("show-grid-units-toggle");
 const canvasThemeSelect = document.getElementById("canvas-theme-select");
-const backgroundTypeSelect = document.getElementById("background-type-select");
-const customBackgroundControls = document.getElementById("custom-background-controls");
-const customBgModeCss = document.getElementById("custom-bg-mode-css");
-const customBgModeImage = document.getElementById("custom-bg-mode-image");
-const customBackgroundInput = document.getElementById("custom-background-input");
 const customBgColorPicker = document.getElementById("custom-bg-color-picker");
 const customGridColorPicker = document.getElementById("custom-grid-color-picker");
-const customBgRepeatToggle = document.getElementById("custom-bg-repeat-toggle");
-const customBackgroundReset = document.getElementById("custom-background-reset");
+const themeNameInput = document.getElementById("theme-name-input");
+const saveThemeButton = document.getElementById("save-theme-btn");
+const deleteThemeButton = document.getElementById("delete-theme-btn");
 
 const strokeOpacityInput = document.getElementById("stroke-opacity-input");
 const strokeWidthInput = document.getElementById("stroke-width-input");
@@ -66,6 +62,19 @@ const calmPalette = [
 let activeColorTarget = "primary";
 let recentColors = [];
 
+const STORAGE_KEYS = {
+  savedThemes: "bp_savedThemes",
+  activeThemeId: "bp_activeThemeId",
+};
+
+const BUILTIN_THEMES = [
+  { id: "builtin:light", name: "Light blueprint", bgColor: "#3e6478", gridColor: "#d0f1ff" },
+  { id: "builtin:dark", name: "Dark blueprint", bgColor: "#1a2430", gridColor: "#b3d7ff" },
+  { id: "builtin:paper", name: "Paper", bgColor: "#f6f1e4", gridColor: "#1f2937" },
+];
+
+let savedThemes = [];
+
 const camera = new Camera();
 const shapeStore = new ShapeStore();
 const layerStore = new LayerStore();
@@ -84,12 +93,8 @@ const appState = {
   showDimensions: true,
   continuePolyline: true,
   showGridUnits: false,
-  canvasTheme: "light",
-  customBackgroundMode: "css",
-  customBackgroundValue: "",
-  customBackgroundColor: "#0f3b53",
-  customGridColor: "#d0f1ff",
-  customBackgroundRepeat: true,
+  theme: null,
+  activeThemeId: "builtin:light",
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -320,92 +325,132 @@ function closeAllMenus() {
   setEditMenuOpen(false);
 }
 
-function getPresetCanvasBackground(theme) {
-  if (theme === "dark") return "#1a2430";
-  if (theme === "paper") return "#f6f1e4";
-  return "#3e6478";
+function isValidHexColor(value) {
+  return /^#[0-9a-fA-F]{6}$/.test(value || "");
 }
 
-function applyCanvasBackground() {
-  if (!canvasWrap) return;
-
-  if (appState.canvasTheme !== "custom") {
-    canvasWrap.style.background = getPresetCanvasBackground(appState.canvasTheme);
-    canvasWrap.style.backgroundImage = "none";
-    canvasWrap.style.backgroundRepeat = "no-repeat";
-    canvasWrap.style.backgroundSize = "auto";
-    canvasWrap.style.backgroundPosition = "center";
-    return;
-  }
-
-  const value = appState.customBackgroundValue.trim();
-  if (!value) {
-    canvasWrap.style.background = appState.customBackgroundColor;
-    canvasWrap.style.backgroundImage = "none";
-    canvasWrap.style.backgroundRepeat = "no-repeat";
-    canvasWrap.style.backgroundSize = "auto";
-    canvasWrap.style.backgroundPosition = "center";
-    return;
-  }
-
-  if (appState.customBackgroundMode === "image") {
-    canvasWrap.style.background = "transparent";
-    canvasWrap.style.backgroundImage = `url("${value}")`;
-    canvasWrap.style.backgroundRepeat = appState.customBackgroundRepeat ? "repeat" : "no-repeat";
-    canvasWrap.style.backgroundSize = appState.customBackgroundRepeat ? "auto" : "cover";
-    canvasWrap.style.backgroundPosition = "center";
-    return;
-  }
-
-  canvasWrap.style.background = value;
-  canvasWrap.style.backgroundImage = "none";
-  canvasWrap.style.backgroundRepeat = "no-repeat";
-  canvasWrap.style.backgroundSize = "auto";
-  canvasWrap.style.backgroundPosition = "center";
+function getThemeById(themeId) {
+  return BUILTIN_THEMES.find((theme) => theme.id === themeId) || savedThemes.find((theme) => theme.id === themeId) || null;
 }
 
-function refreshCanvasThemeUI() {
+function loadSavedThemes() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.savedThemes) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((theme) => theme && theme.id && theme.name && isValidHexColor(theme.bgColor) && isValidHexColor(theme.gridColor))
+      .map((theme) => ({
+        id: String(theme.id),
+        name: String(theme.name),
+        bgColor: theme.bgColor,
+        gridColor: theme.gridColor,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedThemes() {
+  localStorage.setItem(STORAGE_KEYS.savedThemes, JSON.stringify(savedThemes));
+}
+
+function applyTheme(theme, activeThemeId = theme.id) {
+  appState.theme = {
+    id: theme.id,
+    name: theme.name,
+    bgColor: theme.bgColor,
+    gridColor: theme.gridColor,
+  };
+  appState.activeThemeId = activeThemeId;
+
+  if (canvasWrap) {
+    canvasWrap.style.background = appState.theme.bgColor;
+    canvasWrap.style.backgroundImage = "none";
+  }
+
   if (canvasThemeSelect) {
-    canvasThemeSelect.value = appState.canvasTheme;
-  }
-  if (backgroundTypeSelect) {
-    backgroundTypeSelect.value = appState.canvasTheme === "custom" ? "custom" : "preset";
-  }
-  const isCustom = appState.canvasTheme === "custom";
-  if (customBackgroundControls) {
-    customBackgroundControls.hidden = !isCustom;
-  }
-  if (customBgModeCss) {
-    customBgModeCss.checked = appState.customBackgroundMode === "css";
-  }
-  if (customBgModeImage) {
-    customBgModeImage.checked = appState.customBackgroundMode === "image";
-  }
-  if (customBackgroundInput) {
-    customBackgroundInput.value = appState.customBackgroundValue;
-    customBackgroundInput.placeholder = appState.customBackgroundMode === "image"
-      ? "https://example.com/mytexture.png"
-      : "#0f3b53\nlinear-gradient(180deg, #0f3b53 0%, #0a2b3d 100%)";
+    canvasThemeSelect.value = activeThemeId;
   }
   if (customBgColorPicker) {
-    customBgColorPicker.value = appState.customBackgroundColor;
+    customBgColorPicker.value = appState.theme.bgColor;
   }
   if (customGridColorPicker) {
-    customGridColorPicker.value = appState.customGridColor;
+    customGridColorPicker.value = appState.theme.gridColor;
   }
-  if (customBgRepeatToggle) {
-    customBgRepeatToggle.checked = appState.customBackgroundRepeat;
-    customBgRepeatToggle.disabled = !isCustom || appState.customBackgroundMode !== "image";
+  if (deleteThemeButton) {
+    deleteThemeButton.disabled = !savedThemes.some((themeItem) => themeItem.id === activeThemeId);
   }
+
+  localStorage.setItem(STORAGE_KEYS.activeThemeId, activeThemeId);
 }
 
-function persistCanvasThemeState() {
-  localStorage.setItem("canvasTheme", appState.canvasTheme);
-  localStorage.setItem("customBackgroundMode", appState.customBackgroundMode);
-  localStorage.setItem("customBackgroundValue", appState.customBackgroundValue);
-  localStorage.setItem("customBackgroundColor", appState.customBackgroundColor);
-  localStorage.setItem("customGridColor", appState.customGridColor);
-  localStorage.setItem("customBackgroundRepeat", appState.customBackgroundRepeat ? "1" : "0");
+function populateThemeSelect() {
+  if (!canvasThemeSelect) return;
+  canvasThemeSelect.textContent = "";
+
+  for (const theme of BUILTIN_THEMES) {
+    const option = document.createElement("option");
+    option.value = theme.id;
+    option.textContent = theme.name;
+    canvasThemeSelect.appendChild(option);
+  }
+
+  if (savedThemes.length > 0) {
+    const savedGroup = document.createElement("optgroup");
+    savedGroup.label = "Saved";
+    for (const theme of savedThemes) {
+      const option = document.createElement("option");
+      option.value = theme.id;
+      option.textContent = theme.name;
+      savedGroup.appendChild(option);
+    }
+    canvasThemeSelect.appendChild(savedGroup);
+  }
+
+  canvasThemeSelect.value = appState.activeThemeId;
+}
+
+function saveCurrentTheme() {
+  const name = themeNameInput?.value.trim() || "";
+  if (!name) {
+    appState.notifyStatus?.("Theme name is required");
+    return;
+  }
+
+  const existingByName = savedThemes.find((theme) => theme.name.toLowerCase() === name.toLowerCase());
+  const id = existingByName?.id || `saved:${Date.now()}`;
+  const themePreset = {
+    id,
+    name,
+    bgColor: appState.theme.bgColor,
+    gridColor: appState.theme.gridColor,
+  };
+
+  if (existingByName) {
+    savedThemes = savedThemes.map((theme) => (theme.id === existingByName.id ? themePreset : theme));
+  } else {
+    savedThemes.push(themePreset);
+  }
+
+  persistSavedThemes();
+  appState.activeThemeId = themePreset.id;
+  populateThemeSelect();
+  applyTheme(themePreset, themePreset.id);
+  appState.notifyStatus?.("Theme saved");
+}
+
+function deleteSelectedSavedTheme() {
+  const selectedId = appState.activeThemeId;
+  const existing = savedThemes.find((theme) => theme.id === selectedId);
+  if (!existing) return;
+
+  savedThemes = savedThemes.filter((theme) => theme.id !== selectedId);
+  persistSavedThemes();
+  const fallbackTheme = BUILTIN_THEMES[0];
+  appState.activeThemeId = fallbackTheme.id;
+  populateThemeSelect();
+  applyTheme(fallbackTheme, fallbackTheme.id);
+  appState.notifyStatus?.("Saved theme deleted");
 }
 
 for (const button of document.querySelectorAll('.tool-grid [data-tool]')) {
@@ -466,92 +511,29 @@ showGridUnitsToggle.addEventListener("change", (event) => {
 });
 
 canvasThemeSelect?.addEventListener("change", (event) => {
-  const nextTheme = event.target.value;
-  appState.canvasTheme = ["light", "dark", "paper", "custom"].includes(nextTheme) ? nextTheme : "light";
-  if (appState.canvasTheme !== "custom") {
-    appState.customBackgroundValue = "";
+  const selectedTheme = getThemeById(event.target.value) || BUILTIN_THEMES[0];
+  applyTheme(selectedTheme, selectedTheme.id);
+  if (themeNameInput) {
+    themeNameInput.value = "";
   }
-  refreshCanvasThemeUI();
-  applyCanvasBackground();
-  persistCanvasThemeState();
 });
-
-backgroundTypeSelect?.addEventListener("change", (event) => {
-  const isCustom = event.target.value === "custom";
-  appState.canvasTheme = isCustom ? "custom" : "light";
-  if (!isCustom) {
-    appState.customBackgroundValue = "";
-  }
-  refreshCanvasThemeUI();
-  applyCanvasBackground();
-  persistCanvasThemeState();
-});
-
-customBgModeCss?.addEventListener("change", () => {
-  if (!customBgModeCss.checked) return;
-  appState.customBackgroundMode = "css";
-  refreshCanvasThemeUI();
-  applyCanvasBackground();
-  persistCanvasThemeState();
-});
-
-customBgModeImage?.addEventListener("change", () => {
-  if (!customBgModeImage.checked) return;
-  appState.customBackgroundMode = "image";
-  refreshCanvasThemeUI();
-  applyCanvasBackground();
-  persistCanvasThemeState();
-});
-
-customBackgroundInput?.addEventListener("input", (event) => {
-  appState.customBackgroundValue = event.target.value;
-  const trimmedValue = event.target.value.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(trimmedValue)) {
-    appState.customBackgroundColor = trimmedValue;
-  }
-  applyCanvasBackground();
-  refreshCanvasThemeUI();
-  persistCanvasThemeState();
-});
-
 
 customBgColorPicker?.addEventListener("input", (event) => {
-  appState.canvasTheme = "custom";
-  appState.customBackgroundMode = "css";
-  appState.customBackgroundColor = event.target.value;
-  if (!appState.customBackgroundValue.trim()) {
-    appState.customBackgroundValue = event.target.value;
+  if (!appState.theme) return;
+  appState.theme.bgColor = event.target.value;
+  if (canvasWrap) {
+    canvasWrap.style.background = appState.theme.bgColor;
+    canvasWrap.style.backgroundImage = "none";
   }
-  refreshCanvasThemeUI();
-  applyCanvasBackground();
-  persistCanvasThemeState();
 });
 
 customGridColorPicker?.addEventListener("input", (event) => {
-  appState.canvasTheme = "custom";
-  appState.customGridColor = event.target.value;
-  refreshCanvasThemeUI();
-  applyCanvasBackground();
-  persistCanvasThemeState();
+  if (!appState.theme) return;
+  appState.theme.gridColor = event.target.value;
 });
 
-customBgRepeatToggle?.addEventListener("change", (event) => {
-  appState.customBackgroundRepeat = event.target.checked;
-  applyCanvasBackground();
-  persistCanvasThemeState();
-});
-
-customBackgroundReset?.addEventListener("click", () => {
-  appState.canvasTheme = "light";
-  appState.customBackgroundMode = "css";
-  appState.customBackgroundValue = "";
-  appState.customBackgroundColor = "#0f3b53";
-  appState.customGridColor = "#d0f1ff";
-  appState.customBackgroundRepeat = true;
-  refreshCanvasThemeUI();
-  applyCanvasBackground();
-  persistCanvasThemeState();
-});
+saveThemeButton?.addEventListener("click", saveCurrentTheme);
+deleteThemeButton?.addEventListener("click", deleteSelectedSavedTheme);
 
 showDimensionsToggle.addEventListener("change", (event) => {
   appState.showDimensions = event.target.checked;
@@ -662,27 +644,12 @@ renderStyleSwatches();
 renderRecentColors();
 refreshStyleUI();
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
-const storedCanvasTheme = localStorage.getItem("canvasTheme");
-if (["light", "dark", "paper", "custom"].includes(storedCanvasTheme)) {
-  appState.canvasTheme = storedCanvasTheme;
-}
-const storedCustomBackgroundMode = localStorage.getItem("customBackgroundMode");
-if (storedCustomBackgroundMode === "css" || storedCustomBackgroundMode === "image") {
-  appState.customBackgroundMode = storedCustomBackgroundMode;
-}
-const storedCustomBackgroundValue = localStorage.getItem("customBackgroundValue");
-if (typeof storedCustomBackgroundValue === "string") {
-  appState.customBackgroundValue = storedCustomBackgroundValue;
-}
-const storedCustomBackgroundColor = localStorage.getItem("customBackgroundColor");
-if (typeof storedCustomBackgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(storedCustomBackgroundColor)) {
-  appState.customBackgroundColor = storedCustomBackgroundColor;
-}
-const storedCustomGridColor = localStorage.getItem("customGridColor");
-if (typeof storedCustomGridColor === "string" && /^#[0-9a-fA-F]{6}$/.test(storedCustomGridColor)) {
-  appState.customGridColor = storedCustomGridColor;
-}
-appState.customBackgroundRepeat = localStorage.getItem("customBackgroundRepeat") !== "0";
+savedThemes = loadSavedThemes();
+const storedActiveThemeId = localStorage.getItem(STORAGE_KEYS.activeThemeId) || BUILTIN_THEMES[0].id;
+const initialTheme = getThemeById(storedActiveThemeId) || BUILTIN_THEMES[0];
+appState.activeThemeId = initialTheme.id;
+populateThemeSelect();
+applyTheme(initialTheme, initialTheme.id);
 const debugSnapResetV1 = localStorage.getItem("debugSnapResetV1");
 if (debugSnapResetV1 !== "1") {
   localStorage.setItem("debugSnap", "0");
@@ -691,11 +658,6 @@ if (debugSnapResetV1 !== "1") {
 appState.debugSnap = localStorage.getItem("debugSnap") === "1";
 debugSnapToggle.checked = appState.debugSnap;
 showGridUnitsToggle.checked = appState.showGridUnits;
-if (canvasThemeSelect) {
-  canvasThemeSelect.value = appState.canvasTheme;
-}
-refreshCanvasThemeUI();
-applyCanvasBackground();
 setActiveTool("select");
 refreshScaleDisplay();
 refreshStatus();
