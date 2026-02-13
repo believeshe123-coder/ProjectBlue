@@ -21,13 +21,15 @@ html,
 body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 13px;
   background: var(--chrome-bg);
 }
 
-body {
+.app {
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -87,7 +89,7 @@ body {
 }
 
 .tool-group--style {
-  min-width: 360px;
+  min-width: 320px;
 }
 
 .group-title {
@@ -192,21 +194,21 @@ body {
 
 .style-tray {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .color-chips {
   display: flex;
   align-items: stretch;
-  gap: 7px;
+  gap: 6px;
 }
 
 .color-chip,
 .palette-add {
   border: 1px solid var(--soft-border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--button-bg);
-  padding: 5px 8px;
+  padding: 4px 7px;
 }
 
 .color-chip {
@@ -228,16 +230,16 @@ body {
 }
 
 .chip-swatch {
-  width: 20px;
-  height: 20px;
-  border-radius: 7px;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
   border: 1px solid rgba(0, 0, 0, 0.16);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 .palette-add {
-  width: 31px;
-  font-size: 20px;
+  width: 28px;
+  font-size: 18px;
   line-height: 1;
   color: #475569;
 }
@@ -255,15 +257,16 @@ body {
 
 .swatch-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
 }
 
 .swatch {
   width: 100%;
   aspect-ratio: 1 / 1;
+  min-height: 14px;
   border: 1px solid rgba(0, 0, 0, 0.18);
-  border-radius: 8px;
+  border-radius: 5px;
   background: var(--swatch, #f4f4f4);
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -371,9 +374,11 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.canvas-shell {
+.canvas-wrap {
   flex: 1;
   min-height: 0;
+  position: relative;
+  overflow: hidden;
   background: var(--canvas-bg);
 }
 
