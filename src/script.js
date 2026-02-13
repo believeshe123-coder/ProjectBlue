@@ -41,6 +41,10 @@ const fillChipSwatch = document.getElementById("fill-chip-swatch");
 const paletteColorButton = document.getElementById("palette-color-btn");
 const customColorPicker = document.getElementById("customColorPicker");
 const recentRow = document.getElementById("recent-row");
+const uiDrawer = document.querySelector(".ui-drawer");
+const uiDrawerToggle = document.getElementById("ui-drawer-toggle");
+const miniToolButtons = Array.from(document.querySelectorAll('.ui-drawer__mini [data-tool]'));
+const miniActionButtons = Array.from(document.querySelectorAll('.ui-drawer__mini [data-action]'));
 
 const calmPalette = [
   "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
@@ -202,12 +206,24 @@ function getCanvasCenterScreenPoint() {
   return { x: rect.width / 2, y: rect.height / 2 };
 }
 
+function normalizeToolName(toolName) {
+  if (toolName === "isoLine") return "iso-line";
+  return toolName;
+}
+
 function setActiveTool(toolName) {
+  const normalizedToolName = normalizeToolName(toolName);
+  if (!tools[normalizedToolName]) return;
   currentTool.onDeactivate();
-  currentTool = tools[toolName];
+  currentTool = tools[normalizedToolName];
   currentTool.onActivate();
-  document.querySelectorAll("[data-tool]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.tool === toolName);
+
+  document.querySelectorAll('.topbar [data-tool]').forEach((button) => {
+    button.classList.toggle("active", button.dataset.tool === normalizedToolName);
+  });
+
+  miniToolButtons.forEach((button) => {
+    button.classList.toggle("active", normalizeToolName(button.dataset.tool) === normalizedToolName);
   });
 }
 
@@ -226,6 +242,7 @@ function refreshScaleDisplay() {
 
 let statusMessage = null;
 let statusMessageTimeout = null;
+let uiOpen = true;
 
 function refreshStatus() {
   if (statusMessage) {
@@ -246,6 +263,19 @@ appState.notifyStatus = (message, durationMs = 1400) => {
     refreshStatus();
   }, durationMs);
 };
+
+function applyUiDrawerState() {
+  if (!uiDrawer) return;
+  uiDrawer.dataset.open = uiOpen ? "true" : "false";
+  if (uiDrawerToggle) uiDrawerToggle.textContent = uiOpen ? "▲" : "▼";
+  localStorage.setItem("uiDrawerOpen", uiOpen ? "1" : "0");
+  requestAnimationFrame(() => canvasEngine.resizeCanvasToContainer());
+}
+
+function toggleUiDrawer() {
+  uiOpen = !uiOpen;
+  applyUiDrawerState();
+}
 
 function undo() {
   const previous = historyStore.undo(shapeStore.serialize());
@@ -273,9 +303,22 @@ function deleteSelection() {
   shapeStore.deleteSelectedShapes();
 }
 
-for (const button of document.querySelectorAll("[data-tool]")) {
+for (const button of document.querySelectorAll('.topbar [data-tool]')) {
   button.addEventListener("click", () => setActiveTool(button.dataset.tool));
 }
+
+for (const button of miniToolButtons) {
+  button.addEventListener("click", () => setActiveTool(button.dataset.tool));
+}
+
+for (const button of miniActionButtons) {
+  button.addEventListener("click", () => {
+    if (button.dataset.action === "undo") undo();
+    if (button.dataset.action === "redo") redo();
+  });
+}
+
+uiDrawerToggle?.addEventListener("click", toggleUiDrawer);
 
 zoomInButton.addEventListener("click", () => zoomBy(1.15));
 zoomOutButton.addEventListener("click", () => zoomBy(1 / 1.15));
@@ -408,6 +451,8 @@ window.addEventListener("keydown", (event) => {
 renderStyleSwatches();
 renderRecentColors();
 refreshStyleUI();
+uiOpen = localStorage.getItem("uiDrawerOpen") !== "0";
+applyUiDrawerState();
 setActiveTool("select");
 refreshScaleDisplay();
 refreshStatus();

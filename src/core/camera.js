@@ -1,12 +1,8 @@
-import { clamp } from "../utils/math.js";
-
 export class Camera {
   constructor() {
     this.x = 0;
     this.y = 0;
     this.zoom = 1;
-    this.minZoom = 0.2;
-    this.maxZoom = 6;
     this.viewW = 0;
     this.viewH = 0;
   }
@@ -36,8 +32,11 @@ export class Camera {
   }
 
   zoomAt(screenPoint, factor) {
+    const nextZoom = this.zoom * factor;
+    if (!Number.isFinite(nextZoom) || nextZoom <= 0) return;
+
     const before = this.screenToWorld(screenPoint);
-    this.zoom = clamp(this.zoom * factor, this.minZoom, this.maxZoom);
+    this.zoom = nextZoom;
     const after = this.screenToWorld(screenPoint);
     this.x += before.x - after.x;
     this.y += before.y - after.y;
