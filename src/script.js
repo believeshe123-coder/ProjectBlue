@@ -16,13 +16,16 @@ const canvasWrap = document.querySelector(".canvas-wrap");
 const statusEl = document.getElementById("status");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
+const eraseModeToggle = document.getElementById("erase-mode-toggle");
+const eraserSizeInput = document.getElementById("eraser-size-input");
+const eraserSizeDisplay = document.getElementById("eraser-size-display");
 const snapGridToggle = document.getElementById("snap-grid-toggle");
 const snapMidToggle = document.getElementById("snap-mid-toggle");
 const debugSnapToggle = document.getElementById("debug-snap-toggle");
 const unitPerCellInput = document.getElementById("unit-per-cell");
 const unitNameInput = document.getElementById("unit-name");
 const scaleDisplay = document.getElementById("scale-display");
-const smartMeasurementsToggle = document.getElementById("show-dimensions-toggle");
+const measurementModeToggle = document.getElementById("measurement-mode-toggle");
 const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 const showGridUnitsToggle = document.getElementById("show-grid-units-toggle");
 const canvasThemeSelect = document.getElementById("canvas-theme-select");
@@ -96,10 +99,13 @@ const appState = {
   snapDebugStatus: "SNAP: OFF",
   unitName: "ft",
   unitPerCell: 1,
-  smartMeasurements: true,
+  measurementMode: "smart",
   continuePolyline: true,
   showGridUnits: false,
   selected: { type: null, id: null },
+  eraseMode: "object",
+  eraserSizePx: 16,
+  erasePreview: null,
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
   activeThemeId: "builtin:light",
@@ -249,6 +255,43 @@ function getCanvasCenterScreenPoint() {
 function normalizeToolName(toolName) {
   if (toolName === "isoLine") return "iso-line";
   return toolName;
+}
+
+function normalizeMeasurementMode(mode) {
+  return ["on", "smart", "off"].includes(mode) ? mode : "smart";
+}
+
+function getNextMeasurementMode(mode) {
+  if (mode === "on") return "smart";
+  if (mode === "smart") return "off";
+  return "on";
+}
+
+function updateMeasurementModeControl() {
+  if (!measurementModeToggle) return;
+  measurementModeToggle.textContent = `Measurements: ${appState.measurementMode.toUpperCase()}`;
+}
+
+function getNextEraseMode(mode) {
+  return mode === "object" ? "segment" : "object";
+}
+
+function updateEraseControls() {
+  if (eraseModeToggle) {
+    eraseModeToggle.textContent = `Erase: ${appState.eraseMode === "object" ? "Object" : "Segment"}`;
+  }
+  if (eraserSizeInput) {
+    eraserSizeInput.value = String(appState.eraserSizePx);
+  }
+  if (eraserSizeDisplay) {
+    eraserSizeDisplay.textContent = `${appState.eraserSizePx}px`;
+  }
+}
+
+function toggleEraseMode() {
+  appState.eraseMode = getNextEraseMode(appState.eraseMode);
+  localStorage.setItem("eraseMode", appState.eraseMode);
+  updateEraseControls();
 }
 
 function setActiveTool(toolName) {
@@ -457,9 +500,11 @@ function buildProjectData() {
       unit: appState.unitName,
       snapGrid: appState.snapToGrid,
       snapMidpoint: appState.snapToMidpoints,
-      smartMeasurements: appState.smartMeasurements,
+      measurementMode: appState.measurementMode,
       showGridUnits: appState.showGridUnits,
       lastTool: getCurrentToolName(),
+      eraseMode: appState.eraseMode,
+      eraserSizePx: appState.eraserSizePx,
     },
     themes: {
       builtInSelectedId: appState.activeThemeId,
@@ -474,9 +519,10 @@ function updateControlsFromState() {
   unitNameInput.value = appState.unitName;
   snapGridToggle.checked = appState.snapToGrid;
   snapMidToggle.checked = appState.snapToMidpoints;
-  smartMeasurementsToggle.checked = appState.smartMeasurements;
+  updateMeasurementModeControl();
   showGridUnitsToggle.checked = appState.showGridUnits;
   refreshScaleDisplay();
+  updateEraseControls();
   refreshStatus();
 }
 
@@ -490,8 +536,10 @@ function applyProjectData(project, { announce = true } = {}) {
   appState.unitName = typeof settings.unit === "string" && settings.unit ? settings.unit : "ft";
   appState.snapToGrid = settings.snapGrid !== false;
   appState.snapToMidpoints = settings.snapMidpoint !== false;
-  appState.smartMeasurements = settings.smartMeasurements !== false;
+  appState.measurementMode = normalizeMeasurementMode(settings.measurementMode ?? (settings.smartMeasurements === false ? "off" : "smart"));
   appState.showGridUnits = settings.showGridUnits === true;
+  appState.eraseMode = settings.eraseMode === "segment" ? "segment" : "object";
+  appState.eraserSizePx = Number.isFinite(settings.eraserSizePx) ? Math.min(40, Math.max(6, settings.eraserSizePx)) : 16;
 
   const loadedThemes = project.themes?.savedThemes;
   savedThemes = Array.isArray(loadedThemes) ? loadedThemes.filter((theme) => (
@@ -515,8 +563,10 @@ function applyProjectData(project, { announce = true } = {}) {
   setActiveTool(tools[toolName] ? toolName : "select");
 
   localStorage.setItem("showGridUnits", appState.showGridUnits ? "1" : "0");
-  localStorage.setItem("smartMeasurements", appState.smartMeasurements ? "1" : "0");
+  localStorage.setItem("measurementMode", appState.measurementMode);
   localStorage.setItem("debugSnap", appState.debugSnap ? "1" : "0");
+  localStorage.setItem("eraseMode", appState.eraseMode);
+  localStorage.setItem("eraserSizePx", String(appState.eraserSizePx));
   updateControlsFromState();
 
   if (announce) {
@@ -873,9 +923,21 @@ customGridColorPicker?.addEventListener("input", (event) => {
 saveThemeButton?.addEventListener("click", saveCurrentTheme);
 deleteThemeButton?.addEventListener("click", deleteSelectedSavedTheme);
 
-smartMeasurementsToggle.addEventListener("change", (event) => {
-  appState.smartMeasurements = event.target.checked;
-  localStorage.setItem("smartMeasurements", appState.smartMeasurements ? "1" : "0");
+measurementModeToggle?.addEventListener("click", () => {
+  appState.measurementMode = getNextMeasurementMode(appState.measurementMode);
+  localStorage.setItem("measurementMode", appState.measurementMode);
+  updateMeasurementModeControl();
+});
+
+eraseModeToggle?.addEventListener("click", () => {
+  toggleEraseMode();
+});
+
+eraserSizeInput?.addEventListener("input", (event) => {
+  const value = Number.parseInt(event.target.value, 10);
+  appState.eraserSizePx = Number.isFinite(value) ? Math.min(40, Math.max(6, value)) : 16;
+  localStorage.setItem("eraserSizePx", String(appState.eraserSizePx));
+  updateEraseControls();
 });
 
 strokeWidthInput.addEventListener("input", (event) => {
@@ -972,6 +1034,12 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (key === "e" && getCurrentToolName() === "erase") {
+    event.preventDefault();
+    toggleEraseMode();
+    return;
+  }
+
   if (key === "m") {
     const selectedShape = getSelectedMeasurableShape();
     if (selectedShape) {
@@ -991,7 +1059,10 @@ renderRecentColors();
 resetStyleAlphaDefaults();
 refreshStyleUI();
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
-appState.smartMeasurements = localStorage.getItem("smartMeasurements") !== "0";
+appState.measurementMode = normalizeMeasurementMode(localStorage.getItem("measurementMode") || (localStorage.getItem("smartMeasurements") === "0" ? "off" : "smart"));
+appState.eraseMode = localStorage.getItem("eraseMode") === "segment" ? "segment" : "object";
+const storedEraserSizePx = Number.parseInt(localStorage.getItem("eraserSizePx") || "16", 10);
+appState.eraserSizePx = Number.isFinite(storedEraserSizePx) ? Math.min(40, Math.max(6, storedEraserSizePx)) : 16;
 savedThemes = loadSavedThemes();
 const storedActiveThemeId = localStorage.getItem(STORAGE_KEYS.activeThemeId) || BUILTIN_THEMES[0].id;
 const initialTheme = getThemeById(storedActiveThemeId) || BUILTIN_THEMES[0];
@@ -1006,7 +1077,8 @@ if (debugSnapResetV1 !== "1") {
 appState.debugSnap = localStorage.getItem("debugSnap") === "1";
 debugSnapToggle.checked = appState.debugSnap;
 showGridUnitsToggle.checked = appState.showGridUnits;
-smartMeasurementsToggle.checked = appState.smartMeasurements;
+updateMeasurementModeControl();
+updateEraseControls();
 setActiveTool("select");
 restoreAutosaveIfAvailable();
 updateControlsFromState();
