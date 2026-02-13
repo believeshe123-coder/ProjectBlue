@@ -1,4 +1,4 @@
-import { snapWorldToIso, worldToIsoUV } from "../core/isoGrid.js";
+import { isoUVToWorld, snapWorldToIso, worldToIsoUV } from "../core/isoGrid.js";
 
 const SNAP_PIXELS = 14;
 
@@ -6,17 +6,47 @@ export function getSnappedPoint(context, screenPoint) {
   const { appState, camera } = context;
   const raw = camera.screenToWorld(screenPoint);
   const thresholdWorld = SNAP_PIXELS / camera.zoom;
-  const snappedCandidate = snapWorldToIso(raw);
-  const gridDistance = Math.hypot(raw.x - snappedCandidate.point.x, raw.y - snappedCandidate.point.y);
+  const candidates = [];
 
-  if (appState.snapToGrid && gridDistance <= thresholdWorld) {
+  if (appState.snapToGrid) {
+    const snappedGrid = snapWorldToIso(raw);
+    const gridDistance = Math.hypot(raw.x - snappedGrid.point.x, raw.y - snappedGrid.point.y);
+    candidates.push({
+      point: snappedGrid.point,
+      kind: "grid",
+      u: snappedGrid.u,
+      v: snappedGrid.v,
+      distance: gridDistance,
+    });
+  }
+
+  if (appState.snapToMidpoints) {
+    const uv = worldToIsoUV(raw);
+    const uMid = Math.floor(uv.u) + 0.5;
+    const vMid = Math.floor(uv.v) + 0.5;
+    const midpoint = isoUVToWorld(uMid, vMid);
+    const midpointDistance = Math.hypot(raw.x - midpoint.x, raw.y - midpoint.y);
+    candidates.push({
+      point: midpoint,
+      kind: "midpoint",
+      u: uMid,
+      v: vMid,
+      distance: midpointDistance,
+    });
+  }
+
+  const winner = candidates
+    .filter((candidate) => candidate.distance <= thresholdWorld)
+    .sort((a, b) => a.distance - b.distance)[0];
+
+  if (winner) {
     return {
       raw,
-      pt: snappedCandidate.point,
+      pt: winner.point,
       snapped: true,
-      kind: "grid",
-      u: snappedCandidate.u,
-      v: snappedCandidate.v,
+      kind: winner.kind,
+      u: winner.u,
+      v: winner.v,
     };
   }
 
@@ -39,7 +69,9 @@ export function updateSnapIndicator(appState, snapped) {
     u: snapped.snapped ? snapped.u : null,
     v: snapped.snapped ? snapped.v : null,
   };
-  appState.snapDebugStatus = snapped.snapped ? `SNAP: GRID (u=${snapped.u}, v=${snapped.v})` : "SNAP: OFF";
+  appState.snapDebugStatus = snapped.snapped
+    ? `SNAP: ${snapped.kind.toUpperCase()} (u=${snapped.u}, v=${snapped.v})`
+    : "SNAP: OFF";
 }
 
 export function getCurrentStyle(appState) {

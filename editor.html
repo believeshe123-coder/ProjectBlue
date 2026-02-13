@@ -8,50 +8,72 @@
   </head>
   <body>
     <div class="app">
-      <header class="workspace-chrome">
-        <nav class="menu-bar" aria-label="Main menu bar">
+      <header class="menubar" aria-label="Main menu bar">
         <button class="menu-item" type="button">File</button>
         <button class="menu-item" type="button">Edit</button>
-        <button class="menu-item" type="button">View</button>
-        <button class="menu-item" type="button">Tools</button>
-        <button class="menu-item" type="button">Help</button>
-      </nav>
 
-      <div class="ui-drawer" data-open="true">
-        <div class="ui-drawer__full">
-      <div class="topbar" role="toolbar" aria-label="Blueprint editor ribbon">
-        <section class="tool-group" aria-label="Drawing tools">
-          <div class="tool-grid tool-grid--tiles">
-            <button class="tool-button tool-tile" data-tool="select" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l12 7-5 2 3 8-3 1-3-8-4 4z" /></svg>
-              <span>Select</span>
-            </button>
-            <button class="tool-button tool-tile" data-tool="iso-line" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l8-8 8 4" /><path d="M4 20h16" /></svg>
-              <span>Iso Line</span>
-            </button>
-            <button class="tool-button tool-tile" data-tool="polyline" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l5-6 4 3 7-7" /><circle cx="4" cy="16" r="1.5" /><circle cx="9" cy="10" r="1.5" /><circle cx="13" cy="13" r="1.5" /></svg>
-              <span>Polyline</span>
-            </button>
-            <button class="tool-button tool-tile" data-tool="measure" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15l4-4 12 12" /><path d="M8 11l2 2M11 14l2 2M14 17l2 2" /></svg>
-              <span>Measure</span>
-            </button>
-            <button class="tool-button tool-tile" data-tool="fill" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l7 7-5 5-7-7z" /><path d="M14 17h6" /></svg>
-              <span>Fill</span>
-            </button>
-            <button class="tool-button tool-tile" data-tool="erase" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7-4 4H9z" /><path d="M15 19h5" /></svg>
-              <span>Erase</span>
-            </button>
+        <div class="menu-item-wrap">
+          <button class="menu-item" id="menuSettingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuSettingsDropdown">
+            Settings
+          </button>
+
+          <div class="menu-dropdown" id="menuSettingsDropdown" role="menu" aria-label="Settings menu" data-open="false">
+            <div class="menu-section">
+              <div class="menu-title">Options</div>
+              <label class="menu-row"><input id="show-dimensions-toggle" type="checkbox" checked />Show dimensions</label>
+              <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
+              <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continue polyline</label>
+            </div>
+
+            <div class="menu-section">
+              <div class="menu-title">Snapping</div>
+              <label class="menu-row"><input id="snap-grid-toggle" type="checkbox" checked />Snap to grid</label>
+              <label class="menu-row"><input id="snap-mid-toggle" type="checkbox" checked />Snap to midpoint</label>
+              <label class="menu-row"><input id="debug-snap-toggle" type="checkbox" />Debug snap</label>
+            </div>
+
+            <div class="menu-section">
+              <div class="menu-title">Scale</div>
+              <label class="field-block" for="unit-per-cell">
+                <span>Unit / grid</span>
+                <input id="unit-per-cell" class="scale-input" type="number" min="0.01" step="0.01" value="1" />
+              </label>
+              <label class="field-block" for="unit-name">
+                <span>Unit</span>
+                <select id="unit-name" class="scale-input">
+                  <option value="ft" selected>ft</option>
+                  <option value="in">in</option>
+                  <option value="m">m</option>
+                  <option value="cm">cm</option>
+                </select>
+              </label>
+              <div class="scale-display" id="scale-display">1 grid = 1 ft</div>
+            </div>
           </div>
-          <span class="group-title">Tools</span>
-        </section>
+        </div>
 
-        <section class="tool-group tool-group--style" aria-label="Style controls">
-          <div class="style-tray">
+      </header>
+
+      <div class="main">
+        <aside class="sidebar" aria-label="Editor controls">
+          <section class="side-section" aria-label="Drawing tools">
+            <h2 class="section-title">Tool Grid</h2>
+            <div class="tool-grid">
+              <button class="tool-button tool-tile" data-tool="select" type="button">Select</button>
+              <button class="tool-button tool-tile" data-tool="iso-line" type="button">Iso Line</button>
+              <button class="tool-button tool-tile" data-tool="polyline" type="button">Polyline</button>
+              <button class="tool-button tool-tile" data-tool="measure" type="button">Measure</button>
+              <button class="tool-button tool-tile" data-tool="fill" type="button">Fill</button>
+              <button class="tool-button tool-tile" data-tool="erase" type="button">Erase</button>
+            </div>
+            <div class="tool-actions">
+              <button class="tool-button" id="undo-btn" type="button">Undo</button>
+              <button class="tool-button" id="redo-btn" type="button">Redo</button>
+            </div>
+          </section>
+
+          <section class="side-section" aria-label="Color and style">
+            <h2 class="section-title">Colors / Style</h2>
             <div class="color-chips" role="group" aria-label="Primary and secondary colors">
               <button id="stroke-chip" class="color-chip color-chip--active" type="button" aria-label="Primary stroke color">
                 <span class="chip-label">Primary</span>
@@ -72,102 +94,35 @@
               <div class="recent-row" id="recent-row"></div>
             </div>
 
-            <div class="style-controls-inline">
-              <label class="style-inline-item" for="stroke-opacity-input">
-                <span>Stroke α</span>
-                <input id="stroke-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" />
-              </label>
-              <label class="style-inline-item" for="fill-opacity-input">
-                <span>Fill α</span>
-                <input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="0.25" />
-              </label>
-              <label class="style-inline-item" for="stroke-width-input">
-                <span>Width</span>
-                <select id="stroke-width-input" class="style-select compact-select">
-                  <option value="1">1</option>
-                  <option value="2" selected>2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="6">6</option>
-                  <option value="8">8</option>
-                </select>
-              </label>
-              <label class="tool-toggle style-fill-toggle"><input id="fill-enabled-toggle" type="checkbox" checked />Fill enabled</label>
-            </div>
+            <label class="field-block" for="stroke-opacity-input">
+              <span>Stroke α</span>
+              <input id="stroke-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" />
+            </label>
+            <label class="field-block" for="fill-opacity-input">
+              <span>Fill α</span>
+              <input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="0.25" />
+            </label>
+            <label class="field-block" for="stroke-width-input">
+              <span>Width</span>
+              <select id="stroke-width-input" class="style-select">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label class="tool-toggle"><input id="fill-enabled-toggle" type="checkbox" checked />Fill enabled</label>
+            <div id="style-preview-chip" class="style-preview-chip" aria-label="Current stroke and fill preview"></div>
+          </section>
+        </aside>
 
-            <div class="style-preview-wrap">
-              <span class="style-label">Preview</span>
-              <div id="style-preview-chip" class="style-preview-chip" aria-label="Current stroke and fill preview"></div>
-            </div>
-          </div>
-          <span class="group-title">Style</span>
-        </section>
-
-        <section class="tool-group" aria-label="Drawing options">
-          <div class="tool-grid tool-grid--snap">
-            <label class="tool-toggle"><input id="show-dimensions-toggle" type="checkbox" checked />Show dimensions</label>
-            <label class="tool-toggle"><input id="continue-polyline-toggle" type="checkbox" checked />Continue polyline</label>
-            <label class="tool-toggle"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
-          </div>
-          <span class="group-title">Options</span>
-        </section>
-
-        <section class="tool-group" aria-label="Snapping tools">
-          <div class="tool-grid tool-grid--snap">
-            <label class="tool-toggle"><input id="snap-grid-toggle" type="checkbox" checked />Snap to grid</label>
-            <label class="tool-toggle"><input id="snap-mid-toggle" type="checkbox" checked />Snap to midpoint</label>
-            <label class="tool-toggle"><input id="debug-snap-toggle" type="checkbox" />Debug snap</label>
-          </div>
-          <span class="group-title">Snapping</span>
-        </section>
-
-        <section class="tool-group" aria-label="Scale tools">
-          <div class="tool-grid tool-grid--scale">
-            <label class="scale-label" for="unit-per-cell">Unit / grid</label>
-            <input id="unit-per-cell" class="scale-input" type="number" min="0.01" step="0.01" value="1" />
-            <label class="scale-label" for="unit-name">Unit</label>
-            <select id="unit-name" class="scale-input">
-              <option value="ft" selected>ft</option>
-              <option value="in">in</option>
-              <option value="m">m</option>
-              <option value="cm">cm</option>
-            </select>
-            <div class="scale-display" id="scale-display">1 grid = 1 ft</div>
-          </div>
-          <span class="group-title">Scale</span>
-        </section>
-
-        <section class="tool-group" aria-label="View tools">
-          <div class="tool-grid">
-            <button class="tool-button" id="zoom-in-btn" type="button">Zoom in</button>
-            <button class="tool-button" id="zoom-out-btn" type="button">Zoom out</button>
-            <button class="tool-button" id="reset-view-btn" type="button">Reset</button>
-            <button class="tool-button" id="undo-btn" type="button">Undo</button>
-            <button class="tool-button" id="redo-btn" type="button">Redo</button>
-          </div>
-          <span class="group-title">View</span>
-        </section>
+        <div class="canvas-wrap">
+          <canvas id="canvas"></canvas>
+          <div class="status" id="status">Mode: ISO</div>
         </div>
-        <div class="status" id="status">Mode: ISO</div>
-        </div>
-
-        <div class="ui-drawer__mini" role="toolbar" aria-label="Compact toolbar">
-          <button class="mini-btn" data-tool="isoLine" type="button">Line</button>
-          <button class="mini-btn" data-tool="fill" type="button">Fill</button>
-          <button class="mini-btn" data-tool="erase" type="button">Erase</button>
-
-          <div class="mini-spacer"></div>
-
-          <button class="mini-btn" data-action="undo" type="button">Undo</button>
-          <button class="mini-btn" data-action="redo" type="button">Redo</button>
-        </div>
-
-        <button class="ui-drawer__toggle" id="ui-drawer-toggle" type="button" aria-label="Toggle settings">▲</button>
       </div>
-      </header>
-      <main class="canvas-wrap">
-        <canvas id="blueprint-canvas"></canvas>
-      </main>
     </div>
 
     <script type="module" src="./src/script.js"></script>
