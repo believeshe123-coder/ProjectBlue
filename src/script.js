@@ -61,6 +61,7 @@ const menuEditDropdown = document.getElementById("menuEditDropdown");
 
 const newLayerButton = document.getElementById("new-layer-btn");
 const layersList = document.getElementById("layers-list");
+const layersPanel = layersList;
 
 const calmPalette = [
   "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
@@ -319,7 +320,7 @@ appState.notifyStatus = (message, durationMs = 1400) => {
 function migrateLayeredSnapshot(snapshot = {}) {
   const serializedLayers = snapshot.layers ?? snapshot.layerState ?? null;
   const requestedActiveLayerId = snapshot.activeLayerId ?? snapshot.currentActiveLayerId ?? null;
-  layerStore.replaceFromSerialized(serializedLayers, requestedActiveLayerId);
+  layerStore.hydrate(serializedLayers, requestedActiveLayerId);
 
   shapeStore.replaceFromSerialized(snapshot.shapes ?? []);
   migrateShapeLayers(shapeStore.getShapes(), layerStore);
@@ -394,7 +395,7 @@ function resetProject() {
   }
 
   shapeStore.clear();
-  layerStore.replaceFromSerialized();
+  layerStore.hydrate();
   appState.activeLayerId = layerStore.getActiveLayer()?.id ?? null;
   camera.resetView();
   setActiveTool("select");
@@ -482,12 +483,6 @@ function renderLayerNameCell(layer, row) {
   nameButton.className = "layer-name";
   nameButton.textContent = layer.name;
   nameButton.title = "Double-click to rename";
-  nameButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    pushHistoryState();
-    layerStore.setActiveLayer(layer.id);
-    appState.activeLayerId = layer.id;
-  });
 
   nameButton.addEventListener("dblclick", (event) => {
     event.stopPropagation();
@@ -500,14 +495,18 @@ function renderLayerNameCell(layer, row) {
       const nextName = input.value.trim();
       if (nextName && nextName !== layer.name) {
         pushHistoryState();
-        layerStore.updateLayer(layer.id, { name: nextName });
+        layerStore.renameLayer(layer.id, nextName);
       }
       input.replaceWith(nameButton);
+      requestAnimationFrame(renderLayersPanel);
     };
 
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") commit();
-      if (event.key === "Escape") input.replaceWith(nameButton);
+      if (event.key === "Escape") {
+        input.replaceWith(nameButton);
+        requestAnimationFrame(renderLayersPanel);
+      }
     });
     input.addEventListener("blur", commit);
     nameButton.replaceWith(input);
@@ -517,6 +516,7 @@ function renderLayerNameCell(layer, row) {
 
   row.appendChild(nameButton);
 }
+
 
 function renderLayersPanel() {
   if (!layersList) return;
@@ -533,88 +533,45 @@ function renderLayersPanel() {
     const visibleBtn = document.createElement("button");
     visibleBtn.type = "button";
     visibleBtn.className = "layer-icon-btn";
+    visibleBtn.dataset.action = "toggle-visible";
+    visibleBtn.dataset.layerId = layer.id;
     visibleBtn.textContent = layer.visible ? "👁" : "🙈";
     visibleBtn.title = layer.visible ? "Hide layer" : "Show layer";
-    visibleBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      pushHistoryState();
-      const nextVisible = !layer.visible;
-      layerStore.updateLayer(layer.id, { visible: nextVisible });
-      if (nextVisible === false && appState.activeLayerId === layer.id) {
-        appState.notifyStatus?.("Active layer is hidden", 1400);
-      }
-      const selected = getSelectedShape();
-      if (selected && selected.layerId === layer.id) clearSelectionState();
-    });
 
     const lockBtn = document.createElement("button");
     lockBtn.type = "button";
     lockBtn.className = "layer-icon-btn";
+    lockBtn.dataset.action = "toggle-lock";
+    lockBtn.dataset.layerId = layer.id;
     lockBtn.textContent = layer.locked ? "🔒" : "🔓";
     lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
-    lockBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      pushHistoryState();
-      const nextLocked = !layer.locked;
-      layerStore.updateLayer(layer.id, { locked: nextLocked });
-      const selected = getSelectedShape();
-      if (nextLocked && selected && selected.layerId === layer.id) clearSelectionState();
-    });
 
     const upBtn = document.createElement("button");
     upBtn.type = "button";
     upBtn.className = "layer-icon-btn";
+    upBtn.dataset.action = "move-up";
+    upBtn.dataset.layerId = layer.id;
     upBtn.textContent = "↑";
     upBtn.title = "Move layer up";
     upBtn.disabled = index >= layers.length - 1;
-    upBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      pushHistoryState();
-      layerStore.moveLayerByOffset(layer.id, 1);
-    });
 
     const downBtn = document.createElement("button");
     downBtn.type = "button";
     downBtn.className = "layer-icon-btn";
+    downBtn.dataset.action = "move-down";
+    downBtn.dataset.layerId = layer.id;
     downBtn.textContent = "↓";
     downBtn.title = "Move layer down";
     downBtn.disabled = index <= 0;
-    downBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      pushHistoryState();
-      layerStore.moveLayerByOffset(layer.id, -1);
-    });
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "layer-delete-btn";
+    deleteBtn.dataset.action = "delete-layer";
+    deleteBtn.dataset.layerId = layer.id;
     deleteBtn.textContent = "🗑";
     deleteBtn.title = "Delete layer";
-    deleteBtn.disabled = layers.length <= 1;
-    deleteBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (layers.length <= 1) return;
-      const defaultLayerId = layerStore.getLayers()[0]?.id;
-      if (!defaultLayerId || layer.id === defaultLayerId) {
-        appState.notifyStatus?.("Default layer cannot be deleted", 1400);
-        return;
-      }
-
-      const confirmed = window.confirm(`Delete "${layer.name}"? Shapes will be moved to Layer 1.`);
-      if (!confirmed) return;
-
-      pushHistoryState();
-      moveShapesToLayer(layer.id, defaultLayerId);
-      layerStore.deleteLayer(layer.id);
-      appState.activeLayerId = layerStore.getActiveLayer()?.id ?? defaultLayerId;
-      clearSelectionState();
-    });
-
-    row.addEventListener("click", () => {
-      pushHistoryState();
-      layerStore.setActiveLayer(layer.id);
-      appState.activeLayerId = layer.id;
-    });
+    deleteBtn.disabled = layers.length <= 1 || layer.id === "layer-1";
 
     row.appendChild(visibleBtn);
     row.appendChild(lockBtn);
@@ -625,6 +582,7 @@ function renderLayersPanel() {
     layersList.appendChild(row);
   }
 }
+
 
 function deleteSelection() {
   const selectedShape = getSelectedShape();
@@ -1028,9 +986,85 @@ document.addEventListener("click", () => {
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
 
+layersPanel?.addEventListener("click", (event) => {
+  const actionButton = event.target.closest("button[data-action]");
+  if (actionButton && layersPanel.contains(actionButton)) {
+    const layerId = actionButton.dataset.layerId;
+    const action = actionButton.dataset.action;
+    if (!layerId || !action) return;
+
+    const layer = layerStore.getLayerById(layerId);
+    if (!layer) return;
+
+    if (action === "toggle-visible") {
+      pushHistoryState();
+      layerStore.toggleVisible(layerId);
+      if (layerStore.getActiveLayerId() === layerId && layerStore.getLayerById(layerId)?.visible === false) {
+        appState.notifyStatus?.("Active layer is hidden", 1400);
+      }
+      const selected = getSelectedShape();
+      if (selected && selected.layerId === layerId) clearSelectionState();
+      return;
+    }
+
+    if (action === "toggle-lock") {
+      pushHistoryState();
+      layerStore.toggleLocked(layerId);
+      const selected = getSelectedShape();
+      if (selected && selected.layerId === layerId && layerStore.getLayerById(layerId)?.locked === true) clearSelectionState();
+      return;
+    }
+
+    if (action === "move-up") {
+      pushHistoryState();
+      layerStore.moveUp(layerId);
+      return;
+    }
+
+    if (action === "move-down") {
+      pushHistoryState();
+      layerStore.moveDown(layerId);
+      return;
+    }
+
+    if (action === "delete-layer") {
+      const layers = layerStore.getLayers();
+      if (layers.length <= 1) return;
+      const defaultLayerId = layers[0]?.id;
+      if (!defaultLayerId || layerId === defaultLayerId) {
+        appState.notifyStatus?.("Default layer cannot be deleted", 1400);
+        return;
+      }
+
+      const confirmed = window.confirm(`Delete "${layer.name}"? Shapes will be moved to Layer 1.`);
+      if (!confirmed) return;
+
+      pushHistoryState();
+      moveShapesToLayer(layerId, defaultLayerId);
+      layerStore.deleteLayer(layerId);
+      appState.activeLayerId = layerStore.getActiveLayerId();
+      clearSelectionState();
+    }
+    return;
+  }
+
+  if (event.target.closest("button") || event.target.closest("input.layer-name-input")) {
+    return;
+  }
+
+  const row = event.target.closest(".layer-row");
+  if (!row || !layersPanel.contains(row)) return;
+  const layerId = row.dataset.layerId;
+  if (!layerId) return;
+
+  pushHistoryState();
+  layerStore.setActiveLayer(layerId);
+  appState.activeLayerId = layerStore.getActiveLayerId();
+});
+
 newLayerButton?.addEventListener("click", () => {
   pushHistoryState();
-  const layer = layerStore.createLayer();
+  const layer = layerStore.addLayer();
   appState.activeLayerId = layer.id;
 });
 
@@ -1223,7 +1257,13 @@ restoreAutosaveIfAvailable();
 updateControlsFromState();
 
 function frame() {
-  enforceLayerInvariants();
+  // Quick sanity checklist:
+// - Layer row click activates layer; icon buttons toggle visibility/lock/move/delete.
+// - Hidden layers are not rendered or hit-testable.
+// - Locked layers render but cannot be modified by editing tools.
+// - Deleting a layer moves its shapes to Layer 1 and keeps Layer 1 present.
+// - Undo/redo replays add/rename/visibility/lock/reorder/delete/active layer.
+enforceLayerInvariants();
   renderLayersPanel();
   queueAutosave();
   renderer.renderFrame();
