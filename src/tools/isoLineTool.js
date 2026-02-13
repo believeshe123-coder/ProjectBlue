@@ -36,7 +36,7 @@ export class IsoLineTool extends BaseTool {
       end: snapped.pt,
     });
 
-    historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(line);
     this.startPoint = null;
     appState.previewShape = null;
@@ -54,7 +54,7 @@ export class IsoLineTool extends BaseTool {
     }
 
     const layer = layerStore.getActiveLayer();
-    if (!layer || layer.visible === false) {
+    if (!layer || layer.visible === false || layer.locked === true) {
       appState.previewShape = null;
       return;
     }

@@ -24,7 +24,7 @@ export class PolygonTool extends BaseTool {
       return;
     }
 
-    historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(
       new Polygon({
         layerId: layer.id,
@@ -63,7 +63,7 @@ export class PolygonTool extends BaseTool {
 
   onMouseMove({ screenPoint }) {
     const layer = this.context.layerStore.getActiveLayer();
-    if (!layer || layer.visible === false) {
+    if (!layer || layer.visible === false || layer.locked === true) {
       this.context.appState.previewShape = null;
       return;
     }

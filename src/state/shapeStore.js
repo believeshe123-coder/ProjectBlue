@@ -1,15 +1,12 @@
 import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
+import { DEFAULT_LAYER_ID } from "./layerStore.js";
 
 function hydrateShape(serialized) {
-  if (serialized.type === "line") {
-    return new Line(serialized);
-  }
+  if (serialized.type === "line") return new Line(serialized);
 
-  if (serialized.type === "polygon-shape") {
-    return PolygonShape.fromJSON(serialized);
-  }
+  if (serialized.type === "polygon-shape") return PolygonShape.fromJSON(serialized);
 
   if (serialized.type === "polygon") {
     return new PolygonShape({
@@ -19,9 +16,7 @@ function hydrateShape(serialized) {
     });
   }
 
-  if (serialized.type === "measurement") {
-    return new Measurement(serialized);
-  }
+  if (serialized.type === "measurement") return new Measurement(serialized);
 
   if (serialized.type === "fill-region") {
     return new PolygonShape({
@@ -32,6 +27,15 @@ function hydrateShape(serialized) {
   }
 
   return null;
+}
+
+export function migrateShapeLayers(shapes, layerStore) {
+  const fallbackLayerId = layerStore?.getLayerById(DEFAULT_LAYER_ID)?.id ?? layerStore?.getLayers?.()[0]?.id ?? DEFAULT_LAYER_ID;
+  for (const shape of shapes) {
+    if (!shape.layerId || !layerStore?.getLayerById?.(shape.layerId)) {
+      shape.layerId = fallbackLayerId;
+    }
+  }
 }
 
 export class ShapeStore {
@@ -46,17 +50,13 @@ export class ShapeStore {
 
   removeShape(id) {
     const index = this.shapes.findIndex((shape) => shape.id === id);
-    if (index === -1) {
-      return false;
-    }
+    if (index === -1) return false;
     this.shapes.splice(index, 1);
     return true;
   }
 
   clearSelection() {
-    for (const shape of this.shapes) {
-      shape.selected = false;
-    }
+    for (const shape of this.shapes) shape.selected = false;
   }
 
   getSelectedShapes() {
@@ -71,15 +71,27 @@ export class ShapeStore {
   }
 
   getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false, layerStore = null } = {}) {
-    return [...this.shapes]
-      .reverse()
-      .find((shape) => {
+    const layers = layerStore?.getLayers?.() ?? [];
+    const layerOrder = new Map(layers.map((layer, index) => [layer.id, index]));
+
+    return this.shapes
+      .map((shape, index) => ({ shape, index }))
+      .filter(({ shape }) => {
         const layer = layerStore?.getLayerById?.(shape.layerId);
         if (layerStore && !layer) return false;
-        if (layer && layer.visible === false) return false;
-        if (layer && !includeLocked && layer.locked === true) return false;
-        return shape.visible !== false && (includeLocked || shape.locked !== true) && shape.containsPoint(point, toleranceWorld);
-      }) ?? null;
+        if (layer?.visible === false) return false;
+        if (!includeLocked && (layer?.locked === true || shape.locked === true)) return false;
+        return shape.visible !== false;
+      })
+      .sort((a, b) => {
+        const layerDiff = (layerOrder.get(a.shape.layerId) ?? 0) - (layerOrder.get(b.shape.layerId) ?? 0);
+        if (layerDiff !== 0) return layerDiff;
+        const zDiff = (a.shape.zIndex ?? 0) - (b.shape.zIndex ?? 0);
+        if (zDiff !== 0) return zDiff;
+        return a.index - b.index;
+      })
+      .reverse()
+      .find(({ shape }) => shape.containsPoint(point, toleranceWorld))?.shape ?? null;
   }
 
   getShapes() {

@@ -58,7 +58,7 @@ export class PolylineTool extends BaseTool {
       fillAlpha: appState.currentStyle.fillEnabled ? appState.currentStyle.fillOpacity : 0,
     });
 
-    historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(polygon);
     this.finishChain();
   }
@@ -93,7 +93,7 @@ export class PolylineTool extends BaseTool {
       return;
     }
 
-    historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     const segment = createLine(activeLayer.id, this.lastPoint, snapped.pt, getLineStyle(appState));
     shapeStore.addShape(segment);
     this.chainLineIds.push(segment.id);
@@ -116,7 +116,7 @@ export class PolylineTool extends BaseTool {
     }
 
     const layer = layerStore.getActiveLayer();
-    if (!layer || layer.visible === false) {
+    if (!layer || layer.visible === false || layer.locked === true) {
       appState.previewShape = null;
       return;
     }

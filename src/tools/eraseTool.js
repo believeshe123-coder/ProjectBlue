@@ -6,7 +6,7 @@ export class EraseTool extends BaseTool {
     const selectedCount = shapeStore.getSelectedShapes().length;
 
     if (selectedCount > 0) {
-      historyStore.pushState(shapeStore.serialize());
+      this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
       shapeStore.deleteSelectedShapes();
       return;
     }
@@ -15,7 +15,7 @@ export class EraseTool extends BaseTool {
     const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { layerStore });
 
     if (hit) {
-      historyStore.pushState(shapeStore.serialize());
+      this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
       shapeStore.removeShape(hit.id);
     }
   }

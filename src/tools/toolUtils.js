@@ -111,18 +111,24 @@ export function getFillRegionStyle(appState) {
 
 export function ensureActiveDrawableLayer(context, { notify = true } = {}) {
   const { layerStore, appState } = context;
-  const activeLayer = layerStore.getActiveLayer();
+  const activeLayer = layerStore.ensureActiveLayer?.() ?? layerStore.getActiveLayer();
   if (!activeLayer) {
     return null;
   }
 
-  if (activeLayer.locked !== true && activeLayer.visible !== false) {
-    return activeLayer;
+  if (activeLayer.visible === false) {
+    if (notify) {
+      appState.notifyStatus?.("Layer is hidden", 1400);
+    }
+    return null;
   }
 
-  if (notify) {
-    appState.notifyStatus?.("Layer is locked", 1400);
+  if (activeLayer.locked === true) {
+    if (notify) {
+      appState.notifyStatus?.("Layer is locked", 1400);
+    }
+    return null;
   }
 
-  return null;
+  return activeLayer;
 }
