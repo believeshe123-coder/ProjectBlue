@@ -1,5 +1,9 @@
 import { drawIsoGrid, isoUVToWorld, worldToIsoUV } from "./isoGrid.js";
 
+function byLayer(shapes, layerId, predicate) {
+  return shapes.filter((shape) => shape.layerId === layerId && predicate(shape));
+}
+
 export class Renderer {
   constructor({ ctx, camera, shapeStore, layerStore, appState, getCanvasMetrics, ensureCanvasSize }) {
     this.ctx = ctx;
@@ -44,22 +48,24 @@ export class Renderer {
     const layers = this.layerStore.getLayers();
     const shapes = this.shapeStore.getShapes();
 
-    const drawOrder = ["fill-region", "polygon", "line", "measurement"];
     for (const layer of layers) {
       if (!layer.visible) continue;
-      const layerShapes = shapes.filter((shape) => shape.layerId === layer.id);
-      for (const type of drawOrder) {
-        for (const shape of layerShapes) {
-          if (shape.type === type) {
-            shape.draw(this.ctx, this.camera, this.appState);
-          }
-        }
-      }
-      for (const shape of layerShapes) {
-        if (!drawOrder.includes(shape.type)) {
-          shape.draw(this.ctx, this.camera, this.appState);
-        }
-      }
+      const polygons = byLayer(shapes, layer.id, (shape) => shape.type === "polygon-shape");
+      const lines = byLayer(shapes, layer.id, (shape) => shape.type === "line");
+      const measurements = byLayer(shapes, layer.id, (shape) => shape.type === "measurement");
+      const others = byLayer(shapes, layer.id, (shape) => !["polygon-shape", "line", "measurement"].includes(shape.type));
+
+      for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
+      for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
+      for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
+
+      for (const polygon of polygons) polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
+      for (const line of lines) line.drawDimensions?.(this.ctx, this.camera, this.appState);
+      for (const measurement of measurements) measurement.draw(this.ctx, this.camera, this.appState);
+      for (const other of others) other.draw(this.ctx, this.camera, this.appState);
+
+      for (const polygon of polygons) polygon.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
+      for (const line of lines) line.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
     }
 
     if (this.appState.previewShape) {

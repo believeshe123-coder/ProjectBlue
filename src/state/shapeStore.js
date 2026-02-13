@@ -1,15 +1,22 @@
 import { Line } from "../models/line.js";
-import { Polygon } from "../models/polygon.js";
+import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
-import { FillRegion } from "../models/fillRegion.js";
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") {
     return new Line(serialized);
   }
 
+  if (serialized.type === "polygon-shape") {
+    return PolygonShape.fromJSON(serialized);
+  }
+
   if (serialized.type === "polygon") {
-    return new Polygon(serialized);
+    return new PolygonShape({
+      ...serialized,
+      pointsWorld: serialized.points ?? serialized.pointsWorld ?? [],
+      fillAlpha: serialized.fillOpacity ?? serialized.fillAlpha ?? 1,
+    });
   }
 
   if (serialized.type === "measurement") {
@@ -17,7 +24,11 @@ function hydrateShape(serialized) {
   }
 
   if (serialized.type === "fill-region") {
-    return new FillRegion(serialized);
+    return new PolygonShape({
+      ...serialized,
+      pointsWorld: serialized.points ?? [],
+      fillAlpha: serialized.fillOpacity ?? serialized.fillAlpha ?? 1,
+    });
   }
 
   return null;

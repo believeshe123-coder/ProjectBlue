@@ -41,7 +41,7 @@ export class Line extends Shape {
     ctx.restore();
   }
 
-  draw(ctx, camera, appState = {}) {
+  drawStroke(ctx, camera) {
     const s = camera.worldToScreen(this.start);
     const e = camera.worldToScreen(this.end);
 
@@ -55,27 +55,46 @@ export class Line extends Shape {
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(e.x, e.y);
     ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    if (this.selected) {
-      ctx.strokeStyle = "#ffd166";
-      ctx.lineWidth = this.strokeWidth + 2;
-      ctx.setLineDash([8, 6]);
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(e.x, e.y);
-      ctx.stroke();
-    }
-
     ctx.restore();
+  }
 
-    if (appState.showDimensions) {
-      const midScreen = {
-        x: (s.x + e.x) / 2,
-        y: (s.y + e.y) / 2,
-      };
-      this.drawDimensionLabel(ctx, appState, midScreen);
+  drawDimensions(ctx, camera, appState = {}) {
+    if (!appState.showDimensions) {
+      return;
     }
+
+    const s = camera.worldToScreen(this.start);
+    const e = camera.worldToScreen(this.end);
+    const midScreen = {
+      x: (s.x + e.x) / 2,
+      y: (s.y + e.y) / 2,
+    };
+    this.drawDimensionLabel(ctx, appState, midScreen);
+  }
+
+  drawSelectionOverlay(ctx, camera) {
+    if (!this.selected) {
+      return;
+    }
+
+    const s = camera.worldToScreen(this.start);
+    const e = camera.worldToScreen(this.end);
+
+    ctx.save();
+    ctx.strokeStyle = "#ffd166";
+    ctx.lineWidth = this.strokeWidth + 2;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(e.x, e.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  draw(ctx, camera, appState = {}) {
+    this.drawStroke(ctx, camera, appState);
+    this.drawDimensions(ctx, camera, appState);
+    this.drawSelectionOverlay(ctx, camera, appState);
   }
 
   containsPoint(point, toleranceWorld = 6) {

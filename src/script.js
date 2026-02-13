@@ -92,6 +92,8 @@ const appState = {
   showDimensions: true,
   continuePolyline: true,
   showGridUnits: false,
+  selectedId: null,
+  selectedType: null,
   theme: null,
   activeThemeId: "builtin:light",
   currentStyle: {
