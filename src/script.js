@@ -35,21 +35,20 @@ const fillColorInput = document.getElementById("fill-color-input");
 const fillOpacityInput = document.getElementById("fill-opacity-input");
 const styleSwatches = document.getElementById("style-swatches");
 const stylePreviewChip = document.getElementById("style-preview-chip");
+const strokeChip = document.getElementById("stroke-chip");
+const fillChip = document.getElementById("fill-chip");
+const strokeChipSwatch = document.getElementById("stroke-chip-swatch");
+const fillChipSwatch = document.getElementById("fill-chip-swatch");
+const paletteColorButton = document.getElementById("palette-color-btn");
 
 const calmPalette = [
-  "#4aa3ff",
-  "#7fb7be",
-  "#9fc490",
-  "#f2c57c",
-  "#d39dbc",
-  "#b5b4e3",
-  "#6aa9a0",
-  "#f5f1e8",
-  "#e2e8f0",
-  "#9ca3af",
-  "#ffffff",
-  "#000000",
+  "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
+  "#6aa9a0", "#f5f1e8", "#e2e8f0", "#9ca3af", "#ffffff", "#000000",
+  "#db6a8f", "#d9935e", "#d8bf69", "#7eb086", "#62a9b7", "#6e8cd7",
+  "#8f8ad5", "#b79bc8", "#e7d6be", "#c5ced9", "#888f99", "#3a3f48",
 ];
+
+let activeColorTarget = "stroke";
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
@@ -111,8 +110,13 @@ function renderStyleSwatches() {
     swatch.style.setProperty("--swatch", color);
     swatch.title = color;
     swatch.addEventListener("click", () => {
-      appState.currentStyle.fillColor = color;
-      fillColorInput.value = color;
+      if (activeColorTarget === "fill") {
+        appState.currentStyle.fillColor = color;
+        fillColorInput.value = color;
+      } else {
+        appState.currentStyle.strokeColor = color;
+        strokeColorInput.value = color;
+      }
       refreshStyleUI();
     });
     styleSwatches.appendChild(swatch);
@@ -140,13 +144,19 @@ function refreshStyleUI() {
   fillColorInput.disabled = !style.fillEnabled;
   fillOpacityInput.disabled = !style.fillEnabled;
 
+  const activeColor = activeColorTarget === "fill" ? style.fillColor : style.strokeColor;
   for (const swatch of styleSwatches.querySelectorAll(".swatch")) {
-    swatch.classList.toggle("active", swatch.title.toLowerCase() === style.fillColor.toLowerCase());
+    swatch.classList.toggle("active", swatch.title.toLowerCase() === activeColor.toLowerCase());
   }
 
   const fillColor = style.fillEnabled ? toRgba(style.fillColor, style.fillOpacity) : "transparent";
   stylePreviewChip.style.background = fillColor;
-  stylePreviewChip.style.borderColor = toRgba(style.strokeColor, style.strokeOpacity);
+  stylePreviewChip.style.color = toRgba(style.strokeColor, style.strokeOpacity);
+  stylePreviewChip.style.borderColor = toRgba(style.strokeColor, Math.max(style.strokeOpacity * 0.45, 0.22));
+  strokeChipSwatch.style.background = style.strokeColor;
+  fillChipSwatch.style.background = style.fillColor;
+  strokeChip.classList.toggle("color-chip--active", activeColorTarget === "stroke");
+  fillChip.classList.toggle("color-chip--active", activeColorTarget === "fill");
 }
 
 function getCanvasCenterScreenPoint() {
@@ -288,6 +298,24 @@ fillColorInput.addEventListener("input", (event) => {
 fillOpacityInput.addEventListener("input", (event) => {
   appState.currentStyle.fillOpacity = Number.parseFloat(event.target.value);
   refreshStyleUI();
+});
+
+strokeChip?.addEventListener("click", () => {
+  activeColorTarget = "stroke";
+  refreshStyleUI();
+});
+
+fillChip?.addEventListener("click", () => {
+  activeColorTarget = "fill";
+  refreshStyleUI();
+});
+
+paletteColorButton?.addEventListener("click", () => {
+  if (activeColorTarget === "fill") {
+    fillColorInput.click();
+  } else {
+    strokeColorInput.click();
+  }
 });
 
 unitPerCellInput.addEventListener("input", (event) => {

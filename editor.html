@@ -16,46 +16,78 @@
         <button class="menu-item" type="button">Help</button>
       </nav>
 
-      <div class="topbar" role="toolbar" aria-label="Blueprint editor toolbar">
+      <div class="topbar" role="toolbar" aria-label="Blueprint editor ribbon">
         <section class="tool-group" aria-label="Drawing tools">
-          <div class="tool-grid">
-            <button class="tool-button" data-tool="select" type="button">Select</button>
-            <button class="tool-button" data-tool="iso-line" type="button">Iso Line</button>
-            <button class="tool-button" data-tool="polyline" type="button">Polyline</button>
-            <button class="tool-button" data-tool="measure" type="button">Measure</button>
-            <button class="tool-button" data-tool="fill" type="button">Fill</button>
-            <button class="tool-button" data-tool="erase" type="button">Erase</button>
+          <div class="tool-grid tool-grid--tiles">
+            <button class="tool-button tool-tile" data-tool="select" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l12 7-5 2 3 8-3 1-3-8-4 4z" /></svg>
+              <span>Select</span>
+            </button>
+            <button class="tool-button tool-tile" data-tool="iso-line" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l8-8 8 4" /><path d="M4 20h16" /></svg>
+              <span>Iso Line</span>
+            </button>
+            <button class="tool-button tool-tile" data-tool="polyline" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l5-6 4 3 7-7" /><circle cx="4" cy="16" r="1.5" /><circle cx="9" cy="10" r="1.5" /><circle cx="13" cy="13" r="1.5" /></svg>
+              <span>Polyline</span>
+            </button>
+            <button class="tool-button tool-tile" data-tool="measure" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15l4-4 12 12" /><path d="M8 11l2 2M11 14l2 2M14 17l2 2" /></svg>
+              <span>Measure</span>
+            </button>
+            <button class="tool-button tool-tile" data-tool="fill" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l7 7-5 5-7-7z" /><path d="M14 17h6" /></svg>
+              <span>Fill</span>
+            </button>
+            <button class="tool-button tool-tile" data-tool="erase" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7-4 4H9z" /><path d="M15 19h5" /></svg>
+              <span>Erase</span>
+            </button>
           </div>
           <span class="group-title">Tools</span>
         </section>
 
         <section class="tool-group tool-group--style" aria-label="Style controls">
-          <div class="tool-grid tool-grid--style">
-            <label class="style-label" for="stroke-color-input">Stroke color</label>
-            <input id="stroke-color-input" class="color-input" type="color" value="#ffffff" />
+          <div class="style-tray">
+            <div class="color-chips" role="group" aria-label="Primary and secondary colors">
+              <button id="stroke-chip" class="color-chip color-chip--active" type="button" aria-label="Primary stroke color">
+                <span class="chip-label">Primary</span>
+                <span class="chip-swatch" id="stroke-chip-swatch"></span>
+              </button>
+              <button id="fill-chip" class="color-chip" type="button" aria-label="Secondary fill color">
+                <span class="chip-label">Secondary</span>
+                <span class="chip-swatch" id="fill-chip-swatch"></span>
+              </button>
+              <button id="palette-color-btn" class="palette-add" type="button" aria-label="Pick custom color">+</button>
+            </div>
 
-            <label class="style-label" for="stroke-opacity-input">Stroke opacity</label>
-            <input id="stroke-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" />
+            <input id="stroke-color-input" class="color-input visually-hidden" type="color" value="#ffffff" />
+            <input id="fill-color-input" class="color-input visually-hidden" type="color" value="#4aa3ff" />
 
-            <label class="style-label" for="stroke-width-input">Stroke width</label>
-            <select id="stroke-width-input" class="style-select">
-              <option value="1">1</option>
-              <option value="2" selected>2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="6">6</option>
-              <option value="8">8</option>
-            </select>
+            <div class="swatch-grid" id="style-swatches" aria-label="Quick paint swatches"></div>
 
-            <label class="tool-toggle style-fill-toggle"><input id="fill-enabled-toggle" type="checkbox" checked />Fill enabled</label>
-
-            <label class="style-label" for="fill-color-input">Fill color</label>
-            <input id="fill-color-input" class="color-input" type="color" value="#4aa3ff" />
-
-            <label class="style-label" for="fill-opacity-input">Fill opacity</label>
-            <input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="0.25" />
-
-            <div class="swatch-grid" id="style-swatches" aria-label="Quick fill swatches"></div>
+            <div class="style-controls-inline">
+              <label class="style-inline-item" for="stroke-opacity-input">
+                <span>Stroke α</span>
+                <input id="stroke-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" />
+              </label>
+              <label class="style-inline-item" for="fill-opacity-input">
+                <span>Fill α</span>
+                <input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="0.25" />
+              </label>
+              <label class="style-inline-item" for="stroke-width-input">
+                <span>Width</span>
+                <select id="stroke-width-input" class="style-select compact-select">
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="6">6</option>
+                  <option value="8">8</option>
+                </select>
+              </label>
+              <label class="tool-toggle style-fill-toggle"><input id="fill-enabled-toggle" type="checkbox" checked />Fill enabled</label>
+            </div>
 
             <div class="style-preview-wrap">
               <span class="style-label">Preview</span>
