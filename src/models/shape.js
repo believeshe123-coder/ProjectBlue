@@ -12,6 +12,10 @@ export class Shape {
     strokeOpacity,
     fillOpacity,
     fillEnabled,
+    pinnedMeasure = false,
+    visible = true,
+    locked = false,
+    zIndex = 0,
     selected = false,
   }) {
     this.id = id ?? `shape_${shapeCounter++}`;
@@ -25,6 +29,10 @@ export class Shape {
     this.fillOpacity = fillOpacity ?? normalizedOpacity;
     this.fillEnabled = fillEnabled ?? this.fillColor !== "transparent";
     this.opacity = normalizedOpacity;
+    this.pinnedMeasure = pinnedMeasure;
+    this.visible = visible;
+    this.locked = locked;
+    this.zIndex = Number.isFinite(zIndex) ? zIndex : 0;
     this.selected = selected;
   }
 
@@ -48,6 +56,10 @@ export class Shape {
       strokeOpacity: this.strokeOpacity,
       fillOpacity: this.fillOpacity,
       fillEnabled: this.fillEnabled,
+      pinnedMeasure: this.pinnedMeasure,
+      visible: this.visible,
+      locked: this.locked,
+      zIndex: this.zIndex,
       selected: this.selected,
     };
   }

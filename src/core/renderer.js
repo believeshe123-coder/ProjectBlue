@@ -4,6 +4,10 @@ function byLayer(shapes, layerId, predicate) {
   return shapes.filter((shape) => shape.layerId === layerId && predicate(shape));
 }
 
+function zSorted(shapes) {
+  return [...shapes].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+}
+
 export class Renderer {
   constructor({ ctx, camera, shapeStore, layerStore, appState, getCanvasMetrics, ensureCanvasSize }) {
     this.ctx = ctx;
@@ -47,20 +51,34 @@ export class Renderer {
 
     const layers = this.layerStore.getLayers();
     const shapes = this.shapeStore.getShapes();
+    const selectedId = this.appState.selected?.id;
+    const smartMeasurements = this.appState.smartMeasurements !== false;
 
     for (const layer of layers) {
       if (!layer.visible) continue;
-      const polygons = byLayer(shapes, layer.id, (shape) => shape.type === "polygon-shape");
-      const lines = byLayer(shapes, layer.id, (shape) => shape.type === "line");
-      const measurements = byLayer(shapes, layer.id, (shape) => shape.type === "measurement");
-      const others = byLayer(shapes, layer.id, (shape) => !["polygon-shape", "line", "measurement"].includes(shape.type));
+      const polygons = zSorted(byLayer(shapes, layer.id, (shape) => shape.type === "polygon-shape" && shape.visible !== false));
+      const lines = zSorted(byLayer(shapes, layer.id, (shape) => shape.type === "line" && shape.visible !== false));
+      const measurements = zSorted(byLayer(shapes, layer.id, (shape) => shape.type === "measurement" && shape.visible !== false));
+      const others = zSorted(byLayer(shapes, layer.id, (shape) => !["polygon-shape", "line", "measurement"].includes(shape.type) && shape.visible !== false));
 
       for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
       for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
       for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
 
-      for (const polygon of polygons) polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
-      for (const line of lines) line.drawDimensions?.(this.ctx, this.camera, this.appState);
+      if (smartMeasurements) {
+        for (const polygon of polygons) {
+          if (polygon.id === selectedId || polygon.pinnedMeasure === true) {
+            polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
+          }
+        }
+
+        for (const line of lines) {
+          if (line.id === selectedId || line.pinnedMeasure === true) {
+            line.drawDimensions?.(this.ctx, this.camera, this.appState);
+          }
+        }
+      }
+
       for (const measurement of measurements) measurement.draw(this.ctx, this.camera, this.appState);
       for (const other of others) other.draw(this.ctx, this.camera, this.appState);
 
@@ -69,7 +87,10 @@ export class Renderer {
     }
 
     if (this.appState.previewShape) {
-      this.appState.previewShape.draw(this.ctx, this.camera, this.appState);
+      this.appState.previewShape.draw(this.ctx, this.camera, {
+        ...this.appState,
+        smartMeasurements: true,
+      });
     }
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {

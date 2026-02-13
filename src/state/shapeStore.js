@@ -70,8 +70,10 @@ export class ShapeStore {
     return before - this.shapes.length;
   }
 
-  getTopmostHitShape(point, toleranceWorld = 6) {
-    return [...this.shapes].reverse().find((shape) => shape.containsPoint(point, toleranceWorld)) ?? null;
+  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false } = {}) {
+    return [...this.shapes]
+      .reverse()
+      .find((shape) => shape.visible !== false && (includeLocked || shape.locked !== true) && shape.containsPoint(point, toleranceWorld)) ?? null;
   }
 
   getShapes() {

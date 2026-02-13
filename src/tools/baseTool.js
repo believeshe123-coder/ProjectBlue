@@ -1,6 +1,7 @@
 export class BaseTool {
   constructor(context) {
     this.context = context;
+    this.usesRightClick = false;
   }
 
   onMouseDown(_payload) {}

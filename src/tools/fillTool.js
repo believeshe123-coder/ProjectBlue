@@ -147,7 +147,12 @@ function buildLineGraph(lines, eps) {
 }
 
 export class FillTool extends BaseTool {
-  onMouseDown({ worldPoint }) {
+  constructor(context) {
+    super(context);
+    this.usesRightClick = true;
+  }
+
+  onMouseDown({ event, worldPoint }) {
     const { shapeStore, layerStore, historyStore, appState, camera } = this.context;
     const activeLayer = layerStore.getActiveLayer();
     if (!activeLayer || activeLayer.locked) {
@@ -155,20 +160,21 @@ export class FillTool extends BaseTool {
     }
 
     const shapes = shapeStore.getShapes();
+    const clickFillColor = event?.button === 2 ? appState.currentStyle.fillColor : appState.currentStyle.strokeColor;
     const target = [...shapes]
       .reverse()
-      .find((shape) => shape.layerId === activeLayer.id && isPolygonShape(shape) && shape.containsPoint(worldPoint));
+      .find((shape) => shape.layerId === activeLayer.id && shape.visible !== false && shape.locked !== true && isPolygonShape(shape) && shape.containsPoint(worldPoint));
 
     if (target) {
       historyStore.pushState(shapeStore.serialize());
-      target.fillColor = appState.currentStyle.fillColor;
-      target.fillAlpha = appState.currentStyle.fillEnabled ? appState.currentStyle.fillOpacity : 0;
-      target.fillOpacity = target.fillAlpha;
-      target.fillEnabled = target.fillAlpha > 0;
+      target.fillColor = clickFillColor;
+      target.fillAlpha = 1;
+      target.fillOpacity = 1;
+      target.fillEnabled = true;
       return;
     }
 
-    const lines = shapes.filter((shape) => shape.layerId === activeLayer.id && isLineShape(shape));
+    const lines = shapes.filter((shape) => shape.layerId === activeLayer.id && shape.visible !== false && isLineShape(shape));
     const eps = 2 / Math.max(camera.zoom, 1e-6);
     const graph = buildLineGraph(lines, eps);
     const cycles = findCycles(graph);
@@ -197,8 +203,8 @@ export class FillTool extends BaseTool {
       pointsWorld: selected.pointsWorld,
       strokeColor: appState.currentStyle.strokeColor,
       strokeWidth: appState.currentStyle.strokeWidth,
-      fillColor: appState.currentStyle.fillColor,
-      fillAlpha: appState.currentStyle.fillEnabled ? appState.currentStyle.fillOpacity : 0,
+      fillColor: clickFillColor,
+      fillAlpha: 1,
     });
 
     shapeStore.addShape(polygon);
