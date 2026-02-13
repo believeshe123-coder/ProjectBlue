@@ -107,6 +107,12 @@ body {
   font-size: 12px;
 }
 
+.menu-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .menu-row input {
   margin: 0;
   width: 14px;
@@ -274,6 +280,24 @@ body {
   font-size: 11px;
 }
 
+.field-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.field-inline input[type="color"] {
+  width: 42px;
+  height: 28px;
+  border: 1px solid var(--soft-border);
+  border-radius: 6px;
+  background: #fff;
+  padding: 2px;
+  cursor: pointer;
+}
+
 .range-input { width: 100%; }
 
 .tool-toggle {
@@ -332,6 +356,35 @@ body {
   border-radius: 8px;
   background: #fff;
   font-size: 11px;
+}
+
+.custom-background-controls {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.custom-bg-textarea {
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid var(--soft-border);
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 12px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.menu-link-btn {
+  justify-self: start;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-size: 12px;
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
 }
 
 .canvas-wrap {

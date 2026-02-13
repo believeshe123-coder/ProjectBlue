@@ -26,6 +26,15 @@ const showDimensionsToggle = document.getElementById("show-dimensions-toggle");
 const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 const showGridUnitsToggle = document.getElementById("show-grid-units-toggle");
 const canvasThemeSelect = document.getElementById("canvas-theme-select");
+const backgroundTypeSelect = document.getElementById("background-type-select");
+const customBackgroundControls = document.getElementById("custom-background-controls");
+const customBgModeCss = document.getElementById("custom-bg-mode-css");
+const customBgModeImage = document.getElementById("custom-bg-mode-image");
+const customBackgroundInput = document.getElementById("custom-background-input");
+const customBgColorPicker = document.getElementById("custom-bg-color-picker");
+const customGridColorPicker = document.getElementById("custom-grid-color-picker");
+const customBgRepeatToggle = document.getElementById("custom-bg-repeat-toggle");
+const customBackgroundReset = document.getElementById("custom-background-reset");
 
 const strokeOpacityInput = document.getElementById("stroke-opacity-input");
 const strokeWidthInput = document.getElementById("stroke-width-input");
@@ -43,6 +52,8 @@ const recentRow = document.getElementById("recent-row");
 
 const menuSettingsButton = document.getElementById("menuSettingsBtn");
 const menuSettingsDropdown = document.getElementById("menuSettingsDropdown");
+const menuEditButton = document.getElementById("menuEditBtn");
+const menuEditDropdown = document.getElementById("menuEditDropdown");
 
 
 const calmPalette = [
@@ -74,6 +85,11 @@ const appState = {
   continuePolyline: true,
   showGridUnits: false,
   canvasTheme: "light",
+  customBackgroundMode: "css",
+  customBackgroundValue: "",
+  customBackgroundColor: "#0f3b53",
+  customGridColor: "#d0f1ff",
+  customBackgroundRepeat: true,
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -293,21 +309,131 @@ function setSettingsMenuOpen(open) {
   menuSettingsButton.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
+function setEditMenuOpen(open) {
+  if (!menuEditDropdown || !menuEditButton) return;
+  menuEditDropdown.dataset.open = open ? "true" : "false";
+  menuEditButton.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function closeAllMenus() {
+  setSettingsMenuOpen(false);
+  setEditMenuOpen(false);
+}
+
+function getPresetCanvasBackground(theme) {
+  if (theme === "dark") return "#1a2430";
+  if (theme === "paper") return "#f6f1e4";
+  return "#3e6478";
+}
+
+function applyCanvasBackground() {
+  if (!canvasWrap) return;
+
+  if (appState.canvasTheme !== "custom") {
+    canvasWrap.style.background = getPresetCanvasBackground(appState.canvasTheme);
+    canvasWrap.style.backgroundImage = "none";
+    canvasWrap.style.backgroundRepeat = "no-repeat";
+    canvasWrap.style.backgroundSize = "auto";
+    canvasWrap.style.backgroundPosition = "center";
+    return;
+  }
+
+  const value = appState.customBackgroundValue.trim();
+  if (!value) {
+    canvasWrap.style.background = appState.customBackgroundColor;
+    canvasWrap.style.backgroundImage = "none";
+    canvasWrap.style.backgroundRepeat = "no-repeat";
+    canvasWrap.style.backgroundSize = "auto";
+    canvasWrap.style.backgroundPosition = "center";
+    return;
+  }
+
+  if (appState.customBackgroundMode === "image") {
+    canvasWrap.style.background = "transparent";
+    canvasWrap.style.backgroundImage = `url("${value}")`;
+    canvasWrap.style.backgroundRepeat = appState.customBackgroundRepeat ? "repeat" : "no-repeat";
+    canvasWrap.style.backgroundSize = appState.customBackgroundRepeat ? "auto" : "cover";
+    canvasWrap.style.backgroundPosition = "center";
+    return;
+  }
+
+  canvasWrap.style.background = value;
+  canvasWrap.style.backgroundImage = "none";
+  canvasWrap.style.backgroundRepeat = "no-repeat";
+  canvasWrap.style.backgroundSize = "auto";
+  canvasWrap.style.backgroundPosition = "center";
+}
+
+function refreshCanvasThemeUI() {
+  if (canvasThemeSelect) {
+    canvasThemeSelect.value = appState.canvasTheme;
+  }
+  if (backgroundTypeSelect) {
+    backgroundTypeSelect.value = appState.canvasTheme === "custom" ? "custom" : "preset";
+  }
+  const isCustom = appState.canvasTheme === "custom";
+  if (customBackgroundControls) {
+    customBackgroundControls.hidden = !isCustom;
+  }
+  if (customBgModeCss) {
+    customBgModeCss.checked = appState.customBackgroundMode === "css";
+  }
+  if (customBgModeImage) {
+    customBgModeImage.checked = appState.customBackgroundMode === "image";
+  }
+  if (customBackgroundInput) {
+    customBackgroundInput.value = appState.customBackgroundValue;
+    customBackgroundInput.placeholder = appState.customBackgroundMode === "image"
+      ? "https://example.com/mytexture.png"
+      : "#0f3b53\nlinear-gradient(180deg, #0f3b53 0%, #0a2b3d 100%)";
+  }
+  if (customBgColorPicker) {
+    customBgColorPicker.value = appState.customBackgroundColor;
+  }
+  if (customGridColorPicker) {
+    customGridColorPicker.value = appState.customGridColor;
+  }
+  if (customBgRepeatToggle) {
+    customBgRepeatToggle.checked = appState.customBackgroundRepeat;
+    customBgRepeatToggle.disabled = !isCustom || appState.customBackgroundMode !== "image";
+  }
+}
+
+function persistCanvasThemeState() {
+  localStorage.setItem("canvasTheme", appState.canvasTheme);
+  localStorage.setItem("customBackgroundMode", appState.customBackgroundMode);
+  localStorage.setItem("customBackgroundValue", appState.customBackgroundValue);
+  localStorage.setItem("customBackgroundColor", appState.customBackgroundColor);
+  localStorage.setItem("customGridColor", appState.customGridColor);
+  localStorage.setItem("customBackgroundRepeat", appState.customBackgroundRepeat ? "1" : "0");
+}
+
 for (const button of document.querySelectorAll('.tool-grid [data-tool]')) {
   button.addEventListener("click", () => setActiveTool(button.dataset.tool));
 }
 
 menuSettingsButton?.addEventListener("click", (event) => {
   event.stopPropagation();
+  setEditMenuOpen(false);
   setSettingsMenuOpen(menuSettingsDropdown?.dataset.open !== "true");
+});
+
+menuEditButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setSettingsMenuOpen(false);
+  setEditMenuOpen(menuEditDropdown?.dataset.open !== "true");
 });
 
 menuSettingsDropdown?.addEventListener("click", (event) => {
   event.stopPropagation();
 });
 
+menuEditDropdown?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
 document.addEventListener("click", () => {
-  setSettingsMenuOpen(false);
+  closeAllMenus();
 });
 
 
@@ -340,8 +466,91 @@ showGridUnitsToggle.addEventListener("change", (event) => {
 });
 
 canvasThemeSelect?.addEventListener("change", (event) => {
-  appState.canvasTheme = event.target.value === "bw" ? "bw" : "light";
-  localStorage.setItem("canvasTheme", appState.canvasTheme);
+  const nextTheme = event.target.value;
+  appState.canvasTheme = ["light", "dark", "paper", "custom"].includes(nextTheme) ? nextTheme : "light";
+  if (appState.canvasTheme !== "custom") {
+    appState.customBackgroundValue = "";
+  }
+  refreshCanvasThemeUI();
+  applyCanvasBackground();
+  persistCanvasThemeState();
+});
+
+backgroundTypeSelect?.addEventListener("change", (event) => {
+  const isCustom = event.target.value === "custom";
+  appState.canvasTheme = isCustom ? "custom" : "light";
+  if (!isCustom) {
+    appState.customBackgroundValue = "";
+  }
+  refreshCanvasThemeUI();
+  applyCanvasBackground();
+  persistCanvasThemeState();
+});
+
+customBgModeCss?.addEventListener("change", () => {
+  if (!customBgModeCss.checked) return;
+  appState.customBackgroundMode = "css";
+  refreshCanvasThemeUI();
+  applyCanvasBackground();
+  persistCanvasThemeState();
+});
+
+customBgModeImage?.addEventListener("change", () => {
+  if (!customBgModeImage.checked) return;
+  appState.customBackgroundMode = "image";
+  refreshCanvasThemeUI();
+  applyCanvasBackground();
+  persistCanvasThemeState();
+});
+
+customBackgroundInput?.addEventListener("input", (event) => {
+  appState.customBackgroundValue = event.target.value;
+  const trimmedValue = event.target.value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmedValue)) {
+    appState.customBackgroundColor = trimmedValue;
+  }
+  applyCanvasBackground();
+  refreshCanvasThemeUI();
+  persistCanvasThemeState();
+});
+
+
+customBgColorPicker?.addEventListener("input", (event) => {
+  appState.canvasTheme = "custom";
+  appState.customBackgroundMode = "css";
+  appState.customBackgroundColor = event.target.value;
+  if (!appState.customBackgroundValue.trim()) {
+    appState.customBackgroundValue = event.target.value;
+  }
+  refreshCanvasThemeUI();
+  applyCanvasBackground();
+  persistCanvasThemeState();
+});
+
+customGridColorPicker?.addEventListener("input", (event) => {
+  appState.canvasTheme = "custom";
+  appState.customGridColor = event.target.value;
+  refreshCanvasThemeUI();
+  applyCanvasBackground();
+  persistCanvasThemeState();
+});
+
+customBgRepeatToggle?.addEventListener("change", (event) => {
+  appState.customBackgroundRepeat = event.target.checked;
+  applyCanvasBackground();
+  persistCanvasThemeState();
+});
+
+customBackgroundReset?.addEventListener("click", () => {
+  appState.canvasTheme = "light";
+  appState.customBackgroundMode = "css";
+  appState.customBackgroundValue = "";
+  appState.customBackgroundColor = "#0f3b53";
+  appState.customGridColor = "#d0f1ff";
+  appState.customBackgroundRepeat = true;
+  refreshCanvasThemeUI();
+  applyCanvasBackground();
+  persistCanvasThemeState();
 });
 
 showDimensionsToggle.addEventListener("change", (event) => {
@@ -403,7 +612,7 @@ unitNameInput.addEventListener("change", (event) => {
 
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    setSettingsMenuOpen(false);
+    closeAllMenus();
   }
 
   const key = event.key.toLowerCase();
@@ -454,9 +663,26 @@ renderRecentColors();
 refreshStyleUI();
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
 const storedCanvasTheme = localStorage.getItem("canvasTheme");
-if (storedCanvasTheme === "bw" || storedCanvasTheme === "light") {
+if (["light", "dark", "paper", "custom"].includes(storedCanvasTheme)) {
   appState.canvasTheme = storedCanvasTheme;
 }
+const storedCustomBackgroundMode = localStorage.getItem("customBackgroundMode");
+if (storedCustomBackgroundMode === "css" || storedCustomBackgroundMode === "image") {
+  appState.customBackgroundMode = storedCustomBackgroundMode;
+}
+const storedCustomBackgroundValue = localStorage.getItem("customBackgroundValue");
+if (typeof storedCustomBackgroundValue === "string") {
+  appState.customBackgroundValue = storedCustomBackgroundValue;
+}
+const storedCustomBackgroundColor = localStorage.getItem("customBackgroundColor");
+if (typeof storedCustomBackgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(storedCustomBackgroundColor)) {
+  appState.customBackgroundColor = storedCustomBackgroundColor;
+}
+const storedCustomGridColor = localStorage.getItem("customGridColor");
+if (typeof storedCustomGridColor === "string" && /^#[0-9a-fA-F]{6}$/.test(storedCustomGridColor)) {
+  appState.customGridColor = storedCustomGridColor;
+}
+appState.customBackgroundRepeat = localStorage.getItem("customBackgroundRepeat") !== "0";
 const debugSnapResetV1 = localStorage.getItem("debugSnapResetV1");
 if (debugSnapResetV1 !== "1") {
   localStorage.setItem("debugSnap", "0");
@@ -468,6 +694,8 @@ showGridUnitsToggle.checked = appState.showGridUnits;
 if (canvasThemeSelect) {
   canvasThemeSelect.value = appState.canvasTheme;
 }
+refreshCanvasThemeUI();
+applyCanvasBackground();
 setActiveTool("select");
 refreshScaleDisplay();
 refreshStatus();

@@ -6,6 +6,14 @@ const isoSpacingWorld = 60;
 const e1 = { x: dirA.x * isoSpacingWorld, y: dirA.y * isoSpacingWorld };
 const e2 = { x: dirB.x * isoSpacingWorld, y: dirB.y * isoSpacingWorld };
 
+function hexToRgba(hex, alpha) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex || "")) return null;
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function getVisibleWorldCorners(camera, canvasCssW, canvasCssH) {
   return [
     camera.screenToWorld({ x: 0, y: 0 }),
@@ -77,9 +85,15 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH, options = {}) {
 
   ctx.save();
   ctx.lineWidth = 1;
-  const gridColors = options.blackAndWhite
-    ? { major: "rgba(0, 0, 0, 0.22)", minor: "rgba(0, 0, 0, 0.09)" }
-    : { major: "rgba(208, 241, 255, 0.13)", minor: "rgba(208, 241, 255, 0.05)" };
+  const customMajor = hexToRgba(options.customGridColor, 0.24);
+  const customMinor = hexToRgba(options.customGridColor, 0.1);
+  const gridColors = customMajor && customMinor
+    ? { major: customMajor, minor: customMinor }
+    : options.blackAndWhite
+      ? { major: "rgba(0, 0, 0, 0.22)", minor: "rgba(0, 0, 0, 0.09)" }
+      : options.darkMode
+        ? { major: "rgba(179, 215, 255, 0.18)", minor: "rgba(179, 215, 255, 0.08)" }
+        : { major: "rgba(208, 241, 255, 0.13)", minor: "rgba(208, 241, 255, 0.05)" };
 
   for (let u = uMin; u <= uMax; u += 1) {
     const p0 = isoUVToWorld(u, vMin);
