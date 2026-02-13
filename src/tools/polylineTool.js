@@ -51,6 +51,7 @@ export class PolylineTool extends BaseTool {
     const polygon = new PolygonShape({
       layerId: activeLayerId,
       pointsWorld: this.chainPoints,
+      sourceLineIds: [...this.chainLineIds],
       strokeColor: appState.currentStyle.strokeColor,
       strokeWidth: appState.currentStyle.strokeWidth,
       fillColor: appState.currentStyle.fillColor,
@@ -58,9 +59,6 @@ export class PolylineTool extends BaseTool {
     });
 
     historyStore.pushState(shapeStore.serialize());
-    for (const lineId of this.chainLineIds) {
-      shapeStore.removeShape(lineId);
-    }
     shapeStore.addShape(polygon);
     this.finishChain();
   }

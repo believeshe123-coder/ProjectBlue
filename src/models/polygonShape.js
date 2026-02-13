@@ -4,7 +4,7 @@ import { worldToIsoUV } from "../core/isoGrid.js";
 import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class PolygonShape extends Shape {
-  constructor({ id, pointsWorld = [], strokeColor, strokeWidth = 1, fillColor, fillAlpha = 1, zIndex = 0, createdAt, ...rest }) {
+  constructor({ id, pointsWorld = [], sourceLineIds = [], strokeColor, strokeWidth = 1, fillColor, fillAlpha = 1, zIndex = 0, createdAt, ...rest }) {
     super({
       id,
       ...rest,
@@ -17,6 +17,7 @@ export class PolygonShape extends Shape {
     });
 
     this.pointsWorld = pointsWorld.map((point) => ({ ...point }));
+    this.sourceLineIds = Array.isArray(sourceLineIds) ? [...sourceLineIds] : [];
     this.fillAlpha = Number.isFinite(fillAlpha) ? fillAlpha : 1;
     this.zIndex = zIndex;
     this.createdAt = createdAt ?? Date.now();
@@ -112,15 +113,15 @@ export class PolygonShape extends Shape {
       ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
     }
     ctx.closePath();
-    ctx.strokeStyle = "#ffd166";
-    ctx.lineWidth = this.strokeWidth + 2;
-    ctx.setLineDash([8, 6]);
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
     ctx.stroke();
     ctx.restore();
   }
 
   drawDimensions(ctx, camera, appState) {
-    if (!appState.showDimensions || this.pointsWorld.length < 2) {
+    if (this.pointsWorld.length < 2) {
       return;
     }
 
@@ -172,6 +173,7 @@ export class PolygonShape extends Shape {
       ...super.toJSON(),
       type: "polygon-shape",
       pointsWorld: this.pointsWorld.map((point) => ({ ...point })),
+      sourceLineIds: [...this.sourceLineIds],
       fillAlpha: this.fillAlpha,
       zIndex: this.zIndex,
       createdAt: this.createdAt,

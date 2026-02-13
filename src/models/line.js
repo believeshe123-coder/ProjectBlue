@@ -59,10 +59,6 @@ export class Line extends Shape {
   }
 
   drawDimensions(ctx, camera, appState = {}) {
-    if (!appState.showDimensions) {
-      return;
-    }
-
     const s = camera.worldToScreen(this.start);
     const e = camera.worldToScreen(this.end);
     const midScreen = {

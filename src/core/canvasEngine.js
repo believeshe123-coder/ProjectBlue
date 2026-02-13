@@ -112,6 +112,13 @@ export class CanvasEngine {
     }
 
     if (event.button === 2) {
+      const tool = this.getTool?.();
+      if (tool?.usesRightClick) {
+        event.preventDefault();
+        tool.onMouseDown({ event, screenPoint, worldPoint });
+        return;
+      }
+
       this.isPanning = true;
       this.lastPointer = screenPoint;
       return;
@@ -157,6 +164,12 @@ export class CanvasEngine {
     }
 
     if (event.button === 2) {
+      const tool = this.getTool?.();
+      if (tool?.usesRightClick) {
+        tool.onMouseUp({ event, screenPoint, worldPoint });
+        return;
+      }
+
       this.isPanning = false;
       this.lastPointer = null;
       return;
