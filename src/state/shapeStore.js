@@ -1,6 +1,7 @@
 import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
+import { FillRegion } from "../models/fillRegion.js";
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") return new Line(serialized);
@@ -17,13 +18,7 @@ function hydrateShape(serialized) {
 
   if (serialized.type === "measurement") return new Measurement(serialized);
 
-  if (serialized.type === "fill-region") {
-    return new PolygonShape({
-      ...serialized,
-      pointsWorld: serialized.points ?? [],
-      fillAlpha: serialized.fillOpacity ?? serialized.fillAlpha ?? 1,
-    });
-  }
+  if (serialized.type === "fill-region") return new FillRegion(serialized);
 
   return null;
 }
