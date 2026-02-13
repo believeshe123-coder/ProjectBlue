@@ -1,6 +1,7 @@
 export class CanvasEngine {
-  constructor({ canvas, camera, getTool, onContextMenuPrevent, onViewChange }) {
+  constructor({ canvas, canvasWrap, camera, getTool, onContextMenuPrevent, onViewChange }) {
     this.canvas = canvas;
+    this.canvasWrap = canvasWrap;
     this.camera = camera;
     this.getTool = getTool;
     this.onViewChange = onViewChange;
@@ -12,6 +13,10 @@ export class CanvasEngine {
 
     this.ctx = canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
+
+    this.canvasCssW = 0;
+    this.canvasCssH = 0;
+    this.currentDpr = window.devicePixelRatio || 1;
 
     this.handleResize = this.handleResize.bind(this);
     this.handleWheel = this.handleWheel.bind(this);
@@ -34,11 +39,19 @@ export class CanvasEngine {
       onContextMenuPrevent?.(e);
     });
 
-    this.handleResize();
+    this.resizeCanvasToContainer();
   }
 
   getContext() {
     return this.ctx;
+  }
+
+  getCanvasMetrics() {
+    return {
+      canvasCssW: this.canvasCssW,
+      canvasCssH: this.canvasCssH,
+      currentDpr: this.currentDpr,
+    };
   }
 
   getScreenPointFromEvent(event) {
@@ -49,14 +62,33 @@ export class CanvasEngine {
     };
   }
 
-  handleResize() {
+  resizeCanvasToContainer() {
+    const rect = this.canvasWrap.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const { clientWidth, clientHeight } = this.canvas;
+    const canvasCssW = rect.width;
+    const canvasCssH = rect.height;
+    const pixelWidth = Math.round(canvasCssW * dpr);
+    const pixelHeight = Math.round(canvasCssH * dpr);
 
-    this.canvas.width = Math.floor(clientWidth * dpr);
-    this.canvas.height = Math.floor(clientHeight * dpr);
+    this.canvas.style.width = `${canvasCssW}px`;
+    this.canvas.style.height = `${canvasCssH}px`;
 
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.canvas.width !== pixelWidth) {
+      this.canvas.width = pixelWidth;
+    }
+
+    if (this.canvas.height !== pixelHeight) {
+      this.canvas.height = pixelHeight;
+    }
+
+    this.canvasCssW = canvasCssW;
+    this.canvasCssH = canvasCssH;
+    this.currentDpr = dpr;
+    this.camera.setViewSize(canvasCssW, canvasCssH);
+  }
+
+  handleResize() {
+    this.resizeCanvasToContainer();
   }
 
   handleWheel(event) {

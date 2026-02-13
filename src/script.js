@@ -12,6 +12,7 @@ import { FillTool } from "./tools/fillTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 
 const canvas = document.getElementById("blueprint-canvas");
+const canvasWrap = document.querySelector(".canvas-wrap");
 const statusEl = document.getElementById("status");
 const zoomInButton = document.getElementById("zoom-in-btn");
 const zoomOutButton = document.getElementById("zoom-out-btn");
@@ -93,14 +94,39 @@ currentTool.onActivate();
 
 const canvasEngine = new CanvasEngine({
   canvas,
+  canvasWrap,
   camera,
   getTool: () => currentTool,
   onViewChange: refreshStatus,
 });
 
-const renderer = new Renderer({ canvas, ctx: canvasEngine.getContext(), camera, shapeStore, layerStore, appState });
+const renderer = new Renderer({
+  ctx: canvasEngine.getContext(),
+  camera,
+  shapeStore,
+  layerStore,
+  appState,
+  getCanvasMetrics: () => canvasEngine.getCanvasMetrics(),
+  ensureCanvasSize: () => canvasEngine.resizeCanvasToContainer(),
+});
 
 layerStore.createLayer("Layer 1");
+
+function applyColorToTarget(target, color) {
+  if (target === "fill") {
+    appState.currentStyle.fillColor = color;
+    fillColorInput.value = color;
+    return;
+  }
+
+  appState.currentStyle.strokeColor = color;
+  strokeColorInput.value = color;
+}
+
+function applyColorToActiveTarget(color) {
+  applyColorToTarget(activeColorTarget, color);
+  refreshStyleUI();
+}
 
 function renderStyleSwatches() {
   for (const color of calmPalette) {
@@ -110,14 +136,7 @@ function renderStyleSwatches() {
     swatch.style.setProperty("--swatch", color);
     swatch.title = color;
     swatch.addEventListener("click", () => {
-      if (activeColorTarget === "fill") {
-        appState.currentStyle.fillColor = color;
-        fillColorInput.value = color;
-      } else {
-        appState.currentStyle.strokeColor = color;
-        strokeColorInput.value = color;
-      }
-      refreshStyleUI();
+      applyColorToActiveTarget(color);
     });
     styleSwatches.appendChild(swatch);
   }
@@ -141,7 +160,7 @@ function refreshStyleUI() {
   fillEnabledToggle.checked = style.fillEnabled;
   fillColorInput.value = style.fillColor;
   fillOpacityInput.value = String(style.fillOpacity);
-  fillColorInput.disabled = !style.fillEnabled;
+  fillColorInput.disabled = false;
   fillOpacityInput.disabled = !style.fillEnabled;
 
   const activeColor = activeColorTarget === "fill" ? style.fillColor : style.strokeColor;
@@ -271,7 +290,7 @@ showDimensionsToggle.addEventListener("change", (event) => {
 });
 
 strokeColorInput.addEventListener("input", (event) => {
-  appState.currentStyle.strokeColor = event.target.value;
+  applyColorToTarget("stroke", event.target.value);
   refreshStyleUI();
 });
 
@@ -291,7 +310,7 @@ fillEnabledToggle.addEventListener("change", (event) => {
 });
 
 fillColorInput.addEventListener("input", (event) => {
-  appState.currentStyle.fillColor = event.target.value;
+  applyColorToTarget("fill", event.target.value);
   refreshStyleUI();
 });
 

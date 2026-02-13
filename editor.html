@@ -7,8 +7,9 @@
     <link rel="stylesheet" href="./assets/style.css" />
   </head>
   <body>
-    <header class="workspace-chrome">
-      <nav class="menu-bar" aria-label="Main menu bar">
+    <div class="app">
+      <header class="workspace-chrome">
+        <nav class="menu-bar" aria-label="Main menu bar">
         <button class="menu-item" type="button">File</button>
         <button class="menu-item" type="button">Edit</button>
         <button class="menu-item" type="button">View</button>
@@ -140,12 +141,13 @@
           </div>
           <span class="group-title">View</span>
         </section>
-      </div>
-      <div class="status" id="status">Mode: ISO</div>
-    </header>
-    <main class="canvas-shell">
-      <canvas id="blueprint-canvas"></canvas>
-    </main>
+        </div>
+        <div class="status" id="status">Mode: ISO</div>
+      </header>
+      <main class="canvas-wrap">
+        <canvas id="blueprint-canvas"></canvas>
+      </main>
+    </div>
 
     <script type="module" src="./src/script.js"></script>
   </body>

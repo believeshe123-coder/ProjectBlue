@@ -7,6 +7,13 @@ export class Camera {
     this.zoom = 1;
     this.minZoom = 0.2;
     this.maxZoom = 6;
+    this.viewW = 0;
+    this.viewH = 0;
+  }
+
+  setViewSize(viewW, viewH) {
+    this.viewW = viewW;
+    this.viewH = viewH;
   }
 
   worldToScreen(point) {

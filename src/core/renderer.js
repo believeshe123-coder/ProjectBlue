@@ -1,24 +1,27 @@
 import { drawIsoGrid } from "./isoGrid.js";
 
 export class Renderer {
-  constructor({ canvas, ctx, camera, shapeStore, layerStore, appState }) {
-    this.canvas = canvas;
+  constructor({ ctx, camera, shapeStore, layerStore, appState, getCanvasMetrics, ensureCanvasSize }) {
     this.ctx = ctx;
     this.camera = camera;
     this.shapeStore = shapeStore;
     this.layerStore = layerStore;
     this.appState = appState;
+    this.getCanvasMetrics = getCanvasMetrics;
+    this.ensureCanvasSize = ensureCanvasSize;
   }
 
   renderFrame() {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
+    this.ensureCanvasSize?.();
 
-    this.ctx.clearRect(0, 0, width, height);
+    const { canvasCssW, canvasCssH, currentDpr } = this.getCanvasMetrics();
+
+    this.ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
+    this.ctx.clearRect(0, 0, canvasCssW, canvasCssH);
     this.ctx.fillStyle = "#244a60";
-    this.ctx.fillRect(0, 0, width, height);
+    this.ctx.fillRect(0, 0, canvasCssW, canvasCssH);
 
-    drawIsoGrid(this.ctx, this.camera, width, height);
+    drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH);
 
     const layers = this.layerStore.getLayers();
     const shapes = this.shapeStore.getShapes();
