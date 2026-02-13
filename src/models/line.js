@@ -46,7 +46,7 @@ export class Line extends Shape {
     const e = camera.worldToScreen(this.end);
 
     ctx.save();
-    ctx.globalAlpha = this.strokeOpacity;
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = this.strokeColor;
     ctx.lineWidth = this.strokeWidth;
     ctx.lineCap = "round";
@@ -55,6 +55,7 @@ export class Line extends Shape {
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(e.x, e.y);
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
     if (this.selected) {
       ctx.strokeStyle = "#ffd166";

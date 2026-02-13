@@ -25,15 +25,17 @@ export class FillRegion extends Shape {
       ctx.globalAlpha = this.fillOpacity;
       ctx.fillStyle = this.fillColor;
       ctx.fill();
+      ctx.globalAlpha = 1;
     }
 
     if (this.strokeWidth > 0 && this.strokeColor && this.strokeColor !== "transparent") {
-      ctx.globalAlpha = this.strokeOpacity;
+      ctx.globalAlpha = 1;
       ctx.strokeStyle = this.strokeColor;
       ctx.lineWidth = this.strokeWidth;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     if (this.selected) {

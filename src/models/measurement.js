@@ -34,13 +34,14 @@ export class Measurement extends Shape {
     const label = this.buildLabel(appState);
 
     ctx.save();
-    ctx.globalAlpha = this.strokeOpacity;
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = this.strokeColor;
     ctx.lineWidth = this.strokeWidth;
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
     ctx.font = "12px Tahoma, Verdana, Arial, sans-serif";
     const metrics = ctx.measureText(label);
