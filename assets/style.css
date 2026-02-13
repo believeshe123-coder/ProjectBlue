@@ -420,51 +420,53 @@ body {
   border: 0;
 }
 
-.layers-panel {
+.layers-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
-.layers-group {
-  border: 1px solid var(--soft-border);
-  border-radius: 8px;
-  background: #fff;
-  padding: 6px;
-}
-
-.layers-group > summary {
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  color: #334155;
+.layers-add-btn {
+  padding: 6px 10px;
+  font-size: 11px;
 }
 
 .layers-list {
-  margin-top: 6px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .layer-row {
   display: grid;
-  grid-template-columns: 24px 24px 1fr auto;
+  grid-template-columns: 20px 24px 24px 1fr auto;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 3px;
+  padding: 4px;
   font-size: 12px;
+  background: #fff;
 }
 
-.layer-row.is-selected {
-  border-color: #8eb0ea;
-  background: rgba(142, 176, 234, 0.14);
+.layer-row.is-active {
+  border-color: #4f83cc;
+  background: rgba(79, 131, 204, 0.14);
+}
+
+.layer-drag-handle {
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .layer-icon-btn,
-.layer-order-btn {
+.layer-delete-btn {
   width: 22px;
   height: 22px;
   border: 1px solid var(--soft-border);
@@ -475,6 +477,11 @@ body {
   line-height: 1;
 }
 
+.layer-delete-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .layer-name {
   border: 0;
   background: transparent;
@@ -482,12 +489,15 @@ body {
   width: 100%;
   font-size: 12px;
   color: #1f2937;
-  cursor: pointer;
+  cursor: text;
 }
 
-.layer-order-controls {
-  display: inline-flex;
-  gap: 2px;
+.layer-name-input {
+  width: 100%;
+  border: 1px solid var(--soft-border);
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 4px;
 }
 
 .layer-empty {

@@ -1,9 +1,5 @@
 import { drawIsoGrid, isoUVToWorld, worldToIsoUV } from "./isoGrid.js";
 
-function byLayer(shapes, layerId, predicate) {
-  return shapes.filter((shape) => shape.layerId === layerId && predicate(shape));
-}
-
 function zSorted(shapes) {
   return [...shapes].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 }
@@ -56,10 +52,12 @@ export class Renderer {
 
     for (const layer of layers) {
       if (!layer.visible) continue;
-      const polygons = zSorted(byLayer(shapes, layer.id, (shape) => shape.type === "polygon-shape" && shape.visible !== false));
-      const lines = zSorted(byLayer(shapes, layer.id, (shape) => shape.type === "line" && shape.visible !== false));
-      const measurements = zSorted(byLayer(shapes, layer.id, (shape) => shape.type === "measurement" && shape.visible !== false));
-      const others = zSorted(byLayer(shapes, layer.id, (shape) => !["polygon-shape", "line", "measurement"].includes(shape.type) && shape.visible !== false));
+
+      const layerShapes = zSorted(shapes.filter((shape) => shape.layerId === layer.id && shape.visible !== false));
+      const polygons = layerShapes.filter((shape) => shape.type === "polygon-shape");
+      const lines = layerShapes.filter((shape) => shape.type === "line");
+      const measurements = layerShapes.filter((shape) => shape.type === "measurement");
+      const others = layerShapes.filter((shape) => !["polygon-shape", "line", "measurement"].includes(shape.type));
 
       for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
       for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);

@@ -58,12 +58,8 @@ const menuEditButton = document.getElementById("menuEditBtn");
 const menuEditDropdown = document.getElementById("menuEditDropdown");
 
 
-const layersPolygonsCount = document.getElementById("layers-polygons-count");
-const layersLinesCount = document.getElementById("layers-lines-count");
-const layersMeasurementsCount = document.getElementById("layers-measurements-count");
-const layersPolygonsList = document.getElementById("layers-polygons-list");
-const layersLinesList = document.getElementById("layers-lines-list");
-const layersMeasurementsList = document.getElementById("layers-measurements-list");
+const newLayerButton = document.getElementById("new-layer-btn");
+const layersList = document.getElementById("layers-list");
 
 const calmPalette = [
   "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
@@ -111,6 +107,7 @@ const appState = {
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
   activeThemeId: "builtin:light",
+  currentActiveLayerId: null,
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -154,7 +151,8 @@ const renderer = new Renderer({
   ensureCanvasSize: () => canvasEngine.resizeCanvasToContainer(),
 });
 
-layerStore.createLayer("Layer 1");
+layerStore.ensureDefaultLayer();
+appState.currentActiveLayerId = layerStore.getActiveLayer()?.id ?? null;
 
 function applyColorToTarget(target, color) {
   if (target === "secondary") {
@@ -317,18 +315,54 @@ appState.notifyStatus = (message, durationMs = 1400) => {
   }, durationMs);
 };
 
+function getSnapshot() {
+  return {
+    shapes: shapeStore.serialize(),
+    layers: layerStore.serialize(),
+    currentActiveLayerId: appState.currentActiveLayerId,
+  };
+}
+
+function applySnapshot(snapshot) {
+  if (!snapshot) return;
+
+  if (Array.isArray(snapshot)) {
+    shapeStore.replaceFromSerialized(snapshot);
+    const fallbackLayer = layerStore.getActiveLayer() ?? layerStore.ensureDefaultLayer();
+    for (const shape of shapeStore.getShapes()) {
+      if (!shape.layerId || !layerStore.getLayerById(shape.layerId)) {
+        shape.layerId = fallbackLayer.id;
+      }
+    }
+    appState.currentActiveLayerId = fallbackLayer.id;
+    return;
+  }
+
+  layerStore.replaceFromSerialized(snapshot.layers);
+  shapeStore.replaceFromSerialized(snapshot.shapes ?? []);
+  const restoredActiveLayerId = snapshot.currentActiveLayerId;
+  if (!layerStore.setActiveLayer(restoredActiveLayerId)) {
+    layerStore.setActiveLayer(layerStore.getLayers()[0]?.id ?? null);
+  }
+  appState.currentActiveLayerId = layerStore.getActiveLayer()?.id ?? null;
+}
+
+function pushHistoryState() {
+  historyStore.pushState(getSnapshot());
+}
+
 function undo() {
-  const previous = historyStore.undo(shapeStore.serialize());
+  const previous = historyStore.undo(getSnapshot());
   if (!previous) return;
-  shapeStore.replaceFromSerialized(previous);
+  applySnapshot(previous);
   appState.previewShape = null;
   appState.selected = { type: null, id: null };
 }
 
 function redo() {
-  const next = historyStore.redo(shapeStore.serialize());
+  const next = historyStore.redo(getSnapshot());
   if (!next) return;
-  shapeStore.replaceFromSerialized(next);
+  applySnapshot(next);
   appState.previewShape = null;
   appState.selected = { type: null, id: null };
 }
@@ -346,7 +380,7 @@ function clearSelectionState() {
 function setSelectedShape(shape) {
   shapeStore.clearSelection();
 
-  if (!shape || shape.locked === true || shape.visible === false) {
+  if (!isShapeInteractive(shape)) {
     appState.selected = { type: null, id: null };
     return;
   }
@@ -375,154 +409,192 @@ function getSelectedMeasurableShape() {
   return (selectedShape.type === "line" || selectedShape.type === "polygon-shape") ? selectedShape : null;
 }
 
-function getShapesForLayersPanel(type) {
-  return shapeStore.getShapes()
-    .filter((shape) => shape.type === type)
-    .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+function getLayerForShape(shape) {
+  return layerStore.getLayerById(shape.layerId);
 }
 
-function getLayerDisplayName(shape, index) {
-  if (shape.type === "polygon-shape") return `Polygon ${index + 1}`;
-  if (shape.type === "line") return `Line ${index + 1}`;
-  if (shape.type === "measurement") return `Measurement ${index + 1}`;
-  return `Shape ${index + 1}`;
+function isShapeInteractive(shape) {
+  if (!shape || shape.visible === false || shape.locked === true) {
+    return false;
+  }
+
+  const layer = getLayerForShape(shape);
+  if (!layer) {
+    return false;
+  }
+
+  return layer.visible !== false && layer.locked !== true;
 }
 
-function bumpPolygonZIndex(shapeId, direction) {
-  const polygons = getShapesForLayersPanel("polygon-shape");
-  const currentIndex = polygons.findIndex((shape) => shape.id === shapeId);
-  if (currentIndex === -1) return;
-
-  const targetIndex = currentIndex + direction;
-  if (targetIndex < 0 || targetIndex >= polygons.length) return;
-
-  historyStore.pushState(shapeStore.serialize());
-
-  const current = polygons[currentIndex];
-  const target = polygons[targetIndex];
-  const currentZ = current.zIndex ?? 0;
-  current.zIndex = target.zIndex ?? 0;
-  target.zIndex = currentZ;
+function moveShapesToLayer(sourceLayerId, targetLayerId) {
+  for (const shape of shapeStore.getShapes()) {
+    if (shape.layerId === sourceLayerId) {
+      shape.layerId = targetLayerId;
+    }
+  }
 }
 
-function renderLayerRows(container, shapes, { allowReorder = false } = {}) {
-  if (!container) return;
-  container.textContent = "";
+function renderLayerNameCell(layer, row) {
+  const nameButton = document.createElement("button");
+  nameButton.type = "button";
+  nameButton.className = "layer-name";
+  nameButton.textContent = layer.name;
+  nameButton.title = "Double-click to rename";
+  nameButton.addEventListener("click", () => {
+    layerStore.setActiveLayer(layer.id);
+    appState.currentActiveLayerId = layer.id;
+  });
 
-  if (!shapes.length) {
+  nameButton.addEventListener("dblclick", () => {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = layer.name;
+    input.className = "layer-name-input";
+
+    const commit = () => {
+      const nextName = input.value.trim();
+      if (nextName && nextName !== layer.name) {
+        pushHistoryState();
+        layerStore.updateLayer(layer.id, { name: nextName });
+      }
+      input.replaceWith(nameButton);
+    };
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        commit();
+      }
+      if (event.key === "Escape") {
+        input.replaceWith(nameButton);
+      }
+    });
+    input.addEventListener("blur", commit);
+    nameButton.replaceWith(input);
+    input.focus();
+    input.select();
+  });
+
+  row.appendChild(nameButton);
+}
+
+function renderLayersPanel() {
+  if (!layersList) return;
+
+  const layers = layerStore.getLayers();
+  layersList.textContent = "";
+
+  if (!layers.length) {
     const empty = document.createElement("div");
     empty.className = "layer-empty";
-    empty.textContent = "No items";
-    container.appendChild(empty);
+    empty.textContent = "No layers";
+    layersList.appendChild(empty);
     return;
   }
 
-  shapes.forEach((shape, index) => {
+  for (let index = layers.length - 1; index >= 0; index -= 1) {
+    const layer = layers[index];
     const row = document.createElement("div");
-    row.className = `layer-row${appState.selected.id === shape.id ? " is-selected" : ""}`;
+    row.className = `layer-row${appState.currentActiveLayerId === layer.id ? " is-active" : ""}`;
+    row.draggable = true;
+    row.dataset.layerId = layer.id;
+
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "layer-drag-handle";
+    handle.textContent = "⋮⋮";
+    handle.title = "Drag to reorder";
+    handle.addEventListener("click", () => {
+      layerStore.setActiveLayer(layer.id);
+      appState.currentActiveLayerId = layer.id;
+    });
 
     const visibleBtn = document.createElement("button");
     visibleBtn.type = "button";
     visibleBtn.className = "layer-icon-btn";
-    visibleBtn.textContent = shape.visible === false ? "🙈" : "👁";
-    visibleBtn.title = shape.visible === false ? "Show" : "Hide";
+    visibleBtn.textContent = layer.visible ? "👁" : "🙈";
+    visibleBtn.title = layer.visible ? "Hide layer" : "Show layer";
     visibleBtn.addEventListener("click", () => {
-      historyStore.pushState(shapeStore.serialize());
-      shape.visible = shape.visible === false;
-      if (shape.visible === false && appState.selected.id === shape.id) {
-        clearSelectionState();
+      pushHistoryState();
+      layerStore.updateLayer(layer.id, { visible: !layer.visible });
+      if (layer.visible && appState.selected.id) {
+        const selectedShape = getSelectedShape();
+        if (selectedShape && selectedShape.layerId === layer.id) {
+          clearSelectionState();
+        }
       }
     });
 
     const lockBtn = document.createElement("button");
     lockBtn.type = "button";
     lockBtn.className = "layer-icon-btn";
-    lockBtn.textContent = shape.locked ? "🔒" : "🔓";
-    lockBtn.title = shape.locked ? "Unlock" : "Lock";
+    lockBtn.textContent = layer.locked ? "🔒" : "🔓";
+    lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
     lockBtn.addEventListener("click", () => {
-      historyStore.pushState(shapeStore.serialize());
-      shape.locked = !shape.locked;
-      if (shape.locked && appState.selected.id === shape.id) {
-        clearSelectionState();
+      pushHistoryState();
+      layerStore.updateLayer(layer.id, { locked: !layer.locked });
+      if (!layer.locked && appState.selected.id) {
+        const selectedShape = getSelectedShape();
+        if (selectedShape && selectedShape.layerId === layer.id) {
+          clearSelectionState();
+        }
       }
     });
 
-    const nameBtn = document.createElement("button");
-    nameBtn.type = "button";
-    nameBtn.className = "layer-name";
-    nameBtn.textContent = getLayerDisplayName(shape, index);
-    nameBtn.addEventListener("click", () => {
-      setSelectedShape(shape);
-      setActiveTool("select");
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "layer-delete-btn";
+    deleteBtn.textContent = "🗑";
+    deleteBtn.title = "Delete layer";
+    deleteBtn.disabled = layers.length <= 1;
+    deleteBtn.addEventListener("click", () => {
+      if (layers.length <= 1) return;
+      const fallbackLayer = layers.find((item) => item.id !== layer.id);
+      if (!fallbackLayer) return;
+      pushHistoryState();
+      moveShapesToLayer(layer.id, fallbackLayer.id);
+      layerStore.deleteLayer(layer.id);
+      layerStore.setActiveLayer(fallbackLayer.id);
+      appState.currentActiveLayerId = fallbackLayer.id;
+      clearSelectionState();
     });
 
+    row.addEventListener("click", () => {
+      layerStore.setActiveLayer(layer.id);
+      appState.currentActiveLayerId = layer.id;
+    });
+
+    row.addEventListener("dragstart", (event) => {
+      event.dataTransfer.setData("text/plain", layer.id);
+      event.dataTransfer.effectAllowed = "move";
+    });
+
+    row.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    });
+
+    row.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const draggedLayerId = event.dataTransfer.getData("text/plain");
+      if (!draggedLayerId || draggedLayerId === layer.id) return;
+      pushHistoryState();
+      layerStore.moveLayer(draggedLayerId, layer.id);
+    });
+
+    row.appendChild(handle);
     row.appendChild(visibleBtn);
     row.appendChild(lockBtn);
-    row.appendChild(nameBtn);
-
-    if (allowReorder) {
-      const controls = document.createElement("div");
-      controls.className = "layer-order-controls";
-
-      const upBtn = document.createElement("button");
-      upBtn.type = "button";
-      upBtn.className = "layer-order-btn";
-      upBtn.textContent = "↑";
-      upBtn.title = "Move up";
-      upBtn.disabled = index === shapes.length - 1;
-      upBtn.addEventListener("click", () => bumpPolygonZIndex(shape.id, 1));
-
-      const downBtn = document.createElement("button");
-      downBtn.type = "button";
-      downBtn.className = "layer-order-btn";
-      downBtn.textContent = "↓";
-      downBtn.title = "Move down";
-      downBtn.disabled = index === 0;
-      downBtn.addEventListener("click", () => bumpPolygonZIndex(shape.id, -1));
-
-      controls.appendChild(upBtn);
-      controls.appendChild(downBtn);
-      row.appendChild(controls);
-    }
-
-    container.appendChild(row);
-  });
-}
-
-let lastLayersSignature = "";
-
-function refreshLayersPanel() {
-  const polygons = getShapesForLayersPanel("polygon-shape");
-  const lines = getShapesForLayersPanel("line");
-  const measurements = getShapesForLayersPanel("measurement");
-
-  const signature = JSON.stringify({
-    selected: appState.selected.id,
-    polygons: polygons.map((shape) => [shape.id, shape.visible !== false, shape.locked === true, shape.zIndex ?? 0]),
-    lines: lines.map((shape) => [shape.id, shape.visible !== false, shape.locked === true, shape.zIndex ?? 0]),
-    measurements: measurements.map((shape) => [shape.id, shape.visible !== false, shape.locked === true, shape.zIndex ?? 0]),
-  });
-
-  if (signature === lastLayersSignature) {
-    return;
+    renderLayerNameCell(layer, row);
+    row.appendChild(deleteBtn);
+    layersList.appendChild(row);
   }
-
-  lastLayersSignature = signature;
-
-  if (layersPolygonsCount) layersPolygonsCount.textContent = String(polygons.length);
-  if (layersLinesCount) layersLinesCount.textContent = String(lines.length);
-  if (layersMeasurementsCount) layersMeasurementsCount.textContent = String(measurements.length);
-
-  renderLayerRows(layersPolygonsList, polygons, { allowReorder: true });
-  renderLayerRows(layersLinesList, lines);
-  renderLayerRows(layersMeasurementsList, measurements);
 }
 
 function deleteSelection() {
   const selectedShape = getSelectedShape();
-  if (!selectedShape || selectedShape.locked === true) return;
+  if (!isShapeInteractive(selectedShape)) return;
 
-  historyStore.pushState(shapeStore.serialize());
+  pushHistoryState();
 
   if (selectedShape.type === "polygon-shape") {
     shapeStore.removeShape(selectedShape.id);
@@ -556,6 +628,8 @@ function buildProjectData() {
       builtInSelectedId: appState.activeThemeId,
       savedThemes: savedThemes,
     },
+    layers: layerStore.serialize(),
+    currentActiveLayerId: appState.currentActiveLayerId,
     shapes: shapeStore.serialize(),
   };
 }
@@ -596,7 +670,21 @@ function applyProjectData(project, { announce = true } = {}) {
   populateThemeSelect();
   applyTheme(fallbackTheme, fallbackTheme.id);
 
+  layerStore.replaceFromSerialized(project.layers);
+  if (typeof project.currentActiveLayerId === "string") {
+    layerStore.setActiveLayer(project.currentActiveLayerId);
+  }
+
+  const activeLayer = layerStore.getActiveLayer() ?? layerStore.ensureDefaultLayer();
+  appState.currentActiveLayerId = activeLayer.id;
+
   shapeStore.replaceFromSerialized(project.shapes);
+  for (const shape of shapeStore.getShapes()) {
+    if (!shape.layerId || !layerStore.getLayerById(shape.layerId)) {
+      shape.layerId = activeLayer.id;
+    }
+  }
+
   historyStore.undoStack = [];
   historyStore.redoStack = [];
   appState.previewShape = null;
@@ -908,6 +996,13 @@ document.addEventListener("click", () => {
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
 
+newLayerButton?.addEventListener("click", () => {
+  pushHistoryState();
+  const layer = layerStore.createLayer();
+  layerStore.setActiveLayer(layer.id);
+  appState.currentActiveLayerId = layer.id;
+});
+
 snapGridToggle.addEventListener("change", (event) => {
   appState.snapToGrid = event.target.checked;
   refreshStatus();
@@ -1061,7 +1156,7 @@ window.addEventListener("keydown", (event) => {
     const selectedShape = getSelectedMeasurableShape();
     if (selectedShape) {
       event.preventDefault();
-      historyStore.pushState(shapeStore.serialize());
+      pushHistoryState();
       selectedShape.pinnedMeasure = !selectedShape.pinnedMeasure;
       appState.notifyStatus(selectedShape.pinnedMeasure ? "Measurements pinned" : "Measurements unpinned");
       return;
@@ -1097,7 +1192,7 @@ restoreAutosaveIfAvailable();
 updateControlsFromState();
 
 function frame() {
-  refreshLayersPanel();
+  renderLayersPanel();
   queueAutosave();
   renderer.renderFrame();
   requestAnimationFrame(frame);

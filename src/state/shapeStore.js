@@ -70,10 +70,15 @@ export class ShapeStore {
     return before - this.shapes.length;
   }
 
-  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false } = {}) {
+  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false, layerStore = null } = {}) {
     return [...this.shapes]
       .reverse()
-      .find((shape) => shape.visible !== false && (includeLocked || shape.locked !== true) && shape.containsPoint(point, toleranceWorld)) ?? null;
+      .find((shape) => {
+        const layer = layerStore?.getLayerById?.(shape.layerId);
+        if (layer && layer.visible === false) return false;
+        if (layer && !includeLocked && layer.locked === true) return false;
+        return shape.visible !== false && (includeLocked || shape.locked !== true) && shape.containsPoint(point, toleranceWorld);
+      }) ?? null;
   }
 
   getShapes() {
