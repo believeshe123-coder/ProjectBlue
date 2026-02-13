@@ -53,7 +53,7 @@ export class LayerStore {
     return this.getActiveLayer();
   }
 
-  createLayer(name) {
+  addLayer(name) {
     const layer = {
       id: `layer-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       name: typeof name === "string" && name.trim() ? name.trim() : `Layer ${this.layers.length + 1}`,
@@ -69,7 +69,15 @@ export class LayerStore {
     return layer;
   }
 
+  createLayer(name) {
+    return this.addLayer(name);
+  }
+
   deleteLayer(id) {
+    if (id === DEFAULT_LAYER_ID) {
+      return false;
+    }
+
     const index = this.layers.findIndex((layer) => layer.id === id);
     if (index === -1 || this.layers.length <= 1) {
       return false;
@@ -79,6 +87,32 @@ export class LayerStore {
     this.reindexLayers();
     this.ensureActiveLayer();
     return true;
+  }
+
+  toggleVisible(id) {
+    const layer = this.getLayerById(id);
+    if (!layer) return false;
+    layer.visible = !layer.visible;
+    return true;
+  }
+
+  toggleLocked(id) {
+    const layer = this.getLayerById(id);
+    if (!layer) return false;
+    layer.locked = !layer.locked;
+    return true;
+  }
+
+  moveUp(id) {
+    return this.moveLayerByOffset(id, 1);
+  }
+
+  moveDown(id) {
+    return this.moveLayerByOffset(id, -1);
+  }
+
+  renameLayer(id, name) {
+    return this.updateLayer(id, { name });
   }
 
   updateLayer(id, updates = {}) {
@@ -142,6 +176,10 @@ export class LayerStore {
     return this.layers.find((layer) => layer.id === this.activeLayerId) ?? null;
   }
 
+  getActiveLayerId() {
+    return this.activeLayerId;
+  }
+
   getLayerById(id) {
     return this.layers.find((layer) => layer.id === id) ?? null;
   }
@@ -156,6 +194,10 @@ export class LayerStore {
 
   serialize() {
     return this.getLayers().map((layer) => ({ ...layer }));
+  }
+
+  hydrate(serializedLayers, activeLayerId = null) {
+    this.replaceFromSerialized(serializedLayers, activeLayerId);
   }
 
   replaceFromSerialized(serializedLayers, activeLayerId = null) {
