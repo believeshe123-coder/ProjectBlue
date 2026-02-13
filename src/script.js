@@ -3,7 +3,7 @@ import { Camera } from "./core/camera.js";
 import { Renderer } from "./core/renderer.js";
 import { HistoryStore } from "./state/history.js";
 import { LayerStore } from "./state/layerStore.js";
-import { ShapeStore } from "./state/shapeStore.js";
+import { ShapeStore, migrateShapeLayers } from "./state/shapeStore.js";
 import { IsoLineTool } from "./tools/isoLineTool.js";
 import { SelectTool } from "./tools/selectTool.js";
 import { MeasureTool } from "./tools/measureTool.js";
@@ -108,7 +108,7 @@ const appState = {
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
   activeThemeId: "builtin:light",
-  currentActiveLayerId: null,
+  activeLayerId: null,
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -119,7 +119,7 @@ const appState = {
   },
 };
 
-const sharedContext = { canvas, camera, shapeStore, layerStore, historyStore, appState };
+const sharedContext = { canvas, camera, shapeStore, layerStore, historyStore, appState, pushHistoryState: () => pushHistoryState() };
 
 const tools = {
   select: new SelectTool(sharedContext),
@@ -153,7 +153,7 @@ const renderer = new Renderer({
 });
 
 layerStore.ensureDefaultLayer();
-appState.currentActiveLayerId = layerStore.getActiveLayer()?.id ?? null;
+appState.activeLayerId = layerStore.getActiveLayer()?.id ?? null;
 
 function applyColorToTarget(target, color) {
   if (target === "secondary") {
@@ -316,11 +316,23 @@ appState.notifyStatus = (message, durationMs = 1400) => {
   }, durationMs);
 };
 
+function migrateLayeredSnapshot(snapshot = {}) {
+  const serializedLayers = snapshot.layers ?? snapshot.layerState ?? null;
+  const requestedActiveLayerId = snapshot.activeLayerId ?? snapshot.currentActiveLayerId ?? null;
+  layerStore.replaceFromSerialized(serializedLayers, requestedActiveLayerId);
+
+  shapeStore.replaceFromSerialized(snapshot.shapes ?? []);
+  migrateShapeLayers(shapeStore.getShapes(), layerStore);
+
+  const activeLayer = layerStore.getActiveLayer() ?? layerStore.ensureActiveLayer();
+  appState.activeLayerId = activeLayer?.id ?? null;
+}
+
 function getSnapshot() {
   return {
     shapes: shapeStore.serialize(),
     layers: layerStore.serialize(),
-    currentActiveLayerId: appState.currentActiveLayerId,
+    activeLayerId: appState.activeLayerId,
   };
 }
 
@@ -328,25 +340,11 @@ function applySnapshot(snapshot) {
   if (!snapshot) return;
 
   if (Array.isArray(snapshot)) {
-    shapeStore.replaceFromSerialized(snapshot);
-    const defaultLayer = layerStore.getLayers()[0] ?? layerStore.ensureDefaultLayer();
-    for (const shape of shapeStore.getShapes()) {
-      if (!shape.layerId || !layerStore.getLayerById(shape.layerId)) {
-        shape.layerId = defaultLayer.id;
-      }
-    }
-    layerStore.setActiveLayer(defaultLayer.id);
-    appState.currentActiveLayerId = defaultLayer.id;
+    migrateLayeredSnapshot({ shapes: snapshot, layers: layerStore.serialize(), activeLayerId: layerStore.getActiveLayer()?.id });
     return;
   }
 
-  layerStore.replaceFromSerialized(snapshot.layers);
-  shapeStore.replaceFromSerialized(snapshot.shapes ?? []);
-  const restoredActiveLayerId = snapshot.currentActiveLayerId;
-  if (!layerStore.setActiveLayer(restoredActiveLayerId)) {
-    layerStore.setActiveLayer(layerStore.getLayers()[0]?.id ?? null);
-  }
-  appState.currentActiveLayerId = layerStore.getActiveLayer()?.id ?? null;
+  migrateLayeredSnapshot(snapshot);
 }
 
 function pushHistoryState() {
@@ -396,9 +394,8 @@ function resetProject() {
   }
 
   shapeStore.clear();
-  layerStore.replaceFromSerialized([{ id: "layer-1", name: "Layer 1", visible: true, locked: false, zIndex: 0 }]);
-  layerStore.setActiveLayer("layer-1");
-  appState.currentActiveLayerId = "layer-1";
+  layerStore.replaceFromSerialized();
+  appState.activeLayerId = layerStore.getActiveLayer()?.id ?? null;
   camera.resetView();
   setActiveTool("select");
   historyStore.undoStack = [];
@@ -459,6 +456,18 @@ function isShapeInteractive(shape) {
   return layer.visible !== false && layer.locked !== true;
 }
 
+function enforceLayerInvariants() {
+  layerStore.ensureDefaultLayer();
+  layerStore.ensureActiveLayer();
+  appState.activeLayerId = layerStore.getActiveLayer()?.id ?? null;
+  migrateShapeLayers(shapeStore.getShapes(), layerStore);
+
+  const selectedShape = getSelectedShape();
+  if (selectedShape && !isShapeInteractive(selectedShape)) {
+    clearSelectionState();
+  }
+}
+
 function moveShapesToLayer(sourceLayerId, targetLayerId) {
   for (const shape of shapeStore.getShapes()) {
     if (shape.layerId === sourceLayerId) {
@@ -473,16 +482,15 @@ function renderLayerNameCell(layer, row) {
   nameButton.className = "layer-name";
   nameButton.textContent = layer.name;
   nameButton.title = "Double-click to rename";
-  nameButton.addEventListener("click", () => {
-    if (layer.visible === false) {
-      appState.notifyStatus?.("Cannot set hidden layer active", 1400);
-      return;
-    }
+  nameButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    pushHistoryState();
     layerStore.setActiveLayer(layer.id);
-    appState.currentActiveLayerId = layer.id;
+    appState.activeLayerId = layer.id;
   });
 
-  nameButton.addEventListener("dblclick", () => {
+  nameButton.addEventListener("dblclick", (event) => {
+    event.stopPropagation();
     const input = document.createElement("input");
     input.type = "text";
     input.value = layer.name;
@@ -498,12 +506,8 @@ function renderLayerNameCell(layer, row) {
     };
 
     input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        commit();
-      }
-      if (event.key === "Escape") {
-        input.replaceWith(nameButton);
-      }
+      if (event.key === "Enter") commit();
+      if (event.key === "Escape") input.replaceWith(nameButton);
     });
     input.addEventListener("blur", commit);
     nameButton.replaceWith(input);
@@ -520,50 +524,27 @@ function renderLayersPanel() {
   const layers = layerStore.getLayers();
   layersList.textContent = "";
 
-  if (!layers.length) {
-    const empty = document.createElement("div");
-    empty.className = "layer-empty";
-    empty.textContent = "No layers";
-    layersList.appendChild(empty);
-    return;
-  }
-
   for (let index = layers.length - 1; index >= 0; index -= 1) {
     const layer = layers[index];
     const row = document.createElement("div");
-    row.className = `layer-row${appState.currentActiveLayerId === layer.id ? " is-active" : ""}`;
-    row.draggable = true;
+    row.className = `layer-row${appState.activeLayerId === layer.id ? " is-active" : ""}`;
     row.dataset.layerId = layer.id;
-
-    const handle = document.createElement("button");
-    handle.type = "button";
-    handle.className = "layer-drag-handle";
-    handle.textContent = "⋮⋮";
-    handle.title = "Drag to reorder";
-    handle.addEventListener("click", () => {
-      if (layer.visible === false) {
-        appState.notifyStatus?.("Cannot set hidden layer active", 1400);
-        return;
-      }
-      layerStore.setActiveLayer(layer.id);
-      appState.currentActiveLayerId = layer.id;
-    });
 
     const visibleBtn = document.createElement("button");
     visibleBtn.type = "button";
     visibleBtn.className = "layer-icon-btn";
     visibleBtn.textContent = layer.visible ? "👁" : "🙈";
     visibleBtn.title = layer.visible ? "Hide layer" : "Show layer";
-    visibleBtn.addEventListener("click", () => {
+    visibleBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
       pushHistoryState();
       const nextVisible = !layer.visible;
       layerStore.updateLayer(layer.id, { visible: nextVisible });
-      if (!nextVisible && appState.selected.id) {
-        const selectedShape = getSelectedShape();
-        if (selectedShape && selectedShape.layerId === layer.id) {
-          clearSelectionState();
-        }
+      if (nextVisible === false && appState.activeLayerId === layer.id) {
+        appState.notifyStatus?.("Active layer is hidden", 1400);
       }
+      const selected = getSelectedShape();
+      if (selected && selected.layerId === layer.id) clearSelectionState();
     });
 
     const lockBtn = document.createElement("button");
@@ -571,16 +552,37 @@ function renderLayersPanel() {
     lockBtn.className = "layer-icon-btn";
     lockBtn.textContent = layer.locked ? "🔒" : "🔓";
     lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
-    lockBtn.addEventListener("click", () => {
+    lockBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
       pushHistoryState();
       const nextLocked = !layer.locked;
       layerStore.updateLayer(layer.id, { locked: nextLocked });
-      if (nextLocked && appState.selected.id) {
-        const selectedShape = getSelectedShape();
-        if (selectedShape && selectedShape.layerId === layer.id) {
-          clearSelectionState();
-        }
-      }
+      const selected = getSelectedShape();
+      if (nextLocked && selected && selected.layerId === layer.id) clearSelectionState();
+    });
+
+    const upBtn = document.createElement("button");
+    upBtn.type = "button";
+    upBtn.className = "layer-icon-btn";
+    upBtn.textContent = "↑";
+    upBtn.title = "Move layer up";
+    upBtn.disabled = index >= layers.length - 1;
+    upBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      pushHistoryState();
+      layerStore.moveLayerByOffset(layer.id, 1);
+    });
+
+    const downBtn = document.createElement("button");
+    downBtn.type = "button";
+    downBtn.className = "layer-icon-btn";
+    downBtn.textContent = "↓";
+    downBtn.title = "Move layer down";
+    downBtn.disabled = index <= 0;
+    downBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      pushHistoryState();
+      layerStore.moveLayerByOffset(layer.id, -1);
     });
 
     const deleteBtn = document.createElement("button");
@@ -589,49 +591,36 @@ function renderLayersPanel() {
     deleteBtn.textContent = "🗑";
     deleteBtn.title = "Delete layer";
     deleteBtn.disabled = layers.length <= 1;
-    deleteBtn.addEventListener("click", () => {
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
       if (layers.length <= 1) return;
-      const fallbackLayer = layers.find((item) => item.id !== layer.id);
-      if (!fallbackLayer) return;
+      const defaultLayerId = layerStore.getLayers()[0]?.id;
+      if (!defaultLayerId || layer.id === defaultLayerId) {
+        appState.notifyStatus?.("Default layer cannot be deleted", 1400);
+        return;
+      }
+
+      const confirmed = window.confirm(`Delete "${layer.name}"? Shapes will be moved to Layer 1.`);
+      if (!confirmed) return;
+
       pushHistoryState();
-      moveShapesToLayer(layer.id, fallbackLayer.id);
+      moveShapesToLayer(layer.id, defaultLayerId);
       layerStore.deleteLayer(layer.id);
-      layerStore.setActiveLayer(fallbackLayer.id);
-      appState.currentActiveLayerId = fallbackLayer.id;
+      appState.activeLayerId = layerStore.getActiveLayer()?.id ?? defaultLayerId;
       clearSelectionState();
     });
 
     row.addEventListener("click", () => {
-      if (layer.visible === false) {
-        appState.notifyStatus?.("Cannot set hidden layer active", 1400);
-        return;
-      }
-      layerStore.setActiveLayer(layer.id);
-      appState.currentActiveLayerId = layer.id;
-    });
-
-    row.addEventListener("dragstart", (event) => {
-      event.dataTransfer.setData("text/plain", layer.id);
-      event.dataTransfer.effectAllowed = "move";
-    });
-
-    row.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-    });
-
-    row.addEventListener("drop", (event) => {
-      event.preventDefault();
-      const draggedLayerId = event.dataTransfer.getData("text/plain");
-      if (!draggedLayerId || draggedLayerId === layer.id) return;
       pushHistoryState();
-      layerStore.moveLayer(draggedLayerId, layer.id);
+      layerStore.setActiveLayer(layer.id);
+      appState.activeLayerId = layer.id;
     });
 
-    row.appendChild(handle);
     row.appendChild(visibleBtn);
     row.appendChild(lockBtn);
     renderLayerNameCell(layer, row);
+    row.appendChild(upBtn);
+    row.appendChild(downBtn);
     row.appendChild(deleteBtn);
     layersList.appendChild(row);
   }
@@ -676,7 +665,7 @@ function buildProjectData() {
       savedThemes: savedThemes,
     },
     layers: layerStore.serialize(),
-    currentActiveLayerId: appState.currentActiveLayerId,
+    activeLayerId: appState.activeLayerId,
     shapes: shapeStore.serialize(),
   };
 }
@@ -693,7 +682,7 @@ function updateControlsFromState() {
 }
 
 function applyProjectData(project, { announce = true } = {}) {
-  if (!project || project.version !== 1 || !Array.isArray(project.shapes)) {
+  if (!project || !Array.isArray(project.shapes)) {
     throw new Error("Unsupported project file");
   }
 
@@ -717,21 +706,11 @@ function applyProjectData(project, { announce = true } = {}) {
   populateThemeSelect();
   applyTheme(fallbackTheme, fallbackTheme.id);
 
-  layerStore.replaceFromSerialized(project.layers);
-  if (typeof project.currentActiveLayerId === "string") {
-    layerStore.setActiveLayer(project.currentActiveLayerId);
-  }
-
-  const defaultLayer = layerStore.getLayers()[0] ?? layerStore.ensureDefaultLayer();
-  const activeLayer = layerStore.getActiveLayer() ?? defaultLayer;
-  appState.currentActiveLayerId = activeLayer.id;
-
-  shapeStore.replaceFromSerialized(project.shapes);
-  for (const shape of shapeStore.getShapes()) {
-    if (!shape.layerId || !layerStore.getLayerById(shape.layerId)) {
-      shape.layerId = defaultLayer.id;
-    }
-  }
+  migrateLayeredSnapshot({
+    layers: project.layers,
+    activeLayerId: project.activeLayerId ?? project.currentActiveLayerId,
+    shapes: project.shapes,
+  });
 
   historyStore.undoStack = [];
   historyStore.redoStack = [];
@@ -1052,8 +1031,7 @@ redoButton.addEventListener("click", redo);
 newLayerButton?.addEventListener("click", () => {
   pushHistoryState();
   const layer = layerStore.createLayer();
-  layerStore.setActiveLayer(layer.id);
-  appState.currentActiveLayerId = layer.id;
+  appState.activeLayerId = layer.id;
 });
 
 snapGridToggle.addEventListener("change", (event) => {
@@ -1245,6 +1223,7 @@ restoreAutosaveIfAvailable();
 updateControlsFromState();
 
 function frame() {
+  enforceLayerInvariants();
   renderLayersPanel();
   queueAutosave();
   renderer.renderFrame();

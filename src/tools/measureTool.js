@@ -27,7 +27,7 @@ export class MeasureTool extends BaseTool {
       return;
     }
 
-    historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(
       new Measurement({
         layerId: activeLayer.id,
@@ -55,7 +55,7 @@ export class MeasureTool extends BaseTool {
     }
 
     const layer = this.context.layerStore.getActiveLayer();
-    if (!layer || layer.visible === false) {
+    if (!layer || layer.visible === false || layer.locked === true) {
       this.context.appState.previewShape = null;
       return;
     }

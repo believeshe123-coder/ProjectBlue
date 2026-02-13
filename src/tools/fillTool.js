@@ -165,7 +165,7 @@ export class FillTool extends BaseTool {
       .find((shape) => shape.layerId === activeLayer.id && shape.visible !== false && shape.locked !== true && isPolygonShape(shape) && shape.containsPoint(worldPoint));
 
     if (target) {
-      historyStore.pushState(shapeStore.serialize());
+      this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
       target.fillColor = clickFillColor;
       target.fillAlpha = 1;
       target.fillOpacity = 1;
@@ -173,7 +173,7 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    const lines = shapes.filter((shape) => shape.layerId === activeLayer.id && shape.visible !== false && isLineShape(shape));
+    const lines = shapes.filter((shape) => shape.layerId === activeLayer.id && shape.visible !== false && shape.locked !== true && isLineShape(shape));
     const eps = 2 / Math.max(camera.zoom, 1e-6);
     const graph = buildLineGraph(lines, eps);
     const cycles = findCycles(graph);
@@ -195,7 +195,7 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
 
     const polygon = new PolygonShape({
       layerId: activeLayer.id,
