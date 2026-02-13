@@ -11,6 +11,8 @@
   --button-hover: #ffffff;
   --button-active: #e5effe;
   --button-active-border: #9ab7ec;
+  --swatch-size: 22px;
+  --swatch-gap: 6px;
 }
 
 * {
@@ -194,7 +196,8 @@ body {
 
 .style-tray {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  padding: 2px;
 }
 
 .color-chips {
@@ -214,9 +217,12 @@ body {
 .color-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   flex: 1;
   text-align: left;
+  min-height: 40px;
+  padding: 8px 10px;
 }
 
 .color-chip--active {
@@ -238,8 +244,9 @@ body {
 }
 
 .palette-add {
-  width: 28px;
-  font-size: 16px;
+  width: 32px;
+  min-height: 40px;
+  font-size: 18px;
   line-height: 1;
   color: #475569;
 }
@@ -257,18 +264,15 @@ body {
 
 .swatch-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--swatch-size), 1fr));
+  gap: var(--swatch-gap);
 }
 
 .swatch {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  min-height: 14px;
-  border: 1px solid rgba(0, 0, 0, 0.18);
+  width: var(--swatch-size);
+  height: var(--swatch-size);
   border-radius: 6px;
-  min-width: 38px;
-  min-height: 38px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
   background: var(--swatch, #f4f4f4);
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -276,14 +280,31 @@ body {
 
 .swatch:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 .swatch.active {
-  outline: 2px solid #8eb0ea;
+  outline: 2px solid #4a90e2;
   outline-offset: 1px;
 }
 
+
+.recent-colors label {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.recent-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.recent-row .swatch {
+  width: var(--swatch-size);
+  height: var(--swatch-size);
+}
 .style-controls-inline {
   display: grid;
   grid-template-columns: repeat(3, minmax(70px, 1fr)) auto;
