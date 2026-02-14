@@ -59,7 +59,8 @@ export class Renderer {
     }
 
     const shapes = zSorted(this.shapeStore.getShapes().filter((shape) => shape.visible !== false));
-    const selectionSet = this.appState.selectionSet ?? new Set();
+    const selectedIds = Array.isArray(this.appState.selectedIds) ? this.appState.selectedIds : [];
+    const selectionSet = new Set(selectedIds);
     const measurementMode = this.appState.measurementMode ?? "smart";
     const currentlyDrawing = !!this.appState.previewShape;
     const shouldHideMeasurements = measurementMode === "off";
@@ -128,9 +129,11 @@ export class Renderer {
     for (const measurement of measurements) measurement.draw(this.ctx, this.camera, this.appState);
     for (const other of others) other.draw(this.ctx, this.camera, this.appState);
 
-    for (const polygon of polygons) polygon.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
-    for (const line of lines) line.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
-    for (const other of others) other.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
+    for (const id of selectedIds) {
+      const selectedShape = this.shapeStore.getShapeById(id);
+      if (!selectedShape || selectedShape.visible === false) continue;
+      selectedShape.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
+    }
 
     if (this.appState.previewShape) {
       this.appState.previewShape.draw(this.ctx, this.camera, {

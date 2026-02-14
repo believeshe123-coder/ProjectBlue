@@ -25,6 +25,10 @@
           <button class="menu-item" id="menuEditBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuEditDropdown">Edit</button>
           <div class="menu-dropdown" id="menuEditDropdown" role="menu" aria-label="Edit menu" data-open="false">
             <div class="menu-section">
+              <div class="menu-title">Groups</div>
+              <button id="clear-groups-btn" class="menu-link-btn" type="button">Clear All Groups</button>
+            </div>
+            <div class="menu-section">
               <div class="menu-title">Canvas</div>
               <label class="field-block" for="canvas-theme-select"><span>Theme</span><select id="canvas-theme-select" class="scale-input"></select></label>
               <label class="field-inline" for="custom-bg-color-picker"><span>Background color</span><input id="custom-bg-color-picker" type="color" value="#3e6478" /></label>
@@ -103,6 +107,18 @@
             <button id="save-group-btn" class="menu-link-btn" type="button">Save Group</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="selection-bar" class="selection-bar" hidden>
+      <div id="selection-bar-count" class="selection-bar-count">Selection (0)</div>
+      <label class="selection-bar-keep"><input id="selection-keep-checkbox" type="checkbox" /> Keep selecting</label>
+      <div class="selection-bar-actions">
+        <button id="selection-done-btn" class="menu-link-btn" type="button">Done</button>
+        <button id="selection-clear-btn" class="menu-link-btn" type="button">Clear</button>
+        <button id="selection-delete-btn" class="menu-link-btn" type="button">Delete</button>
+        <button id="selection-group-btn" class="menu-link-btn" type="button">Group</button>
+        <button id="selection-ungroup-btn" class="menu-link-btn" type="button">Ungroup</button>
       </div>
     </div>
 

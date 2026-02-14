@@ -17,6 +17,10 @@ function getSelectionSet(appState) {
   return appState.selectionSet instanceof Set ? appState.selectionSet : new Set();
 }
 
+function getSelectedIds(appState) {
+  return Array.isArray(appState.selectedIds) ? appState.selectedIds : [];
+}
+
 export class SelectTool extends BaseTool {
   constructor(context) {
     super(context);
@@ -33,48 +37,45 @@ export class SelectTool extends BaseTool {
     if (this.context.canvas) this.context.canvas.style.cursor = "default";
   }
 
-  onMouseDown({ event, worldPoint, screenPoint }) {
+  onMouseDown({ worldPoint, screenPoint }) {
     const { shapeStore, camera, appState } = this.context;
     const toleranceWorld = 8 / camera.zoom;
     const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
-    const isCtrl = event.ctrlKey || event.metaKey;
     const selectionSet = getSelectionSet(appState);
+    const keepSelecting = appState.keepSelecting === true;
 
     if (!hit) {
-      if (!isCtrl) {
+      if (!keepSelecting) {
         appState.clearSelection?.();
       }
       this.marqueeState = {
         startWorld: { ...worldPoint },
         startScreen: { ...screenPoint },
-        ctrlToggle: isCtrl,
       };
       return;
     }
 
-    const hitWasSelected = selectionSet.has(hit.id);
-    if (isCtrl) {
-      if (hitWasSelected) appState.removeFromSelection?.(hit.id);
-      else appState.addToSelection?.(hit.id);
+    const targetId = shapeStore.getSelectionTargetId(hit.id) ?? hit.id;
+    const hitWasSelected = selectionSet.has(targetId);
+    if (keepSelecting) {
+      if (hitWasSelected) appState.removeFromSelection?.(targetId);
+      else appState.addToSelection?.(targetId);
     } else if (!hitWasSelected || selectionSet.size > 1) {
-      appState.setSelection?.([hit.id], hit.id);
+      appState.setSelection?.([targetId], targetId);
     }
 
-    if (!isMovableShape(hit)) {
+    const moveShape = shapeStore.getShapeById(targetId) ?? hit;
+    if (!isMovableShape(moveShape)) {
       this.dragState = null;
       return;
     }
 
     this.dragState = {
-      shapeId: hit.id,
+      shapeId: moveShape.id,
       startMouseWorld: { ...worldPoint },
       didDrag: false,
       historyPushed: false,
     };
-
-    if (!isCtrl && hitWasSelected) {
-      appState.openSelectionPanel?.(screenPoint);
-    }
   }
 
   moveShape(shape, du, dv) {
@@ -92,7 +93,7 @@ export class SelectTool extends BaseTool {
     }
 
     if (shape.type === "group") {
-      const members = shape.memberIds
+      const members = shape.childIds
         .map((id) => this.context.shapeStore.getShapeById(id))
         .filter(Boolean);
       for (const member of members) this.moveShape(member, du, dv);
@@ -138,8 +139,13 @@ export class SelectTool extends BaseTool {
         }
       }
 
-      appState.setSelection?.([this.dragState.shapeId], this.dragState.shapeId);
-      this.moveShape(shape, du, dv);
+      const selectedIds = getSelectedIds(appState);
+      const dragIds = selectedIds.includes(this.dragState.shapeId) ? selectedIds : [this.dragState.shapeId];
+      const moveTargets = shapeStore.getShapeTargetsForMove(dragIds);
+      for (const target of moveTargets) {
+        if (!isMovableShape(target)) continue;
+        this.moveShape(target, du, dv);
+      }
       this.dragState.startMouseWorld = { ...worldPoint };
 
       if (canvas) canvas.style.cursor = "grabbing";
@@ -162,7 +168,7 @@ export class SelectTool extends BaseTool {
       };
       const hitShapes = shapeStore.getShapesIntersectingRect(rect);
       const hitIds = hitShapes.map((shape) => shape.id);
-      if (this.marqueeState.ctrlToggle) {
+      if (appState.keepSelecting === true) {
         for (const id of hitIds) {
           if (appState.selectionSet.has(id)) appState.removeFromSelection?.(id);
           else appState.addToSelection?.(id);

@@ -455,3 +455,46 @@ body {
   display: grid;
   gap: 8px;
 }
+
+
+.selection-bar {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: rgba(20, 30, 40, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  z-index: 2500;
+  color: #e2e8f0;
+}
+
+.selection-bar-count {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 120px;
+}
+
+.selection-bar-keep {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.selection-bar-keep input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: #6d94d9;
+}
+
+.selection-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
