@@ -434,3 +434,24 @@ body {
   border: 0;
 }
 
+
+.selection-count {
+  min-height: 18px;
+  font-size: 11px;
+  color: #475569;
+}
+
+.selection-panel {
+  position: absolute;
+  right: 12px;
+  top: 44px;
+  width: 220px;
+  z-index: 1500;
+  background: rgba(245, 244, 242, 0.98);
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}

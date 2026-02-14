@@ -16,6 +16,7 @@ export class Renderer {
 
   renderFrame() {
     this.ensureCanvasSize?.();
+    this.appState.shapeStore = this.shapeStore;
 
     const { canvasCssW, canvasCssH, currentDpr } = this.getCanvasMetrics();
 
@@ -25,6 +26,18 @@ export class Renderer {
       gridColor: this.appState.theme?.gridColor,
     });
 
+
+
+    if (this.appState.marqueeRect) {
+      const { x, y, width, height } = this.appState.marqueeRect;
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(79, 153, 255, 0.16)";
+      this.ctx.strokeStyle = "rgba(79, 153, 255, 0.9)";
+      this.ctx.lineWidth = 1;
+      this.ctx.fillRect(x, y, width, height);
+      this.ctx.strokeRect(x, y, width, height);
+      this.ctx.restore();
+    }
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
       const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);
@@ -46,19 +59,16 @@ export class Renderer {
     }
 
     const shapes = zSorted(this.shapeStore.getShapes().filter((shape) => shape.visible !== false));
-    const selectedId = this.appState.selected?.id;
+    const selectionSet = this.appState.selectionSet ?? new Set();
     const measurementMode = this.appState.measurementMode ?? "smart";
     const currentlyDrawing = !!this.appState.previewShape;
     const shouldHideMeasurements = measurementMode === "off";
 
     const polygons = shapes.filter((shape) => shape.type === "polygon-shape");
-    const fillRegions = shapes.filter((shape) => shape.type === "fill-region");
     const lines = shapes.filter((shape) => shape.type === "line");
     const measurements = shapes.filter((shape) => shape.type === "measurement");
-    const others = shapes.filter((shape) => !["polygon-shape", "fill-region", "line", "measurement"].includes(shape.type));
+    const others = shapes.filter((shape) => !["polygon-shape", "line", "measurement"].includes(shape.type));
 
-    for (const fillRegion of fillRegions) fillRegion.draw?.(this.ctx, this.camera, this.appState);
-    for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
     for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
     for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
 
@@ -66,15 +76,15 @@ export class Renderer {
       if (measurementMode === "on") {
         for (const polygon of polygons) polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
         for (const line of lines) line.drawDimensions?.(this.ctx, this.camera, this.appState);
-      } else if (measurementMode === "smart" && selectedId) {
+      } else if (measurementMode === "smart" && selectionSet.size > 0) {
         for (const polygon of polygons) {
-          if (polygon.id === selectedId) {
+          if (selectionSet.has(polygon.id)) {
             polygon.drawDimensions?.(this.ctx, this.camera, this.appState);
           }
         }
 
         for (const line of lines) {
-          if (line.id === selectedId) {
+          if (selectionSet.has(line.id)) {
             line.drawDimensions?.(this.ctx, this.camera, this.appState);
           }
         }
@@ -120,6 +130,7 @@ export class Renderer {
 
     for (const polygon of polygons) polygon.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
     for (const line of lines) line.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
+    for (const other of others) other.drawSelectionOverlay?.(this.ctx, this.camera, this.appState);
 
     if (this.appState.previewShape) {
       this.appState.previewShape.draw(this.ctx, this.camera, {
@@ -127,6 +138,18 @@ export class Renderer {
         currentlyDrawing,
         forceMeasurements: measurementMode !== "off",
       });
+    }
+
+
+    if (this.appState.marqueeRect) {
+      const { x, y, width, height } = this.appState.marqueeRect;
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(79, 153, 255, 0.16)";
+      this.ctx.strokeStyle = "rgba(79, 153, 255, 0.9)";
+      this.ctx.lineWidth = 1;
+      this.ctx.fillRect(x, y, width, height);
+      this.ctx.strokeRect(x, y, width, height);
+      this.ctx.restore();
     }
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {

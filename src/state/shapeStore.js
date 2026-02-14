@@ -1,13 +1,11 @@
 import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
-import { FillRegion } from "../models/fillRegion.js";
+import { GroupShape } from "../models/groupShape.js";
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") return new Line(serialized);
-
   if (serialized.type === "polygon-shape") return PolygonShape.fromJSON(serialized);
-
   if (serialized.type === "polygon") {
     return new PolygonShape({
       ...serialized,
@@ -15,11 +13,8 @@ function hydrateShape(serialized) {
       fillAlpha: serialized.fillOpacity ?? serialized.fillAlpha ?? 1,
     });
   }
-
   if (serialized.type === "measurement") return new Measurement(serialized);
-
-  if (serialized.type === "fill-region") return new FillRegion(serialized);
-
+  if (serialized.type === "group") return new GroupShape(serialized);
   return null;
 }
 
@@ -40,19 +35,12 @@ export class ShapeStore {
     return true;
   }
 
+  getShapeById(id) {
+    return this.shapes.find((shape) => shape.id === id) ?? null;
+  }
+
   clearSelection() {
     for (const shape of this.shapes) shape.selected = false;
-  }
-
-  getSelectedShapes() {
-    return this.shapes.filter((shape) => shape.selected);
-  }
-
-  deleteSelectedShapes() {
-    const selectedIds = new Set(this.getSelectedShapes().map((shape) => shape.id));
-    const before = this.shapes.length;
-    this.shapes = this.shapes.filter((shape) => !selectedIds.has(shape.id));
-    return before - this.shapes.length;
   }
 
   getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false } = {}) {
@@ -60,6 +48,7 @@ export class ShapeStore {
       .map((shape, index) => ({ shape, index }))
       .filter(({ shape }) => {
         if (!includeLocked && shape.locked === true) return false;
+        if (shape.parentGroupId) return false;
         return shape.visible !== false;
       })
       .sort((a, b) => {
@@ -68,7 +57,61 @@ export class ShapeStore {
         return a.index - b.index;
       })
       .reverse()
-      .find(({ shape }) => shape.containsPoint(point, toleranceWorld))?.shape ?? null;
+      .find(({ shape }) => this.shapeContainsPoint(shape, point, toleranceWorld))?.shape ?? null;
+  }
+
+  shapeContainsPoint(shape, point, toleranceWorld = 6) {
+    if (shape.type === "group") {
+      const bounds = this.getShapeBounds(shape);
+      if (!bounds) return false;
+      return point.x >= bounds.minX - toleranceWorld
+        && point.x <= bounds.maxX + toleranceWorld
+        && point.y >= bounds.minY - toleranceWorld
+        && point.y <= bounds.maxY + toleranceWorld;
+    }
+
+    return shape.containsPoint(point, toleranceWorld);
+  }
+
+  getShapeBounds(shape) {
+    if (!shape) return null;
+
+    if (shape.type === "line") {
+      return {
+        minX: Math.min(shape.start.x, shape.end.x),
+        minY: Math.min(shape.start.y, shape.end.y),
+        maxX: Math.max(shape.start.x, shape.end.x),
+        maxY: Math.max(shape.start.y, shape.end.y),
+      };
+    }
+
+    if (shape.type === "polygon-shape") {
+      return shape.getBounds();
+    }
+
+    if (shape.type === "group") {
+      const memberBounds = shape.memberIds
+        .map((id) => this.getShapeBounds(this.getShapeById(id)))
+        .filter(Boolean);
+      if (!memberBounds.length) return null;
+      return {
+        minX: Math.min(...memberBounds.map((b) => b.minX)),
+        minY: Math.min(...memberBounds.map((b) => b.minY)),
+        maxX: Math.max(...memberBounds.map((b) => b.maxX)),
+        maxY: Math.max(...memberBounds.map((b) => b.maxY)),
+      };
+    }
+
+    return null;
+  }
+
+  getShapesIntersectingRect(rect) {
+    return this.shapes.filter((shape) => {
+      if (shape.visible === false || shape.locked === true || shape.parentGroupId) return false;
+      const bounds = this.getShapeBounds(shape);
+      if (!bounds) return false;
+      return !(bounds.maxX < rect.minX || bounds.minX > rect.maxX || bounds.maxY < rect.minY || bounds.minY > rect.maxY);
+    });
   }
 
   getShapes() {
