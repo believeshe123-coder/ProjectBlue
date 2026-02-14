@@ -1,9 +1,18 @@
 import { Shape } from "./shape.js";
 
 export class GroupShape extends Shape {
-  constructor({ id, memberIds = [], fillColor, ...rest }) {
-    super({ id, ...rest, type: "group", fillColor: fillColor ?? "#4aa3ff", fillEnabled: false, fillOpacity: 0 });
-    this.memberIds = Array.isArray(memberIds) ? [...memberIds] : [];
+  constructor({ id, childIds = [], memberIds = [], fillColor, ...rest }) {
+    super({
+      id,
+      ...rest,
+      type: "group",
+      fillColor: fillColor ?? "#4aa3ff",
+      fillEnabled: false,
+      fillOpacity: 0,
+      groupId: null,
+    });
+    const normalized = Array.isArray(childIds) ? childIds : memberIds;
+    this.childIds = Array.isArray(normalized) ? [...normalized] : [];
   }
 
   draw(_ctx, _camera, _appState = {}) {}
@@ -31,7 +40,7 @@ export class GroupShape extends Shape {
   toJSON() {
     return {
       ...super.toJSON(),
-      memberIds: [...this.memberIds],
+      childIds: [...this.childIds],
     };
   }
 }

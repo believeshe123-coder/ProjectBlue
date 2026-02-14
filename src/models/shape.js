@@ -16,6 +16,7 @@ export class Shape {
     locked = false,
     zIndex = 0,
     selected = false,
+    groupId = null,
   }) {
     this.id = id ?? `shape_${shapeCounter++}`;
     this.type = type ?? "shape";
@@ -32,6 +33,7 @@ export class Shape {
     this.locked = locked;
     this.zIndex = Number.isFinite(zIndex) ? zIndex : 0;
     this.selected = selected;
+    this.groupId = groupId ?? null;
   }
 
   draw(_ctx, _camera) {
@@ -58,6 +60,7 @@ export class Shape {
       locked: this.locked,
       zIndex: this.zIndex,
       selected: this.selected,
+      groupId: this.groupId,
     };
   }
 }
