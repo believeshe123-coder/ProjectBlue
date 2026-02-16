@@ -102,6 +102,7 @@ const shapeStore = new ShapeStore();
 const historyStore = new HistoryStore();
 
 const appState = {
+  activeTool: "select",
   currentMode: "ISO",
   previewShape: null,
   snapIndicator: null,
@@ -155,6 +156,7 @@ const canvasEngine = new CanvasEngine({
   canvasWrap,
   camera,
   getTool: () => currentTool,
+  getToolName: () => getCurrentToolName(),
   onViewChange: refreshStatus,
 });
 
@@ -307,17 +309,28 @@ function setActiveTool(toolName) {
   if (!tools[normalizedToolName]) return;
   currentTool.onDeactivate();
   currentTool = tools[normalizedToolName];
+  appState.activeTool = normalizedToolName;
   currentTool.onActivate();
+
+  if (normalizedToolName === "fill") {
+    console.log("[UI] Fill button clicked -> activating fill tool");
+  }
 
   document.querySelectorAll('.tool-grid [data-tool]').forEach((button) => {
     button.classList.toggle("active", button.dataset.tool === normalizedToolName);
   });
+  refreshStatus();
   updateSelectionBar();
 }
 
 function getCurrentToolName() {
-  const entry = Object.entries(tools).find(([, tool]) => tool === currentTool);
-  return entry?.[0] ?? "select";
+  return appState.activeTool ?? "select";
+}
+
+function getToolStatusLabel() {
+  const toolName = getCurrentToolName();
+  if (toolName === "iso-line") return "Line";
+  return toolName.charAt(0).toUpperCase() + toolName.slice(1);
 }
 
 function getSnapStatusLabel() {
@@ -350,7 +363,7 @@ function refreshStatus() {
   }
 
   const polygonCount = shapeStore.getShapes().filter((shape) => shape.type === "polygon" && shape.visible !== false).length;
-  statusEl.textContent = `Mode: ISO | Zoom: ${camera.zoom.toFixed(2)}x | polygons: ${polygonCount} | ${getSnapStatusLabel()}`;
+  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | polygons: ${polygonCount} | ${getSnapStatusLabel()}`;
 }
 
 appState.setSelection = setSelection;
@@ -946,7 +959,9 @@ function deleteSelectedSavedTheme() {
 }
 
 for (const button of document.querySelectorAll('.tool-grid [data-tool]')) {
-  button.addEventListener("click", () => setActiveTool(button.dataset.tool));
+  button.addEventListener("click", () => {
+    setActiveTool(button.dataset.tool);
+  });
 }
 
 menuFileButton?.addEventListener("click", (event) => {
