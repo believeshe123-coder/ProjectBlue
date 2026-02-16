@@ -212,6 +212,29 @@ export function isPointInPolygonUV(point, polygon) {
   return inside;
 }
 
+function isPointStrictlyInPolygonUV(point, polygon) {
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    if (pointOnSegmentUv(point, polygon[j], polygon[i])) return false;
+  }
+
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const pi = polygon[i];
+    const pj = polygon[j];
+    const intersects =
+      pi.v > point.v !== pj.v > point.v
+      && point.u < ((pj.u - pi.u) * (point.v - pi.v)) / ((pj.v - pi.v) || EPS) + pi.u;
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
+}
+
+function regionFullyContainsRegion(containerRegion, nestedRegion) {
+  if (containerRegion.id === nestedRegion.id) return false;
+  return nestedRegion.uvCycle.every((point) => isPointInPolygonUV(point, containerRegion.uvCycle));
+}
+
 export function buildRegionsFromLines(lines) {
   const { vertices, undirectedEdges } = buildSplitGraph(lines);
   if (!undirectedEdges.size) return { boundedFaces: [], debug: { totalEdges: 0, totalVertices: vertices.size, totalRegions: 0, outerArea: 0 } };
@@ -327,8 +350,28 @@ export function buildRegionsFromLines(lines) {
 }
 
 export function findSmallestRegionContainingPoint(regions, pointUV) {
-  const containing = regions.filter((region) => isPointInPolygonUV(pointUV, region.uvCycle));
-  if (!containing.length) return null;
-  containing.sort((a, b) => Math.abs(a.area) - Math.abs(b.area));
-  return containing[0];
+  const boundedRegions = regions.filter((region) => Array.isArray(region?.uvCycle) && region.uvCycle.length >= 3);
+  const candidateRegions = boundedRegions.filter((region) => isPointStrictlyInPolygonUV(pointUV, region.uvCycle));
+  console.debug("[FillTool] candidate region ids:", candidateRegions.map((region) => region.id));
+
+  if (!candidateRegions.length) {
+    console.debug("[FillTool] eliminated parent regions:", []);
+    console.debug("[FillTool] final selected region id:", null);
+    return null;
+  }
+
+  const eliminatedParentRegions = [];
+  const filteredRegions = candidateRegions.filter((candidate) => {
+    const isParent = candidateRegions.some((other) => regionFullyContainsRegion(candidate, other));
+    if (isParent) eliminatedParentRegions.push(candidate.id);
+    return !isParent;
+  });
+
+  console.debug("[FillTool] eliminated parent regions:", eliminatedParentRegions);
+
+  const pool = filteredRegions.length ? filteredRegions : candidateRegions;
+  pool.sort((a, b) => Math.abs(a.area) - Math.abs(b.area));
+  const selected = pool[0] ?? null;
+  console.debug("[FillTool] final selected region id:", selected?.id ?? null);
+  return selected;
 }
