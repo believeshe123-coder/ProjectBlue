@@ -10,6 +10,8 @@ import { PolylineTool } from "./tools/polylineTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
 import { GroupShape } from "./models/groupShape.js";
+import { FaceShape } from "./models/faceShape.js";
+import { isoUVToWorld } from "./core/isoGrid.js";
 
 const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
@@ -59,6 +61,13 @@ const selectionClearButton = document.getElementById("selection-clear-btn");
 const selectionDeleteButton = document.getElementById("selection-delete-btn");
 const selectionGroupButton = document.getElementById("selection-group-btn");
 const selectionUngroupButton = document.getElementById("selection-ungroup-btn");
+const selectionZFrontButton = document.getElementById("selection-z-front-btn");
+const selectionZForwardButton = document.getElementById("selection-z-forward-btn");
+const selectionZBackwardButton = document.getElementById("selection-z-backward-btn");
+const selectionZBackButton = document.getElementById("selection-z-back-btn");
+const regionSelectToggleButton = document.getElementById("region-select-toggle-btn");
+const regionConvertFaceButton = document.getElementById("region-convert-face-btn");
+const regionClearSelectionButton = document.getElementById("region-clear-selection-btn");
 
 const menuFileButton = document.getElementById("menuFileBtn");
 const menuFileDropdown = document.getElementById("menuFileDropdown");
@@ -124,6 +133,8 @@ const appState = {
   selectionSet: new Set(),
   selectedIds: [],
   keepSelecting: false,
+  regionSelectMode: false,
+  selectedRegionKey: null,
   lastSelectedId: null,
   marqueeRect: null,
   selectionPanelOpen: false,
@@ -368,7 +379,8 @@ function refreshStatus() {
   }
 
   const regionCount = shapeStore.getComputedRegions().length;
-  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | regions: ${regionCount} boundedFaces: ${regionCount} | ${getSnapStatusLabel()}`;
+  const regionStatus = appState.selectedRegionKey ? " | Region Selected" : "";
+  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | regions: ${regionCount} boundedFaces: ${regionCount}${regionStatus} | ${getSnapStatusLabel()}`;
 }
 
 appState.setSelection = setSelection;
@@ -457,6 +469,8 @@ function undo() {
   if (!previous) return;
   applySnapshot(previous);
   appState.previewShape = null;
+  appState.regionSelectMode = false;
+  appState.selectedRegionKey = null;
   clearSelectionState();
 }
 
@@ -465,6 +479,8 @@ function redo() {
   if (!next) return;
   applySnapshot(next);
   appState.previewShape = null;
+  appState.regionSelectMode = false;
+  appState.selectedRegionKey = null;
   clearSelectionState();
 }
 
@@ -522,14 +538,34 @@ function isSingleSelectedGroup() {
 
 function updateSelectionBar() {
   if (!selectionBar) return;
-  const shouldShow = getCurrentToolName() === "select" && appState.selectedIds.length > 0;
+  const shouldShow = getCurrentToolName() === "select"
+    && (appState.selectedIds.length > 0 || appState.selectedRegionKey || appState.regionSelectMode === true);
   selectionBar.hidden = !shouldShow;
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.length})`;
   if (selectionKeepCheckbox) selectionKeepCheckbox.checked = appState.keepSelecting === true;
   if (selectionGroupButton) selectionGroupButton.disabled = !canGroupSelection();
   if (selectionUngroupButton) selectionUngroupButton.hidden = !isSingleSelectedGroup();
   if (selectionUngroupButton) selectionUngroupButton.disabled = !isSingleSelectedGroup();
+  const hasSelection = appState.selectedIds.length > 0;
+  if (selectionZFrontButton) selectionZFrontButton.disabled = !hasSelection;
+  if (selectionZForwardButton) selectionZForwardButton.disabled = !hasSelection;
+  if (selectionZBackwardButton) selectionZBackwardButton.disabled = !hasSelection;
+  if (selectionZBackButton) selectionZBackButton.disabled = !hasSelection;
+  if (regionSelectToggleButton) {
+    regionSelectToggleButton.textContent = `Region Select: ${appState.regionSelectMode ? "ON" : "OFF"}`;
+  }
+  const hasRegion = !!appState.selectedRegionKey;
+  if (regionConvertFaceButton) {
+    regionConvertFaceButton.hidden = !hasRegion;
+    regionConvertFaceButton.disabled = !hasRegion;
+  }
+  if (regionClearSelectionButton) {
+    regionClearSelectionButton.hidden = !hasRegion;
+    regionClearSelectionButton.disabled = !hasRegion;
+  }
 }
+
+appState.updateSelectionBar = updateSelectionBar;
 
 function updateSelectedFlags() {
   const ids = appState.selectionSet;
@@ -567,6 +603,7 @@ function clearSelectionState() {
   appState.selectedIds = [];
   appState.selectionSet = new Set();
   appState.lastSelectedId = null;
+  appState.selectedRegionKey = null;
   shapeStore.clearSelection();
   updateSelectedFlags();
 }
@@ -643,6 +680,74 @@ function clearAllGroups() {
   clearSelectionState();
 }
 
+function reorderSelectionZ(mode) {
+  if (!appState.selectedIds.length) return;
+  const before = getSnapshot();
+  const didChange = shapeStore.reorderSelectionZ(appState.selectedIds, mode);
+  if (!didChange) return;
+  historyStore.pushState(before);
+  const statusByMode = {
+    front: "Brought to front",
+    forward: "Brought forward",
+    backward: "Sent backward",
+    back: "Sent to back",
+  };
+  appState.notifyStatus?.(statusByMode[mode] ?? "Reordered");
+}
+
+function toggleRegionSelectMode() {
+  appState.regionSelectMode = !appState.regionSelectMode;
+  if (!appState.regionSelectMode) {
+    appState.selectedRegionKey = null;
+  }
+  updateSelectionBar();
+}
+
+function clearRegionSelection() {
+  appState.selectedRegionKey = null;
+  updateSelectionBar();
+}
+
+function convertSelectedRegionToFace() {
+  const regionKey = appState.selectedRegionKey;
+  if (!regionKey) return;
+
+  const existingFace = shapeStore.getShapes().find((shape) => shape.type === "face" && shape.regionKey === regionKey);
+  if (existingFace) {
+    setSelection([existingFace.id], existingFace.id);
+    appState.selectedRegionKey = null;
+    appState.notifyStatus?.("Face already exists", 1500);
+    return;
+  }
+
+  const region = shapeStore.getComputedRegions().find((entry) => entry.id === regionKey);
+  if (!region?.uvCycle || region.uvCycle.length < 3) {
+    appState.notifyStatus?.("Region no longer available", 1800);
+    return;
+  }
+
+  const sourceFill = shapeStore.getShapes().find((shape) => shape.type === "fillRegion" && shape.regionId === region.id);
+  if (!sourceFill) {
+    appState.notifyStatus?.("Region is not filled", 1600);
+    return;
+  }
+
+  const maxZ = shapeStore.getShapes().reduce((max, shape) => Math.max(max, shape.zIndex ?? 0), 0);
+  const face = new FaceShape({
+    pointsWorld: region.uvCycle.map((point) => isoUVToWorld(point.u, point.v)),
+    fillColor: sourceFill.color ?? sourceFill.fillColor ?? "#4aa3ff",
+    fillAlpha: sourceFill.alpha ?? sourceFill.fillOpacity ?? 1,
+    zIndex: maxZ + 1,
+    regionKey,
+  });
+
+  pushHistoryState();
+  shapeStore.addShape(face);
+  setSelection([face.id], face.id);
+  appState.selectedRegionKey = null;
+  appState.notifyStatus?.("Converted to Face", 1600);
+}
+
 function buildProjectData() {
   return {
     version: 1,
@@ -714,6 +819,8 @@ function applyProjectData(project, { announce = true } = {}) {
   historyStore.undoStack = [];
   historyStore.redoStack = [];
   appState.previewShape = null;
+  appState.regionSelectMode = false;
+  appState.selectedRegionKey = null;
   clearSelectionState();
   const toolName = normalizeToolName(settings.lastTool || "select");
   setActiveTool(tools[toolName] ? toolName : "select");
@@ -1180,6 +1287,14 @@ selectionUngroupButton?.addEventListener("click", () => {
   updateSelectionBar();
 });
 
+selectionZFrontButton?.addEventListener("click", () => reorderSelectionZ("front"));
+selectionZForwardButton?.addEventListener("click", () => reorderSelectionZ("forward"));
+selectionZBackwardButton?.addEventListener("click", () => reorderSelectionZ("backward"));
+selectionZBackButton?.addEventListener("click", () => reorderSelectionZ("back"));
+regionSelectToggleButton?.addEventListener("click", toggleRegionSelectMode);
+regionConvertFaceButton?.addEventListener("click", convertSelectedRegionToFace);
+regionClearSelectionButton?.addEventListener("click", clearRegionSelection);
+
 paletteColorButton?.addEventListener("click", () => {
   customColorPicker?.click();
 });
@@ -1216,11 +1331,19 @@ unitNameInput.addEventListener("change", (event) => {
   refreshScaleDisplay();
 });
 
+function isTypingInInput(event) {
+  const target = event.target;
+  if (!target) return false;
+  const tagName = target.tagName?.toLowerCase();
+  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
+}
+
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeAllMenus();
     closeSelectionPanel();
     appState.keepSelecting = false;
+    appState.selectedRegionKey = null;
     clearSelectionState();
   }
 
@@ -1237,6 +1360,32 @@ window.addEventListener("keydown", (event) => {
     event.preventDefault();
     redo();
     return;
+  }
+
+  if (!isTypingInInput(event)) {
+    if (event.key === "]" && event.shiftKey) {
+      event.preventDefault();
+      reorderSelectionZ("front");
+      return;
+    }
+
+    if (event.key === "[" && event.shiftKey) {
+      event.preventDefault();
+      reorderSelectionZ("back");
+      return;
+    }
+
+    if (event.key === "]") {
+      event.preventDefault();
+      reorderSelectionZ("forward");
+      return;
+    }
+
+    if (event.key === "[") {
+      event.preventDefault();
+      reorderSelectionZ("backward");
+      return;
+    }
   }
 
   if (event.key === "+" || event.key === "=") {

@@ -1,8 +1,9 @@
 import { BaseTool } from "./baseTool.js";
-import { worldToIsoUV } from "../core/isoGrid.js";
+import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
+import { findSmallestRegionContainingPoint } from "../core/regionBuilder.js";
 
 function isMovableShape(shape) {
-  return shape && ["line", "polygon", "group"].includes(shape.type) && shape.locked !== true;
+  return shape && ["line", "polygon", "face", "group"].includes(shape.type) && shape.locked !== true;
 }
 
 function getStep(appState) {
@@ -43,10 +44,24 @@ export class SelectTool extends BaseTool {
     const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
     const selectionSet = getSelectionSet(appState);
     const keepSelecting = appState.keepSelecting === true;
+    const regionSelectMode = appState.regionSelectMode === true;
+
+    if (regionSelectMode && hit?.type !== "face") {
+      const clickUv = worldToIsoUV(worldPoint);
+      const hitRegion = findSmallestRegionContainingPoint(shapeStore.getComputedRegions(), clickUv);
+      if (hitRegion) {
+        appState.selectedRegionKey = hitRegion.id;
+        appState.setSelection?.([], null);
+        appState.updateSelectionBar?.();
+        return;
+      }
+    }
 
     if (!hit) {
+      appState.selectedRegionKey = null;
+      appState.updateSelectionBar?.();
       if (!keepSelecting) {
-        appState.clearSelection?.();
+        appState.setSelection?.([], null);
       }
       this.marqueeState = {
         startWorld: { ...worldPoint },
@@ -64,6 +79,8 @@ export class SelectTool extends BaseTool {
       appState.setSelection?.([targetId], targetId);
     }
 
+    appState.selectedRegionKey = null;
+    appState.updateSelectionBar?.();
     const moveShape = shapeStore.getShapeById(targetId) ?? hit;
     if (!isMovableShape(moveShape)) {
       this.dragState = null;
@@ -92,6 +109,14 @@ export class SelectTool extends BaseTool {
       return;
     }
 
+    if (shape.type === "face") {
+      const deltaWorld = isoUVToWorld(du, dv);
+      shape.pointsWorld = shape.pointsWorld.map((point) => ({
+        x: point.x + deltaWorld.x,
+        y: point.y + deltaWorld.y,
+      }));
+      return;
+    }
 
     if (shape.type === "group") {
       const members = shape.childIds
