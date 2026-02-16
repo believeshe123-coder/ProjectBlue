@@ -23,6 +23,7 @@ const snapGridToggle = document.getElementById("snap-grid-toggle");
 const snapMidToggle = document.getElementById("snap-mid-toggle");
 const debugSnapToggle = document.getElementById("debug-snap-toggle");
 const debugPolygonsToggle = document.getElementById("debug-polygons-toggle");
+const debugRegionsToggle = document.getElementById("debug-regions-toggle");
 const unitPerCellInput = document.getElementById("unit-per-cell");
 const unitNameInput = document.getElementById("unit-name");
 const scaleDisplay = document.getElementById("scale-display");
@@ -110,6 +111,7 @@ const appState = {
   snapToMidpoints: true,
   debugSnap: false,
   debugPolygons: false,
+  debugRegions: false,
   debugPolygonStrokeColor: "#ff3cf7",
   flashPolygonDebugOutlines: false,
   debugFillWorkflow: false,
@@ -366,7 +368,7 @@ function refreshStatus() {
   }
 
   const regionCount = shapeStore.getComputedRegions().length;
-  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | regions: ${regionCount} | ${getSnapStatusLabel()}`;
+  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | regions: ${regionCount} boundedFaces: ${regionCount} | ${getSnapStatusLabel()}`;
 }
 
 appState.setSelection = setSelection;
@@ -1054,6 +1056,11 @@ debugPolygonsToggle?.addEventListener("change", (event) => {
   localStorage.setItem("debugPolygons", appState.debugPolygons ? "1" : "0");
 });
 
+debugRegionsToggle?.addEventListener("change", (event) => {
+  appState.debugRegions = event.target.checked;
+  localStorage.setItem("debugRegions", appState.debugRegions ? "1" : "0");
+});
+
 continuePolylineToggle.addEventListener("change", (event) => {
   appState.continuePolyline = event.target.checked;
 });
@@ -1308,6 +1315,8 @@ appState.debugSnap = localStorage.getItem("debugSnap") === "1";
 debugSnapToggle.checked = appState.debugSnap;
 appState.debugPolygons = localStorage.getItem("debugPolygons") === "1";
 if (debugPolygonsToggle) debugPolygonsToggle.checked = appState.debugPolygons;
+appState.debugRegions = localStorage.getItem("debugRegions") === "1";
+if (debugRegionsToggle) debugRegionsToggle.checked = appState.debugRegions;
 showGridUnitsToggle.checked = appState.showGridUnits;
 updateMeasurementModeControl();
 updateEraseControls();

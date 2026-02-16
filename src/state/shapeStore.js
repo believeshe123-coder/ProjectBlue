@@ -18,6 +18,7 @@ export class ShapeStore {
   constructor() {
     this.shapes = [];
     this.cachedRegions = [];
+    this.cachedRegionDebug = { totalEdges: 0, totalVertices: 0, totalRegions: 0, outerArea: 0 };
     this.cachedLinesHash = "";
   }
 
@@ -42,8 +43,16 @@ export class ShapeStore {
     if (nextHash === this.cachedLinesHash) return this.cachedRegions;
 
     const lines = this.shapes.filter((shape) => shape.type === "line" && shape.visible !== false);
-    this.cachedRegions = buildRegionsFromLines(lines);
+    const regionResult = buildRegionsFromLines(lines);
+    this.cachedRegions = regionResult.boundedFaces;
+    this.cachedRegionDebug = regionResult.debug;
     this.cachedLinesHash = nextHash;
+    console.log("[RegionBuilder]", {
+      totalEdges: this.cachedRegionDebug.totalEdges,
+      totalVertices: this.cachedRegionDebug.totalVertices,
+      totalRegions: this.cachedRegionDebug.totalRegions,
+      outerArea: this.cachedRegionDebug.outerArea,
+    });
 
     const regionById = new Map(this.cachedRegions.map((region) => [region.id, region]));
     this.shapes = this.shapes.filter((shape) => {
@@ -55,6 +64,11 @@ export class ShapeStore {
     });
 
     return this.cachedRegions;
+  }
+
+  getRegionDebugStats() {
+    this.getComputedRegions();
+    return this.cachedRegionDebug;
   }
 
   addShape(shape) {
