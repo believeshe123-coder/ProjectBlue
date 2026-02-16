@@ -50,6 +50,34 @@ export class FillRegion extends Shape {
       .filter((contour) => contour.length >= 3);
 
     this.pointsWorld = this.contoursWorld[0] ? this.contoursWorld[0].map((point) => ({ ...point })) : [];
+    this.updateBounds();
+  }
+
+  updateBounds() {
+    if (!this.contoursWorld.length) {
+      this.bounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+      return;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const contour of this.contoursWorld) {
+      for (const point of contour) {
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+        maxX = Math.max(maxX, point.x);
+        maxY = Math.max(maxY, point.y);
+      }
+    }
+
+    this.bounds = { minX, minY, maxX, maxY };
+  }
+
+  getBounds() {
+    return { ...this.bounds };
   }
 
   setUVContours(contoursUV = []) {
@@ -121,6 +149,7 @@ export class FillRegion extends Shape {
       alpha: this.alpha,
       createdAt: this.createdAt,
       zIndex: this.zIndex,
+      bounds: { ...this.bounds },
     };
   }
 

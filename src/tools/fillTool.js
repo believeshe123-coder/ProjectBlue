@@ -1,6 +1,11 @@
 import { BaseTool } from "./baseTool.js";
 import { FillRegion } from "../models/fillRegion.js";
-import { worldToIsoUV } from "../core/isoGrid.js";
+import { getIsoSpacingWorld, worldToIsoUV } from "../core/isoGrid.js";
+import { traceContoursFromMask } from "../utils/marchingSquares.js";
+
+const MIN_PIXELS_PER_WORLD = 8;
+const MAX_PIXELS_PER_WORLD = 32;
+const MAX_OFFSCREEN_DIMENSION = 4096;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -68,86 +73,54 @@ function contourArea(points) {
   return area * 0.5;
 }
 
-function buildContoursFromMask(mask, width, height) {
-  const getMask = (x, y) => (x < 0 || y < 0 || x >= width || y >= height ? 0 : mask[y * width + x]);
-
-  const adjacency = new Map();
-  const addEdge = (ax, ay, bx, by) => {
-    const a = `${ax},${ay}`;
-    const b = `${bx},${by}`;
-    if (!adjacency.has(a)) adjacency.set(a, new Set());
-    if (!adjacency.has(b)) adjacency.set(b, new Set());
-    adjacency.get(a).add(b);
-    adjacency.get(b).add(a);
+function expandBounds(bounds, padding) {
+  return {
+    minX: bounds.minX - padding,
+    minY: bounds.minY - padding,
+    maxX: bounds.maxX + padding,
+    maxY: bounds.maxY + padding,
   };
+}
 
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      if (!getMask(x, y)) continue;
-      if (!getMask(x, y - 1)) addEdge(x, y, x + 1, y);
-      if (!getMask(x + 1, y)) addEdge(x + 1, y, x + 1, y + 1);
-      if (!getMask(x, y + 1)) addEdge(x + 1, y + 1, x, y + 1);
-      if (!getMask(x - 1, y)) addEdge(x, y + 1, x, y);
-    }
+function boundsFromPoints(points) {
+  if (!Array.isArray(points) || !points.length) return null;
+
+  let minX = points[0].x;
+  let minY = points[0].y;
+  let maxX = points[0].x;
+  let maxY = points[0].y;
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
   }
 
-  const visited = new Set();
-  const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
-  const parsePoint = (key) => {
-    const [x, y] = key.split(",").map(Number);
-    return { x, y };
+  return { minX, minY, maxX, maxY };
+}
+
+function unionBounds(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
   };
+}
 
-  const contours = [];
-  for (const [start, neighbors] of adjacency.entries()) {
-    for (const next of neighbors) {
-      const startEdge = edgeKey(start, next);
-      if (visited.has(startEdge)) continue;
-
-      const contour = [];
-      let previous = start;
-      let current = next;
-      contour.push(parsePoint(start));
-
-      visited.add(startEdge);
-
-      while (current !== start) {
-        contour.push(parsePoint(current));
-        const options = [...(adjacency.get(current) ?? [])].filter((node) => node !== previous);
-        if (!options.length) break;
-        let nextNode = options[0];
-        if (options.length > 1) {
-          const prevPoint = parsePoint(previous);
-          const currentPoint = parsePoint(current);
-          const incoming = { x: currentPoint.x - prevPoint.x, y: currentPoint.y - prevPoint.y };
-          let bestScore = Infinity;
-          for (const option of options) {
-            const optionPoint = parsePoint(option);
-            const outgoing = { x: optionPoint.x - currentPoint.x, y: optionPoint.y - currentPoint.y };
-            const cross = incoming.x * outgoing.y - incoming.y * outgoing.x;
-            const dot = incoming.x * outgoing.x + incoming.y * outgoing.y;
-            const angle = Math.atan2(cross, dot);
-            const normalized = (angle + Math.PI * 2) % (Math.PI * 2);
-            if (normalized < bestScore) {
-              bestScore = normalized;
-              nextNode = option;
-            }
-          }
-        }
-
-        const currentEdge = edgeKey(current, nextNode);
-        visited.add(currentEdge);
-        previous = current;
-        current = nextNode;
-      }
-
-      if (contour.length >= 3) {
-        contours.push(contour);
-      }
-    }
+function getShapeBounds(shape) {
+  if (shape.type === "line") {
+    return boundsFromPoints([shape.start, shape.end]);
   }
 
-  return contours;
+  if (shape.type === "polygon-shape" && Array.isArray(shape.pointsWorld) && shape.pointsWorld.length >= 2) {
+    return shape.getBounds?.() ?? boundsFromPoints(shape.pointsWorld);
+  }
+
+  return null;
 }
 
 export class FillTool extends BaseTool {
@@ -157,31 +130,84 @@ export class FillTool extends BaseTool {
     this.barrierCtx = this.barrierCanvas.getContext("2d", { willReadFrequently: true });
   }
 
-  buildBarrierCanvas(canvasCssW, canvasCssH, dpr) {
-    const pixelWidth = Math.max(1, Math.round(canvasCssW * dpr));
-    const pixelHeight = Math.max(1, Math.round(canvasCssH * dpr));
+  resolveWorldRasterBounds(clickWorld, boundaryShapes) {
+    const { camera } = this.context;
 
-    if (this.barrierCanvas.width !== pixelWidth) this.barrierCanvas.width = pixelWidth;
-    if (this.barrierCanvas.height !== pixelHeight) this.barrierCanvas.height = pixelHeight;
+    const containingPolygons = boundaryShapes
+      .filter((shape) => shape.type === "polygon-shape" && shape.containsPoint?.(clickWorld))
+      .map((shape) => ({
+        shape,
+        bounds: shape.getBounds?.() ?? boundsFromPoints(shape.pointsWorld),
+      }))
+      .filter(({ bounds }) => !!bounds)
+      .sort((a, b) => {
+        const areaA = Math.abs((a.bounds.maxX - a.bounds.minX) * (a.bounds.maxY - a.bounds.minY));
+        const areaB = Math.abs((b.bounds.maxX - b.bounds.minX) * (b.bounds.maxY - b.bounds.minY));
+        return areaA - areaB;
+      });
+
+    const maxStrokeWidthPx = boundaryShapes.reduce(
+      (max, shape) => Math.max(max, Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1),
+      1,
+    );
+    const strokeWidthWorld = maxStrokeWidthPx / Math.max(camera.zoom, 0.001);
+    const paddingWorld = strokeWidthWorld * 4 + getIsoSpacingWorld() * 10;
+
+    if (containingPolygons.length) {
+      return expandBounds(containingPolygons[0].bounds, paddingWorld);
+    }
+
+    let union = null;
+    for (const shape of boundaryShapes) {
+      union = unionBounds(union, getShapeBounds(shape));
+    }
+
+    if (!union) return null;
+    return expandBounds(union, paddingWorld);
+  }
+
+  getRasterSizing(worldBounds) {
+    const dpr = window.devicePixelRatio || 1;
+    const worldWidth = Math.max(0.001, worldBounds.maxX - worldBounds.minX);
+    const worldHeight = Math.max(0.001, worldBounds.maxY - worldBounds.minY);
+
+    let pixelsPerWorld = clamp(Math.round(16 * dpr), MIN_PIXELS_PER_WORLD, MAX_PIXELS_PER_WORLD);
+    let offW = Math.max(1, Math.ceil(worldWidth * pixelsPerWorld));
+    let offH = Math.max(1, Math.ceil(worldHeight * pixelsPerWorld));
+
+    while ((offW > MAX_OFFSCREEN_DIMENSION || offH > MAX_OFFSCREEN_DIMENSION) && pixelsPerWorld > 1) {
+      pixelsPerWorld -= 1;
+      offW = Math.max(1, Math.ceil(worldWidth * pixelsPerWorld));
+      offH = Math.max(1, Math.ceil(worldHeight * pixelsPerWorld));
+    }
+
+    return { pixelsPerWorld, offW, offH };
+  }
+
+  drawBoundaryRaster(boundaryShapes, worldBounds, pixelsPerWorld, offW, offH) {
+    if (this.barrierCanvas.width !== offW) this.barrierCanvas.width = offW;
+    if (this.barrierCanvas.height !== offH) this.barrierCanvas.height = offH;
 
     const bctx = this.barrierCtx;
-    bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    bctx.clearRect(0, 0, canvasCssW, canvasCssH);
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.clearRect(0, 0, offW, offH);
     bctx.imageSmoothingEnabled = false;
     bctx.globalAlpha = 1;
     bctx.strokeStyle = "#000";
     bctx.lineCap = "round";
     bctx.lineJoin = "round";
 
-    const { shapeStore, camera } = this.context;
-    const shapes = shapeStore.getShapes().filter((shape) => shape.visible !== false && shape.type !== "fillRegion");
+    const toOffscreen = (point) => ({
+      x: (point.x - worldBounds.minX) * pixelsPerWorld,
+      y: (point.y - worldBounds.minY) * pixelsPerWorld,
+    });
 
-    for (const shape of shapes) {
+    for (const shape of boundaryShapes) {
       if (shape.type === "line") {
-        const start = camera.worldToScreen(shape.start);
-        const end = camera.worldToScreen(shape.end);
-        const barrierWidthPx = Math.max(2, Math.round(shape.strokeWidth * camera.zoom) + 2);
-        bctx.lineWidth = barrierWidthPx / dpr;
+        const start = toOffscreen(shape.start);
+        const end = toOffscreen(shape.end);
+        const strokeWidthWorld = (Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1) / Math.max(this.context.camera.zoom, 0.001);
+        bctx.lineWidth = Math.max(1, strokeWidthWorld * pixelsPerWorld + 2);
         bctx.beginPath();
         bctx.moveTo(start.x, start.y);
         bctx.lineTo(end.x, end.y);
@@ -189,9 +215,9 @@ export class FillTool extends BaseTool {
       }
 
       if (shape.type === "polygon-shape" && Array.isArray(shape.pointsWorld) && shape.pointsWorld.length >= 2) {
-        const points = shape.pointsWorld.map((point) => camera.worldToScreen(point));
-        const barrierWidthPx = Math.max(2, Math.round(shape.strokeWidth * camera.zoom) + 2);
-        bctx.lineWidth = barrierWidthPx / dpr;
+        const points = shape.pointsWorld.map(toOffscreen);
+        const strokeWidthWorld = (Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1) / Math.max(this.context.camera.zoom, 0.001);
+        bctx.lineWidth = Math.max(1, strokeWidthWorld * pixelsPerWorld + 2);
         bctx.beginPath();
         bctx.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length; i += 1) {
@@ -201,41 +227,25 @@ export class FillTool extends BaseTool {
         bctx.stroke();
       }
     }
-
-    return { pixelWidth, pixelHeight };
   }
 
-  onMouseDown({ event, screenPoint }) {
-    if (event.button !== 0) return;
+  floodFill(alpha, width, height, seedX, seedY) {
+    const getAlpha = (x, y) => alpha[(y * width + x) * 4 + 3];
+    if (getAlpha(seedX, seedY) > 0) return null;
 
-    const { canvas, camera, shapeStore, appState } = this.context;
-    const dpr = window.devicePixelRatio || 1;
-    const canvasCssW = canvas.clientWidth;
-    const canvasCssH = canvas.clientHeight;
-
-    const { pixelWidth, pixelHeight } = this.buildBarrierCanvas(canvasCssW, canvasCssH, dpr);
-    const clickX = clamp(Math.round(screenPoint.x * dpr), 0, pixelWidth - 1);
-    const clickY = clamp(Math.round(screenPoint.y * dpr), 0, pixelHeight - 1);
-
-    const imageData = this.barrierCtx.getImageData(0, 0, pixelWidth, pixelHeight);
-    const alpha = imageData.data;
-    const getAlpha = (x, y) => alpha[(y * pixelWidth + x) * 4 + 3];
-
-    if (getAlpha(clickX, clickY) > 0) {
-      return;
-    }
-
-    const size = pixelWidth * pixelHeight;
+    const size = width * height;
     const filledMask = new Uint8Array(size);
     const queueX = new Int32Array(size);
     const queueY = new Int32Array(size);
 
     let head = 0;
     let tail = 0;
-    queueX[tail] = clickX;
-    queueY[tail] = clickY;
+    let touchesEdge = false;
+
+    queueX[tail] = seedX;
+    queueY[tail] = seedY;
     tail += 1;
-    filledMask[clickY * pixelWidth + clickX] = 1;
+    filledMask[seedY * width + seedX] = 1;
 
     const dirs = [
       [1, 0],
@@ -249,11 +259,15 @@ export class FillTool extends BaseTool {
       const y = queueY[head];
       head += 1;
 
+      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
+        touchesEdge = true;
+      }
+
       for (const [dx, dy] of dirs) {
         const nx = x + dx;
         const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= pixelWidth || ny >= pixelHeight) continue;
-        const index = ny * pixelWidth + nx;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const index = ny * width + nx;
         if (filledMask[index]) continue;
         if (getAlpha(nx, ny) > 0) continue;
         filledMask[index] = 1;
@@ -263,30 +277,68 @@ export class FillTool extends BaseTool {
       }
     }
 
-    const dilatedMask = filledMask.slice();
-    for (let y = 0; y < pixelHeight; y += 1) {
-      for (let x = 0; x < pixelWidth; x += 1) {
-        const idx = y * pixelWidth + x;
-        if (!filledMask[idx]) continue;
-        for (const [dx, dy] of dirs) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= pixelWidth || ny >= pixelHeight) continue;
-          if (getAlpha(nx, ny) > 0) continue;
-          dilatedMask[ny * pixelWidth + nx] = 1;
-        }
-      }
+    if (touchesEdge) {
+      return null;
     }
 
-    const contoursPx = buildContoursFromMask(dilatedMask, pixelWidth, pixelHeight);
+    let dilatedMask = filledMask;
+    for (let iteration = 0; iteration < 2; iteration += 1) {
+      const nextMask = dilatedMask.slice();
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const idx = y * width + x;
+          if (!dilatedMask[idx]) continue;
+          for (const [dx, dy] of dirs) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            if (getAlpha(nx, ny) > 0) continue;
+            nextMask[ny * width + nx] = 1;
+          }
+        }
+      }
+      dilatedMask = nextMask;
+    }
+
+    return dilatedMask;
+  }
+
+  onMouseDown({ event, worldPoint }) {
+    if (event.button !== 0) return;
+
+    const { shapeStore, appState } = this.context;
+    const clickWorld = worldPoint;
+    const boundaryShapes = shapeStore
+      .getShapes()
+      .filter((shape) => shape.visible !== false && (shape.type === "line" || shape.type === "polygon-shape"));
+
+    if (!boundaryShapes.length) return;
+
+    const worldBounds = this.resolveWorldRasterBounds(clickWorld, boundaryShapes);
+    if (!worldBounds) return;
+
+    const { pixelsPerWorld, offW, offH } = this.getRasterSizing(worldBounds);
+    this.drawBoundaryRaster(boundaryShapes, worldBounds, pixelsPerWorld, offW, offH);
+
+    const clickOffX = clamp(Math.round((clickWorld.x - worldBounds.minX) * pixelsPerWorld), 0, offW - 1);
+    const clickOffY = clamp(Math.round((clickWorld.y - worldBounds.minY) * pixelsPerWorld), 0, offH - 1);
+
+    const imageData = this.barrierCtx.getImageData(0, 0, offW, offH);
+    const fillMask = this.floodFill(imageData.data, offW, offH, clickOffX, clickOffY);
+    if (!fillMask) return;
+
+    const contoursPx = traceContoursFromMask(fillMask, offW, offH);
     if (!contoursPx.length) return;
 
-    const epsilonScreen = 0.75 / dpr;
+    const epsilonWorld = 0.75 / pixelsPerWorld;
     const contoursWorld = contoursPx
       .map((contour) => {
-        const contourCss = contour.map((point) => ({ x: point.x / dpr, y: point.y / dpr }));
-        const simplified = simplifyRdp([...contourCss, contourCss[0]], epsilonScreen).slice(0, -1);
-        return simplified.map((screen) => camera.screenToWorld(screen));
+        const contourWorld = contour.map((point) => ({
+          x: worldBounds.minX + point.x / pixelsPerWorld,
+          y: worldBounds.minY + point.y / pixelsPerWorld,
+        }));
+        const simplified = simplifyRdp([...contourWorld, contourWorld[0]], epsilonWorld).slice(0, -1);
+        return simplified;
       })
       .filter((contour) => contour.length >= 3)
       .sort((a, b) => Math.abs(contourArea(b)) - Math.abs(contourArea(a)));
