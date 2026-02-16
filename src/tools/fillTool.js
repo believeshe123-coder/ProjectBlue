@@ -1,18 +1,10 @@
 import { BaseTool } from "./baseTool.js";
 import { FillRegion } from "../models/fillRegion.js";
-import { getIsoSpacingWorld, worldToIsoUV } from "../core/isoGrid.js";
+import { worldToIsoUV } from "../core/isoGrid.js";
 import { traceContoursFromMask } from "../utils/marchingSquares.js";
 
-const MIN_PIXELS_PER_WORLD = 2;
-const MAX_PIXELS_PER_WORLD = 32;
-const MAX_OFFSCREEN_SIDE = 2048;
-const MAX_OFFSCREEN_PIXELS = 4_000_000;
+const MAX_FILL_SIDE = 1536;
 const FILL_CHUNK_SIZE = 50_000;
-const MAX_FILL_VISITS = 1_500_000;
-const SPATIAL_RADIUS_CELLS = 200;
-const FILL_TOO_LARGE_MESSAGE = "Fill area too large. Zoom in or draw a smaller closed region.";
-const FILL_TOO_COMPLEX_MESSAGE = "Fill region too complex/large.";
-
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -79,56 +71,6 @@ function contourArea(points) {
   return area * 0.5;
 }
 
-function expandBounds(bounds, padding) {
-  return {
-    minX: bounds.minX - padding,
-    minY: bounds.minY - padding,
-    maxX: bounds.maxX + padding,
-    maxY: bounds.maxY + padding,
-  };
-}
-
-function boundsFromPoints(points) {
-  if (!Array.isArray(points) || !points.length) return null;
-
-  let minX = points[0].x;
-  let minY = points[0].y;
-  let maxX = points[0].x;
-  let maxY = points[0].y;
-
-  for (const point of points) {
-    minX = Math.min(minX, point.x);
-    minY = Math.min(minY, point.y);
-    maxX = Math.max(maxX, point.x);
-    maxY = Math.max(maxY, point.y);
-  }
-
-  return { minX, minY, maxX, maxY };
-}
-
-function unionBounds(a, b) {
-  if (!a) return b;
-  if (!b) return a;
-  return {
-    minX: Math.min(a.minX, b.minX),
-    minY: Math.min(a.minY, b.minY),
-    maxX: Math.max(a.maxX, b.maxX),
-    maxY: Math.max(a.maxY, b.maxY),
-  };
-}
-
-function getShapeBounds(shape) {
-  if (shape.type === "line") {
-    return boundsFromPoints([shape.start, shape.end]);
-  }
-
-  if (shape.type === "polygon-shape" && Array.isArray(shape.pointsWorld) && shape.pointsWorld.length >= 2) {
-    return shape.getBounds?.() ?? boundsFromPoints(shape.pointsWorld);
-  }
-
-  return null;
-}
-
 export class FillTool extends BaseTool {
   constructor(context) {
     super(context);
@@ -155,87 +97,22 @@ export class FillTool extends BaseTool {
     }
   }
 
-  resolveWorldRasterBounds(clickWorld, boundaryShapes) {
-    const { camera } = this.context;
-
-    const containingPolygons = boundaryShapes
-      .filter((shape) => shape.type === "polygon-shape" && shape.containsPoint?.(clickWorld))
-      .map((shape) => ({
-        shape,
-        bounds: shape.getBounds?.() ?? boundsFromPoints(shape.pointsWorld),
-      }))
-      .filter(({ bounds }) => !!bounds)
-      .sort((a, b) => {
-        const areaA = Math.abs((a.bounds.maxX - a.bounds.minX) * (a.bounds.maxY - a.bounds.minY));
-        const areaB = Math.abs((b.bounds.maxX - b.bounds.minX) * (b.bounds.maxY - b.bounds.minY));
-        return areaA - areaB;
-      });
-
-    const maxStrokeWidthPx = boundaryShapes.reduce(
-      (max, shape) => Math.max(max, Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1),
-      1,
-    );
-    const strokeWidthWorld = maxStrokeWidthPx / Math.max(camera.zoom, 0.001);
-    const paddingWorld = strokeWidthWorld * 4 + getIsoSpacingWorld() * 10;
-
-    if (containingPolygons.length) {
-      return expandBounds(containingPolygons[0].bounds, paddingWorld);
-    }
-
-    const radius = getIsoSpacingWorld() * SPATIAL_RADIUS_CELLS;
-    const localBounds = {
-      minX: clickWorld.x - radius,
-      minY: clickWorld.y - radius,
-      maxX: clickWorld.x + radius,
-      maxY: clickWorld.y + radius,
-    };
-
-    let union = null;
-    for (const shape of boundaryShapes) {
-      const bounds = getShapeBounds(shape);
-      if (!bounds) continue;
-      const intersectsRadius = !(
-        bounds.maxX < localBounds.minX
-        || bounds.minX > localBounds.maxX
-        || bounds.maxY < localBounds.minY
-        || bounds.minY > localBounds.maxY
-      );
-      if (!intersectsRadius) continue;
-      union = unionBounds(union, bounds);
-    }
-
-    if (!union) return null;
-    return expandBounds(union, paddingWorld);
-  }
-
-  getRasterSizing(worldBounds) {
-    const dpr = window.devicePixelRatio || 1;
-    const worldWidth = Math.max(0.001, worldBounds.maxX - worldBounds.minX);
-    const worldHeight = Math.max(0.001, worldBounds.maxY - worldBounds.minY);
-
-    let pixelsPerWorld = clamp(Math.round(16 * dpr), MIN_PIXELS_PER_WORLD, MAX_PIXELS_PER_WORLD);
-    let offW = Math.max(1, Math.ceil(worldWidth * pixelsPerWorld));
-    let offH = Math.max(1, Math.ceil(worldHeight * pixelsPerWorld));
-
-    while ((offW > MAX_OFFSCREEN_SIDE || offH > MAX_OFFSCREEN_SIDE || offW * offH > MAX_OFFSCREEN_PIXELS) && pixelsPerWorld > MIN_PIXELS_PER_WORLD) {
-      pixelsPerWorld -= 1;
-      offW = Math.max(1, Math.ceil(worldWidth * pixelsPerWorld));
-      offH = Math.max(1, Math.ceil(worldHeight * pixelsPerWorld));
-    }
-
-    const fitsLimit = offW <= MAX_OFFSCREEN_SIDE
-      && offH <= MAX_OFFSCREEN_SIDE
-      && offW * offH <= MAX_OFFSCREEN_PIXELS;
+  getViewportRasterSizing() {
+    const viewW = Math.max(1, Math.floor(this.context.camera.viewW || this.context.canvas?.clientWidth || this.context.canvas?.width || 1));
+    const viewH = Math.max(1, Math.floor(this.context.camera.viewH || this.context.canvas?.clientHeight || this.context.canvas?.height || 1));
+    const largestSide = Math.max(viewW, viewH);
+    const scaleDown = largestSide > MAX_FILL_SIDE ? MAX_FILL_SIDE / largestSide : 1;
 
     return {
-      pixelsPerWorld,
-      offW,
-      offH,
-      tooLarge: !fitsLimit || pixelsPerWorld < MIN_PIXELS_PER_WORLD,
+      viewW,
+      viewH,
+      scaleDown,
+      offW: Math.max(1, Math.floor(viewW * scaleDown)),
+      offH: Math.max(1, Math.floor(viewH * scaleDown)),
     };
   }
 
-  drawBoundaryRaster(boundaryShapes, worldBounds, pixelsPerWorld, offW, offH) {
+  drawBoundaryRaster(boundaryShapes, scaleDown, offW, offH) {
     if (this.barrierCanvas.width !== offW) this.barrierCanvas.width = offW;
     if (this.barrierCanvas.height !== offH) this.barrierCanvas.height = offH;
 
@@ -248,17 +125,19 @@ export class FillTool extends BaseTool {
     bctx.lineCap = "round";
     bctx.lineJoin = "round";
 
-    const toOffscreen = (point) => ({
-      x: (point.x - worldBounds.minX) * pixelsPerWorld,
-      y: (point.y - worldBounds.minY) * pixelsPerWorld,
-    });
+    const toOffscreen = (point) => {
+      const screenPoint = this.context.camera.worldToScreen(point);
+      return {
+        x: screenPoint.x * scaleDown,
+        y: screenPoint.y * scaleDown,
+      };
+    };
 
     for (const shape of boundaryShapes) {
       if (shape.type === "line") {
         const start = toOffscreen(shape.start);
         const end = toOffscreen(shape.end);
-        const strokeWidthWorld = (Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1) / Math.max(this.context.camera.zoom, 0.001);
-        bctx.lineWidth = Math.max(1, strokeWidthWorld * pixelsPerWorld + 2);
+        bctx.lineWidth = Math.max(1, ((Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1) + 2) * scaleDown);
         bctx.beginPath();
         bctx.moveTo(start.x, start.y);
         bctx.lineTo(end.x, end.y);
@@ -267,8 +146,7 @@ export class FillTool extends BaseTool {
 
       if (shape.type === "polygon-shape" && Array.isArray(shape.pointsWorld) && shape.pointsWorld.length >= 2) {
         const points = shape.pointsWorld.map(toOffscreen);
-        const strokeWidthWorld = (Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1) / Math.max(this.context.camera.zoom, 0.001);
-        bctx.lineWidth = Math.max(1, strokeWidthWorld * pixelsPerWorld + 2);
+        bctx.lineWidth = Math.max(1, ((Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1) + 2) * scaleDown);
         bctx.beginPath();
         bctx.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length; i += 1) {
@@ -300,16 +178,11 @@ export class FillTool extends BaseTool {
     tail += 1;
     visitedMask[seedY * width + seedX] = 1;
 
-    const maxVisits = Math.min(MAX_FILL_VISITS, Math.max(1, Math.floor(size * 0.95)));
 
     while (head < tail) {
       const index = queue[head];
       head += 1;
       visitCount += 1;
-
-      if (visitCount > maxVisits) {
-        return { fillMask: null, status: "too_complex", visitedCount: visitCount };
-      }
 
       const x = index % width;
       const y = Math.floor(index / width);
@@ -381,7 +254,7 @@ export class FillTool extends BaseTool {
     return { fillMask: dilatedMask, status: "ok", visitedCount: visitCount };
   }
 
-  async onMouseDown({ event, worldPoint }) {
+  async onMouseDown({ event, screenPoint }) {
     if (event.button !== 0) return;
 
     const fillToken = this.activeFillToken + 1;
@@ -392,7 +265,6 @@ export class FillTool extends BaseTool {
     const startMs = performance.now();
 
     const { shapeStore, appState } = this.context;
-    const clickWorld = worldPoint;
     const boundaryShapes = shapeStore
       .getShapes()
       .filter((shape) => shape.visible !== false && (shape.type === "line" || shape.type === "polygon-shape"));
@@ -402,34 +274,16 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    const worldBounds = this.resolveWorldRasterBounds(clickWorld, boundaryShapes);
-    if (!worldBounds) {
-      appState.notifyStatus?.(FILL_TOO_LARGE_MESSAGE, 2600);
-      console.info("[fill] abort: no local bounds near click");
-      this.context.appState.clearBusyStatus?.();
-      return;
-    }
+    const { viewW, viewH, scaleDown, offW, offH } = this.getViewportRasterSizing();
+    this.drawBoundaryRaster(boundaryShapes, scaleDown, offW, offH);
 
-    const { pixelsPerWorld, offW, offH, tooLarge } = this.getRasterSizing(worldBounds);
-    if (tooLarge) {
-      appState.notifyStatus?.(FILL_TOO_LARGE_MESSAGE, 2600);
-      console.info("[fill] abort: raster too large", { offW, offH, pixelsPerWorld });
-      this.context.appState.clearBusyStatus?.();
-      return;
-    }
-
-    this.drawBoundaryRaster(boundaryShapes, worldBounds, pixelsPerWorld, offW, offH);
-
-    const clickOffX = clamp(Math.round((clickWorld.x - worldBounds.minX) * pixelsPerWorld), 0, offW - 1);
-    const clickOffY = clamp(Math.round((clickWorld.y - worldBounds.minY) * pixelsPerWorld), 0, offH - 1);
+    const clickOffX = clamp(Math.floor(screenPoint.x * scaleDown), 0, offW - 1);
+    const clickOffY = clamp(Math.floor(screenPoint.y * scaleDown), 0, offH - 1);
 
     const imageData = this.barrierCtx.getImageData(0, 0, offW, offH);
     const { fillMask, status, visitedCount } = await this.floodFill(imageData.data, offW, offH, clickOffX, clickOffY, fillToken);
     if (!fillMask) {
-      if (status === "too_complex") {
-        appState.notifyStatus?.(FILL_TOO_COMPLEX_MESSAGE, 2400);
-        console.info("[fill] abort: max visit cap exceeded", { offW, offH, visitedCount });
-      } else if (status === "cancelled") {
+      if (status === "cancelled") {
         appState.notifyStatus?.("Fill cancelled", 1200);
         console.info("[fill] cancelled", { offW, offH, visitedCount });
       } else if (status === "touches_edge") {
@@ -450,12 +304,12 @@ export class FillTool extends BaseTool {
       return;
     }
 
-    const epsilonWorld = 0.75 / pixelsPerWorld;
+    const epsilonWorld = 0.75 / Math.max(this.context.camera.zoom * scaleDown, 0.001);
     const contoursWorld = contoursPx
       .map((contour) => {
         const contourWorld = contour.map((point) => ({
-          x: worldBounds.minX + point.x / pixelsPerWorld,
-          y: worldBounds.minY + point.y / pixelsPerWorld,
+          x: this.context.camera.x + point.x / Math.max(this.context.camera.zoom * scaleDown, 0.001),
+          y: this.context.camera.y + point.y / Math.max(this.context.camera.zoom * scaleDown, 0.001),
         }));
         const simplified = simplifyRdp([...contourWorld, contourWorld[0]], epsilonWorld).slice(0, -1);
         return simplified;
@@ -486,7 +340,9 @@ export class FillTool extends BaseTool {
     console.info("[fill] stats", {
       offW,
       offH,
-      pixelsPerWorld,
+      viewW,
+      viewH,
+      scaleDown,
       visitedCount,
       elapsedMs: Number(elapsed.toFixed(1)),
     });
