@@ -108,6 +108,7 @@ const appState = {
   snapToGrid: true,
   snapToMidpoints: true,
   debugSnap: false,
+  debugFillWorkflow: false,
   snapDebugStatus: "SNAP: OFF",
   unitName: "ft",
   unitPerCell: 1,
@@ -348,7 +349,8 @@ function refreshStatus() {
     return;
   }
 
-  statusEl.textContent = `Mode: ISO | Zoom: ${camera.zoom.toFixed(2)}x | ${getSnapStatusLabel()}`;
+  const polygonCount = shapeStore.getShapes().filter((shape) => shape.type === "polygon" && shape.visible !== false).length;
+  statusEl.textContent = `Mode: ISO | Zoom: ${camera.zoom.toFixed(2)}x | polygons: ${polygonCount} | ${getSnapStatusLabel()}`;
 }
 
 appState.setSelection = setSelection;

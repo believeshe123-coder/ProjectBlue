@@ -44,6 +44,30 @@ export class PolylineTool extends BaseTool {
     return this.chainPoints.length >= 3 && this.chainStart && this.lastPoint;
   }
 
+  sanitizePolygonPoints(points = []) {
+    const deduped = [];
+    for (const point of points) {
+      if (!deduped.length) {
+        deduped.push({ ...point });
+        continue;
+      }
+
+      const prev = deduped[deduped.length - 1];
+      if (prev.x === point.x && prev.y === point.y) continue;
+      deduped.push({ ...point });
+    }
+
+    if (deduped.length >= 2) {
+      const first = deduped[0];
+      const last = deduped[deduped.length - 1];
+      if (first.x === last.x && first.y === last.y) {
+        deduped.pop();
+      }
+    }
+
+    return deduped;
+  }
+
   commitClosedPolygon() {
     const { appState, shapeStore } = this.context;
     if (!this.hasClosableLoop()) {
@@ -51,15 +75,30 @@ export class PolylineTool extends BaseTool {
       return false;
     }
 
-    const pointsWorld = [...this.chainPoints];
+    const pointsWorld = this.sanitizePolygonPoints(this.chainPoints);
+    const uniquePointCount = new Set(pointsWorld.map((point) => `${point.x}:${point.y}`)).size;
+    if (uniquePointCount < 3) {
+      this.finishChain();
+      appState.notifyStatus?.("Need at least 3 unique points to close shape", 1400);
+      return false;
+    }
+
     const polygon = new PolygonShape({
       pointsWorld,
       sourceLineIds: [...this.chainLineIds],
       strokeColor: appState.currentStyle.strokeColor,
       strokeWidth: appState.currentStyle.strokeWidth,
       fillColor: appState.currentStyle.fillColor,
-      fillAlpha: 0,
+      fillAlpha: 1,
     });
+
+    if (appState.debugFillWorkflow) {
+      const bounds = polygon.getBounds();
+      console.debug("[close-shape] polygon created", {
+        pointsCount: pointsWorld.length,
+        bounds,
+      });
+    }
 
     this.context.pushHistoryState?.();
     shapeStore.addShape(polygon);
