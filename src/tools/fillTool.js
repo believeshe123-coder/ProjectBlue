@@ -77,6 +77,7 @@ export class FillTool extends BaseTool {
     this.barrierCanvas = document.createElement("canvas");
     this.barrierCtx = this.barrierCanvas.getContext("2d", { willReadFrequently: true });
     this.activeFillToken = 0;
+    this.isFillInProgress = false;
   }
 
   cancelCurrentFill(reason = "Cancelled") {
@@ -98,10 +99,10 @@ export class FillTool extends BaseTool {
   }
 
   getViewportRasterSizing() {
-    const viewW = Math.max(1, Math.floor(this.context.camera.viewW || this.context.canvas?.clientWidth || this.context.canvas?.width || 1));
-    const viewH = Math.max(1, Math.floor(this.context.camera.viewH || this.context.canvas?.clientHeight || this.context.canvas?.height || 1));
-    const largestSide = Math.max(viewW, viewH);
-    const scaleDown = largestSide > MAX_FILL_SIDE ? MAX_FILL_SIDE / largestSide : 1;
+    const viewW = Math.max(1, Math.floor(this.context.canvas?.width || this.context.camera.viewW || this.context.canvas?.clientWidth || 1));
+    const viewH = Math.max(1, Math.floor(this.context.canvas?.height || this.context.camera.viewH || this.context.canvas?.clientHeight || 1));
+    const maxSide = Math.max(viewW, viewH);
+    const scaleDown = maxSide > MAX_FILL_SIDE ? MAX_FILL_SIDE / maxSide : 1;
 
     return {
       viewW,
@@ -170,7 +171,6 @@ export class FillTool extends BaseTool {
 
     let head = 0;
     let tail = 0;
-    let touchesEdge = false;
     let visitCount = 0;
     let processedSinceYield = 0;
 
@@ -186,10 +186,6 @@ export class FillTool extends BaseTool {
 
       const x = index % width;
       const y = Math.floor(index / width);
-
-      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
-        touchesEdge = true;
-      }
 
       const tryQueueNeighbor = (nx, ny) => {
         if (nx < 0 || ny < 0 || nx >= width || ny >= height) return;
@@ -214,10 +210,6 @@ export class FillTool extends BaseTool {
         }
         await new Promise((resolve) => window.requestAnimationFrame(resolve));
       }
-    }
-
-    if (touchesEdge) {
-      return { fillMask: null, status: "touches_edge", visitedCount: visitCount };
     }
 
     const dirs = [
@@ -254,13 +246,15 @@ export class FillTool extends BaseTool {
     return { fillMask: dilatedMask, status: "ok", visitedCount: visitCount };
   }
 
-  async onMouseDown({ event, screenPoint }) {
+  async handleMouseDown({ event, screenPoint }) {
     if (event.button !== 0) return;
+    if (this.isFillInProgress) return;
+
+    this.isFillInProgress = true;
 
     const fillToken = this.activeFillToken + 1;
     this.activeFillToken = fillToken;
     this.context.appState.fillAbort = false;
-    this.context.appState.setBusyStatus?.("Filling…");
 
     const startMs = performance.now();
 
@@ -269,12 +263,10 @@ export class FillTool extends BaseTool {
       .getShapes()
       .filter((shape) => shape.visible !== false && (shape.type === "line" || shape.type === "polygon-shape"));
 
-    if (!boundaryShapes.length) {
-      this.context.appState.clearBusyStatus?.();
-      return;
-    }
+    if (!boundaryShapes.length) return;
 
     const { viewW, viewH, scaleDown, offW, offH } = this.getViewportRasterSizing();
+    console.log("[fill] offW/offH", offW, offH, "scaleDown", scaleDown);
     this.drawBoundaryRaster(boundaryShapes, scaleDown, offW, offH);
 
     const clickOffX = clamp(Math.floor(screenPoint.x * scaleDown), 0, offW - 1);
@@ -284,25 +276,17 @@ export class FillTool extends BaseTool {
     const { fillMask, status, visitedCount } = await this.floodFill(imageData.data, offW, offH, clickOffX, clickOffY, fillToken);
     if (!fillMask) {
       if (status === "cancelled") {
-        appState.notifyStatus?.("Fill cancelled", 1200);
         console.info("[fill] cancelled", { offW, offH, visitedCount });
-      } else if (status === "touches_edge") {
-        console.info("[fill] abort: region touches raster edge", { offW, offH, visitedCount });
       }
-      this.context.appState.clearBusyStatus?.();
       return;
     }
 
     if (this.context.appState.fillAbort || fillToken !== this.activeFillToken) {
-      this.context.appState.clearBusyStatus?.();
       return;
     }
 
     const contoursPx = traceContoursFromMask(fillMask, offW, offH);
-    if (!contoursPx.length) {
-      this.context.appState.clearBusyStatus?.();
-      return;
-    }
+    if (!contoursPx.length) return;
 
     const epsilonWorld = 0.75 / Math.max(this.context.camera.zoom * scaleDown, 0.001);
     const contoursWorld = contoursPx
@@ -317,10 +301,7 @@ export class FillTool extends BaseTool {
       .filter((contour) => contour.length >= 3)
       .sort((a, b) => Math.abs(contourArea(b)) - Math.abs(contourArea(a)));
 
-    if (!contoursWorld.length) {
-      this.context.appState.clearBusyStatus?.();
-      return;
-    }
+    if (!contoursWorld.length) return;
 
     const contoursUV = contoursWorld.map((contour) => contour.map((point) => worldToIsoUV(point)));
 
@@ -346,6 +327,14 @@ export class FillTool extends BaseTool {
       visitedCount,
       elapsedMs: Number(elapsed.toFixed(1)),
     });
-    this.context.appState.clearBusyStatus?.();
+  }
+
+  async onMouseDown(args) {
+    try {
+      await this.handleMouseDown(args);
+    } finally {
+      this.isFillInProgress = false;
+      this.context.appState.clearBusyStatus?.();
+    }
   }
 }
