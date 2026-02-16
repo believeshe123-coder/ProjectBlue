@@ -1,9 +1,10 @@
 export class CanvasEngine {
-  constructor({ canvas, canvasWrap, camera, getTool, onContextMenuPrevent, onViewChange }) {
+  constructor({ canvas, canvasWrap, camera, getTool, getToolName, onContextMenuPrevent, onViewChange }) {
     this.canvas = canvas;
     this.canvasWrap = canvasWrap;
     this.camera = camera;
     this.getTool = getTool;
+    this.getToolName = getToolName;
     this.onViewChange = onViewChange;
     this.isPanning = false;
     this.isMiddlePanning = false;
@@ -102,6 +103,17 @@ export class CanvasEngine {
   handleMouseDown(event) {
     const screenPoint = this.getScreenPointFromEvent(event);
     const worldPoint = this.camera.screenToWorld(screenPoint);
+
+    console.log("[CANVAS] pointerdown", {
+      activeTool: this.getToolName?.(),
+      x: event.clientX,
+      y: event.clientY,
+    });
+    console.log("[CANVAS] coords", {
+      screen: { x: screenPoint.x, y: screenPoint.y },
+      world: { x: worldPoint.x, y: worldPoint.y },
+      zoom: this.camera?.zoom,
+    });
 
     if (event.button === 1) {
       this.isMiddlePanning = true;
