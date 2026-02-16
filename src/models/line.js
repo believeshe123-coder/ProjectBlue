@@ -1,15 +1,15 @@
 import { Shape } from "./shape.js";
 import { distancePointToSegment } from "../utils/math.js";
-import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
+import { isoUVToWorld, snapIsoUV, worldToIsoUV } from "../core/isoGrid.js";
 import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class Line extends Shape {
   constructor({ start, end, startUV, endUV, sourceForPolygonId = null, ...rest }) {
     super({ ...rest, type: "line" });
-    this.startUV = startUV ? { ...startUV } : worldToIsoUV(start);
-    this.endUV = endUV ? { ...endUV } : worldToIsoUV(end);
+    this.startUV = snapIsoUV(startUV ?? worldToIsoUV(start), 0.5);
+    this.endUV = snapIsoUV(endUV ?? worldToIsoUV(end), 0.5);
     this.syncWorldFromUV();
-    this.sourceForPolygonId = sourceForPolygonId ?? null;
+    this.sourceForPolygonId = null;
   }
 
   syncWorldFromUV() {
@@ -18,15 +18,15 @@ export class Line extends Shape {
   }
 
   syncUVFromWorld() {
-    this.startUV = worldToIsoUV(this.start);
-    this.endUV = worldToIsoUV(this.end);
+    this.startUV = snapIsoUV(worldToIsoUV(this.start), 0.5);
+    this.endUV = snapIsoUV(worldToIsoUV(this.end), 0.5);
   }
 
   setUVPoints(startUV, endUV) {
-    this.startUV = { ...startUV };
-    this.endUV = { ...endUV };
+    this.startUV = snapIsoUV(startUV, 0.5);
+    this.endUV = snapIsoUV(endUV, 0.5);
     this.syncWorldFromUV();
-    this.sourceForPolygonId = sourceForPolygonId ?? null;
+    this.sourceForPolygonId = null;
   }
 
   drawDimensionLabel(ctx, appState, midScreen) {

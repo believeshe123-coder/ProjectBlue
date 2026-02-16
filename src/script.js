@@ -16,7 +16,6 @@ const canvasWrap = document.querySelector(".canvas-wrap");
 const statusEl = document.getElementById("status");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
-const closeShapeButton = document.getElementById("close-shape-btn");
 const eraseModeToggle = document.getElementById("erase-mode-toggle");
 const eraserSizeInput = document.getElementById("eraser-size-input");
 const eraserSizeDisplay = document.getElementById("eraser-size-display");
@@ -366,8 +365,8 @@ function refreshStatus() {
     return;
   }
 
-  const polygonCount = shapeStore.getPolygons().filter((shape) => shape.visible !== false).length;
-  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | polygons: ${polygonCount} | ${getSnapStatusLabel()}`;
+  const regionCount = shapeStore.getComputedRegions().length;
+  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | regions: ${regionCount} | ${getSnapStatusLabel()}`;
 }
 
 appState.setSelection = setSelection;
@@ -1034,10 +1033,6 @@ document.addEventListener("click", () => {
 
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
-closeShapeButton?.addEventListener("click", () => {
-  tools.polyline.closeShapeNow?.();
-});
-
 snapGridToggle.addEventListener("change", (event) => {
   appState.snapToGrid = event.target.checked;
   refreshStatus();

@@ -47,7 +47,7 @@ export class EyedropperTool extends BaseTool {
     }
 
     let sampledColor = null;
-    if (hit.type === "polygon") {
+    if (hit.type === "polygon" || hit.type === "fillRegion") {
       sampledColor = normalizeHex(hit.fillColor);
     } else if (hit.type === "line") {
       sampledColor = normalizeHex(hit.strokeColor);

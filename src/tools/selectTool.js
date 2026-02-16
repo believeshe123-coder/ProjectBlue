@@ -147,6 +147,7 @@ export class SelectTool extends BaseTool {
         if (!isMovableShape(target)) continue;
         this.moveShape(target, du, dv);
       }
+      shapeStore.invalidateDerivedData?.();
       this.dragState.startMouseWorld = { ...worldPoint };
 
       if (canvas) canvas.style.cursor = "grabbing";

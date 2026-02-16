@@ -51,6 +51,15 @@ export function worldToIsoUV(worldPt) {
   };
 }
 
+
+export function snapIsoUV(uvPt, step = 1) {
+  const safeStep = Number.isFinite(step) && step > 0 ? step : 1;
+  return {
+    u: Math.round((uvPt.u ?? 0) / safeStep) * safeStep,
+    v: Math.round((uvPt.v ?? 0) / safeStep) * safeStep,
+  };
+}
+
 export function isoUVToWorld(u, v) {
   return {
     x: u * e1.x + v * e2.x,

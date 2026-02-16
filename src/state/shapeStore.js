@@ -2,23 +2,92 @@ import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
 import { GroupShape } from "../models/groupShape.js";
+import { FillRegion } from "../models/fillRegion.js";
+import { buildRegionsFromLines } from "../core/regionBuilder.js";
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") return new Line(serialized);
   if (serialized.type === "polygon" || serialized.type === "polygon-shape") return PolygonShape.fromJSON(serialized);
   if (serialized.type === "measurement") return new Measurement(serialized);
   if (serialized.type === "group") return new GroupShape(serialized);
+  if (serialized.type === "fillRegion") return FillRegion.fromJSON(serialized);
   return null;
 }
 
 export class ShapeStore {
   constructor() {
     this.shapes = [];
+    this.cachedRegions = [];
+    this.cachedLinesHash = "";
+  }
+
+  invalidateDerivedData() {
+    this.cachedLinesHash = "";
+  }
+
+  getLinesHash() {
+    const lines = this.shapes.filter((shape) => shape.type === "line");
+    return lines
+      .map((line) => {
+        const a = `${line.startUV.u},${line.startUV.v}`;
+        const b = `${line.endUV.u},${line.endUV.v}`;
+        return a < b ? `${a}|${b}` : `${b}|${a}`;
+      })
+      .sort()
+      .join(";");
+  }
+
+  getComputedRegions() {
+    const nextHash = this.getLinesHash();
+    if (nextHash === this.cachedLinesHash) return this.cachedRegions;
+
+    const lines = this.shapes.filter((shape) => shape.type === "line" && shape.visible !== false);
+    this.cachedRegions = buildRegionsFromLines(lines);
+    this.cachedLinesHash = nextHash;
+
+    const regionById = new Map(this.cachedRegions.map((region) => [region.id, region]));
+    this.shapes = this.shapes.filter((shape) => {
+      if (shape.type !== "fillRegion") return true;
+      const region = regionById.get(shape.regionId);
+      if (!region) return false;
+      shape.setRegionCycle(region.uvCycle);
+      return true;
+    });
+
+    return this.cachedRegions;
   }
 
   addShape(shape) {
     this.shapes.push(shape);
+    this.invalidateDerivedData();
     return shape;
+  }
+
+  upsertFillRegion(region, { color, alpha }) {
+    if (!region?.id) return null;
+
+    const existing = this.shapes.find((shape) => shape.type === "fillRegion" && shape.regionId === region.id);
+    if (existing) {
+      existing.color = color;
+      existing.alpha = alpha;
+      existing.fillColor = color;
+      existing.fillOpacity = alpha;
+      existing.setRegionCycle(region.uvCycle);
+      return existing;
+    }
+
+    const fill = new FillRegion({
+      regionId: region.id,
+      uvCycle: region.uvCycle,
+      color,
+      alpha,
+    });
+    this.shapes.push(fill);
+    return fill;
+  }
+
+  getFillRegions() {
+    return this.shapes.filter((shape) => shape.type === "fillRegion");
   }
 
   removeShape(id) {
@@ -43,6 +112,7 @@ export class ShapeStore {
     this.shapes.splice(index, 1);
 
     this.normalizeGroups();
+    this.invalidateDerivedData();
     return true;
   }
 
@@ -121,7 +191,7 @@ export class ShapeStore {
         && point.y <= bounds.maxY + toleranceWorld;
     }
 
-    return shape.containsPoint(point, toleranceWorld);
+    return shape.containsPoint?.(point, toleranceWorld) ?? false;
   }
 
   getShapeBounds(shape) {
@@ -138,6 +208,10 @@ export class ShapeStore {
 
     if (shape.type === "polygon") {
       return shape.getBounds();
+    }
+
+    if (shape.type === "fillRegion") {
+      return shape.bounds ?? null;
     }
 
     if (shape.type === "group") {
@@ -201,6 +275,7 @@ export class ShapeStore {
 
   clear() {
     this.shapes.length = 0;
+    this.invalidateDerivedData();
   }
 
   serialize() {
@@ -238,5 +313,7 @@ export class ShapeStore {
   replaceFromSerialized(serializedShapes) {
     this.shapes = serializedShapes.map(hydrateShape).filter(Boolean);
     this.normalizeGroups();
+    this.invalidateDerivedData();
+    this.getComputedRegions();
   }
 }
