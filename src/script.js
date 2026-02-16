@@ -8,6 +8,7 @@ import { SelectTool } from "./tools/selectTool.js";
 import { MeasureTool } from "./tools/measureTool.js";
 import { PolylineTool } from "./tools/polylineTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
+import { FillTool } from "./tools/fillTool.js";
 import { GroupShape } from "./models/groupShape.js";
 
 const canvas = document.getElementById("canvas");
@@ -38,6 +39,9 @@ const strokeWidthInput = document.getElementById("stroke-width-input");
 const styleSwatches = document.getElementById("style-swatches");
 const paletteColorButton = document.getElementById("palette-color-btn");
 const customColorPicker = document.getElementById("customColorPicker");
+const fillColorPicker = document.getElementById("fill-color-picker");
+const fillOpacityInput = document.getElementById("fill-opacity-input");
+const fillOpacityDisplay = document.getElementById("fill-opacity-display");
 const recentRow = document.getElementById("recent-row");
 const selectionCountEl = document.getElementById("selection-count");
 const selectionPanel = document.getElementById("selection-panel");
@@ -126,6 +130,7 @@ const appState = {
     strokeOpacity: 1,
     strokeWidth: 2,
     fillColor: "#4aa3ff",
+    fillOpacity: 1,
   },
 };
 
@@ -136,6 +141,7 @@ const tools = {
   "iso-line": new IsoLineTool(sharedContext),
   measure: new MeasureTool(sharedContext),
   polyline: new PolylineTool(sharedContext),
+  fill: new FillTool(sharedContext),
   erase: new EraseTool(sharedContext),
 };
 
@@ -233,6 +239,9 @@ function refreshStyleUI() {
   const style = appState.currentStyle;
   strokeWidthInput.value = String(style.strokeWidth);
   customColorPicker.value = style.strokeColor;
+  if (fillColorPicker) fillColorPicker.value = style.fillColor;
+  if (fillOpacityInput) fillOpacityInput.value = String(style.fillOpacity ?? 1);
+  if (fillOpacityDisplay) fillOpacityDisplay.textContent = Number(style.fillOpacity ?? 1).toFixed(2);
 
   for (const swatch of document.querySelectorAll(".swatch-grid .swatch, .recent-row .swatch")) {
     swatch.classList.toggle("active", swatch.title.toLowerCase() === style.strokeColor.toLowerCase());
@@ -240,7 +249,9 @@ function refreshStyleUI() {
 }
 
 
-function resetStyleAlphaDefaults() {}
+function resetStyleAlphaDefaults() {
+  appState.currentStyle.fillOpacity = 1;
+}
 
 function getCanvasCenterScreenPoint() {
   const rect = canvas.getBoundingClientRect();
@@ -609,6 +620,7 @@ function buildProjectData() {
       lastTool: getCurrentToolName(),
       eraseMode: appState.eraseMode,
       eraserSizePx: appState.eraserSizePx,
+      fillOpacity: appState.currentStyle.fillOpacity,
     },
     themes: {
       builtInSelectedId: appState.activeThemeId,
@@ -644,6 +656,9 @@ function applyProjectData(project, { announce = true } = {}) {
   appState.showGridUnits = settings.showGridUnits === true;
   appState.eraseMode = settings.eraseMode === "segment" ? "segment" : "object";
   appState.eraserSizePx = Number.isFinite(settings.eraserSizePx) ? Math.min(40, Math.max(6, settings.eraserSizePx)) : 16;
+  appState.currentStyle.fillOpacity = Number.isFinite(settings.fillOpacity)
+    ? Math.max(0, Math.min(1, settings.fillOpacity))
+    : 1;
 
   const loadedThemes = project.themes?.savedThemes;
   savedThemes = Array.isArray(loadedThemes) ? loadedThemes.filter((theme) => (
@@ -1078,7 +1093,10 @@ selectionStrokeWidth?.addEventListener("change", () => pushHistoryState());
 
 selectionFillColor?.addEventListener("input", (event) => {
   const value = event.target.value;
-  applyToSelected((shape) => { shape.fillColor = value; });
+  applyToSelected((shape) => {
+    shape.fillColor = value;
+    if (shape.type === "fillRegion") shape.color = value;
+  });
 });
 selectionFillColor?.addEventListener("change", () => pushHistoryState());
 
@@ -1124,6 +1142,18 @@ customColorPicker?.addEventListener("input", (event) => {
   appState.currentStyle.strokeColor = color;
   refreshStyleUI();
   addRecentColor(color);
+});
+
+fillColorPicker?.addEventListener("input", (event) => {
+  appState.currentStyle.fillColor = event.target.value;
+  refreshStyleUI();
+  addRecentColor(event.target.value);
+});
+
+fillOpacityInput?.addEventListener("input", (event) => {
+  const value = Number.parseFloat(event.target.value);
+  appState.currentStyle.fillOpacity = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+  refreshStyleUI();
 });
 
 unitPerCellInput.addEventListener("input", (event) => {

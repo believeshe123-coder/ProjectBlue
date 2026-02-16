@@ -65,11 +65,13 @@ export class Renderer {
     const currentlyDrawing = !!this.appState.previewShape;
     const shouldHideMeasurements = measurementMode === "off";
 
+    const fillRegions = shapes.filter((shape) => shape.type === "fillRegion");
     const polygons = shapes.filter((shape) => shape.type === "polygon-shape");
     const lines = shapes.filter((shape) => shape.type === "line");
     const measurements = shapes.filter((shape) => shape.type === "measurement");
-    const others = shapes.filter((shape) => !["polygon-shape", "line", "measurement"].includes(shape.type));
+    const others = shapes.filter((shape) => !["fillRegion", "polygon-shape", "line", "measurement"].includes(shape.type));
 
+    for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
     for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
     for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
 

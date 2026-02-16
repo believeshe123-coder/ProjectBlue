@@ -2,7 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { worldToIsoUV } from "../core/isoGrid.js";
 
 function isMovableShape(shape) {
-  return shape && ["line", "polygon-shape", "group"].includes(shape.type) && shape.locked !== true;
+  return shape && ["line", "polygon-shape", "fillRegion", "group"].includes(shape.type) && shape.locked !== true;
 }
 
 function getStep(appState) {
@@ -89,6 +89,11 @@ export class SelectTool extends BaseTool {
 
     if (shape.type === "polygon-shape") {
       shape.setUVPoints(shape.pointsUV.map((point) => ({ u: point.u + du, v: point.v + dv })));
+      return;
+    }
+
+    if (shape.type === "fillRegion") {
+      shape.setUVContours(shape.contoursUV.map((contour) => contour.map((point) => ({ u: point.u + du, v: point.v + dv }))));
       return;
     }
 
