@@ -2,21 +2,12 @@ import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
 import { GroupShape } from "../models/groupShape.js";
-import { FillRegion } from "../models/fillRegion.js";
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") return new Line(serialized);
-  if (serialized.type === "polygon-shape") return PolygonShape.fromJSON(serialized);
-  if (serialized.type === "polygon") {
-    return new PolygonShape({
-      ...serialized,
-      pointsWorld: serialized.points ?? serialized.pointsWorld ?? [],
-      fillAlpha: serialized.fillOpacity ?? serialized.fillAlpha ?? 1,
-    });
-  }
+  if (serialized.type === "polygon" || serialized.type === "polygon-shape") return PolygonShape.fromJSON(serialized);
   if (serialized.type === "measurement") return new Measurement(serialized);
   if (serialized.type === "group") return new GroupShape(serialized);
-  if (serialized.type === "fillRegion") return FillRegion.fromJSON(serialized);
   return null;
 }
 
@@ -145,20 +136,8 @@ export class ShapeStore {
       };
     }
 
-    if (shape.type === "polygon-shape") {
+    if (shape.type === "polygon") {
       return shape.getBounds();
-    }
-
-    if (shape.type === "fillRegion") {
-      const contours = shape.contoursWorld ?? (shape.pointsWorld ? [shape.pointsWorld] : []);
-      const flat = contours.flat();
-      if (!flat.length) return null;
-      return {
-        minX: Math.min(...flat.map((point) => point.x)),
-        minY: Math.min(...flat.map((point) => point.y)),
-        maxX: Math.max(...flat.map((point) => point.x)),
-        maxY: Math.max(...flat.map((point) => point.y)),
-      };
     }
 
     if (shape.type === "group") {

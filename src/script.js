@@ -16,6 +16,7 @@ const canvasWrap = document.querySelector(".canvas-wrap");
 const statusEl = document.getElementById("status");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
+const closeShapeButton = document.getElementById("close-shape-btn");
 const eraseModeToggle = document.getElementById("erase-mode-toggle");
 const eraserSizeInput = document.getElementById("eraser-size-input");
 const eraserSizeDisplay = document.getElementById("eraser-size-display");
@@ -102,7 +103,6 @@ const historyStore = new HistoryStore();
 
 const appState = {
   currentMode: "ISO",
-  fillAbort: false,
   previewShape: null,
   snapIndicator: null,
   snapToGrid: true,
@@ -558,7 +558,7 @@ function getSelectedShapes() {
 function getSelectedMeasurableShape() {
   if (appState.selectionSet.size !== 1) return null;
   const shape = shapeStore.getShapeById(appState.lastSelectedId) || getSelectedShapes()[0] || null;
-  return (shape && (shape.type === "line" || shape.type === "polygon-shape")) ? shape : null;
+  return (shape && (shape.type === "line" || shape.type === "polygon")) ? shape : null;
 }
 
 function deleteSelection() {
@@ -570,7 +570,7 @@ function deleteSelection() {
       shapeStore.removeShape(selectedShape.id);
       continue;
     }
-    if (selectedShape.type === "polygon-shape" && appState.deleteSourceLinesOnPolygonDelete && Array.isArray(selectedShape.sourceLineIds)) {
+    if (selectedShape.type === "polygon" && appState.deleteSourceLinesOnPolygonDelete && Array.isArray(selectedShape.sourceLineIds)) {
       for (const lineId of selectedShape.sourceLineIds) shapeStore.removeShape(lineId);
     }
     shapeStore.removeShape(selectedShape.id);
@@ -1013,6 +1013,9 @@ document.addEventListener("click", () => {
 
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
+closeShapeButton?.addEventListener("click", () => {
+  tools.polyline.closeShapeNow?.();
+});
 
 snapGridToggle.addEventListener("change", (event) => {
   appState.snapToGrid = event.target.checked;
@@ -1112,7 +1115,6 @@ selectionFillColor?.addEventListener("input", (event) => {
   const value = event.target.value;
   applyToSelected((shape) => {
     shape.fillColor = value;
-    if (shape.type === "fillRegion") shape.color = value;
   });
 });
 selectionFillColor?.addEventListener("change", () => pushHistoryState());

@@ -4,11 +4,12 @@ import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
 import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class Line extends Shape {
-  constructor({ start, end, startUV, endUV, ...rest }) {
+  constructor({ start, end, startUV, endUV, sourceForPolygonId = null, ...rest }) {
     super({ ...rest, type: "line" });
     this.startUV = startUV ? { ...startUV } : worldToIsoUV(start);
     this.endUV = endUV ? { ...endUV } : worldToIsoUV(end);
     this.syncWorldFromUV();
+    this.sourceForPolygonId = sourceForPolygonId ?? null;
   }
 
   syncWorldFromUV() {
@@ -25,6 +26,7 @@ export class Line extends Shape {
     this.startUV = { ...startUV };
     this.endUV = { ...endUV };
     this.syncWorldFromUV();
+    this.sourceForPolygonId = sourceForPolygonId ?? null;
   }
 
   drawDimensionLabel(ctx, appState, midScreen) {
@@ -125,6 +127,7 @@ export class Line extends Shape {
       end: { ...this.end },
       startUV: { ...this.startUV },
       endUV: { ...this.endUV },
+      sourceForPolygonId: this.sourceForPolygonId,
     };
   }
 }
