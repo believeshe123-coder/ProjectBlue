@@ -18,27 +18,14 @@ function parseVertexKey(key) {
   return { u, v };
 }
 
-function cross(a, b, c) {
+function crossUv(a, b, c) {
   return (b.u - a.u) * (c.v - a.v) - (b.v - a.v) * (c.u - a.u);
-}
-
-function dot(a, b, c) {
-  return (c.u - a.u) * (b.u - a.u) + (c.v - a.v) * (b.v - a.v);
 }
 
 function segmentLengthSquared(a, b) {
   const du = b.u - a.u;
   const dv = b.v - a.v;
   return du * du + dv * dv;
-}
-
-function isPointOnSegment(point, start, end) {
-  if (Math.abs(cross(start, end, point)) > EPS) return false;
-  const projection = dot(start, end, point);
-  if (projection < -EPS) return false;
-  const lenSq = segmentLengthSquared(start, end);
-  if (projection - lenSq > EPS) return false;
-  return true;
 }
 
 function polygonSignedArea(points) {
@@ -81,6 +68,67 @@ function toUvPoint(linePoint, maybeUV) {
   return canonicalUv(maybeUV ?? worldToIsoUV(linePoint));
 }
 
+function normalizeIntersectionNumber(value) {
+  if (!Number.isFinite(value)) return value;
+  const roundedInt = Math.round(value);
+  if (Math.abs(value - roundedInt) < EPS) return roundedInt;
+  const roundedHalf = Math.round(value * 2) / 2;
+  if (Math.abs(value - roundedHalf) < EPS) return roundedHalf;
+  return value;
+}
+
+function isSamePointUv(a, b) {
+  return Math.abs(a.u - b.u) <= EPS && Math.abs(a.v - b.v) <= EPS;
+}
+
+function pointOnSegmentUv(point, start, end) {
+  if (Math.abs(crossUv(start, end, point)) > EPS) return false;
+  const minU = Math.min(start.u, end.u) - EPS;
+  const maxU = Math.max(start.u, end.u) + EPS;
+  const minV = Math.min(start.v, end.v) - EPS;
+  const maxV = Math.max(start.v, end.v) + EPS;
+  return point.u >= minU && point.u <= maxU && point.v >= minV && point.v <= maxV;
+}
+
+function segmentIntersectionUv(a, b, c, d) {
+  const r = { u: b.u - a.u, v: b.v - a.v };
+  const s = { u: d.u - c.u, v: d.v - c.v };
+  const denom = r.u * s.v - r.v * s.u;
+  const ca = { u: c.u - a.u, v: c.v - a.v };
+
+  if (Math.abs(denom) <= EPS) {
+    if (Math.abs(ca.u * r.v - ca.v * r.u) > EPS) return [];
+    const points = [a, b, c, d].filter((pt) => pointOnSegmentUv(pt, a, b) && pointOnSegmentUv(pt, c, d));
+    const unique = new Map();
+    for (const point of points) {
+      const normalized = {
+        u: normalizeIntersectionNumber(point.u),
+        v: normalizeIntersectionNumber(point.v),
+      };
+      unique.set(vertexKey(normalized), normalized);
+    }
+    return [...unique.values()];
+  }
+
+  const t = (ca.u * s.v - ca.v * s.u) / denom;
+  const u = (ca.u * r.v - ca.v * r.u) / denom;
+  if (t < -EPS || t > 1 + EPS || u < -EPS || u > 1 + EPS) return [];
+
+  return [{
+    u: normalizeIntersectionNumber(a.u + t * r.u),
+    v: normalizeIntersectionNumber(a.v + t * r.v),
+  }];
+}
+
+function edgeCanonicalKey(aKey, bKey) {
+  return aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
+}
+
+function cycleKey(pointsUV) {
+  const canonical = normalizeCycleForId(pointsUV);
+  return canonical.map((point) => vertexKey(point)).join(";");
+}
+
 function buildSplitGraph(lines) {
   const vertices = new Map();
   const segments = [];
@@ -93,21 +141,55 @@ function buildSplitGraph(lines) {
     vertices.set(startKey, start);
     vertices.set(endKey, end);
     if (startKey === endKey) continue;
-    segments.push({ start, end });
+    segments.push({ start, end, startKey, endKey });
+  }
+
+  const pointsBySegment = segments.map((segment) => {
+    const pointMap = new Map();
+    pointMap.set(segment.startKey, segment.start);
+    pointMap.set(segment.endKey, segment.end);
+    return pointMap;
+  });
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const first = segments[i];
+    for (let j = i + 1; j < segments.length; j += 1) {
+      const second = segments[j];
+      const intersections = segmentIntersectionUv(first.start, first.end, second.start, second.end);
+      for (const point of intersections) {
+        const canonical = canonicalUv(point);
+        const key = vertexKey(canonical);
+        vertices.set(key, canonical);
+        pointsBySegment[i].set(key, canonical);
+        pointsBySegment[j].set(key, canonical);
+      }
+    }
   }
 
   const allVertices = [...vertices.values()];
-  const undirectedEdges = new Set();
+  for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+    const segment = segments[segmentIndex];
+    const segmentPoints = pointsBySegment[segmentIndex];
+    for (const point of allVertices) {
+      if (!pointOnSegmentUv(point, segment.start, segment.end)) continue;
+      const key = vertexKey(point);
+      segmentPoints.set(key, point);
+    }
+  }
 
-  for (const segment of segments) {
-    const splitPoints = allVertices.filter((vertex) => isPointOnSegment(vertex, segment.start, segment.end));
-    splitPoints.sort((a, b) => segmentLengthSquared(segment.start, a) - segmentLengthSquared(segment.start, b));
+  const undirectedEdges = new Set();
+  for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex += 1) {
+    const segment = segments[segmentIndex];
+    const splitPoints = [...pointsBySegment[segmentIndex].values()]
+      .sort((a, b) => segmentLengthSquared(segment.start, a) - segmentLengthSquared(segment.start, b));
 
     for (let i = 0; i < splitPoints.length - 1; i += 1) {
-      const aKey = vertexKey(splitPoints[i]);
-      const bKey = vertexKey(splitPoints[i + 1]);
-      if (aKey === bKey) continue;
-      undirectedEdges.add(aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`);
+      const from = splitPoints[i];
+      const to = splitPoints[i + 1];
+      if (isSamePointUv(from, to)) continue;
+      const aKey = vertexKey(from);
+      const bKey = vertexKey(to);
+      undirectedEdges.add(edgeCanonicalKey(aKey, bKey));
     }
   }
 
@@ -119,6 +201,9 @@ export function isPointInPolygonUV(point, polygon) {
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
     const pi = polygon[i];
     const pj = polygon[j];
+
+    if (pointOnSegmentUv(point, pj, pi)) return true;
+
     const intersects =
       pi.v > point.v !== pj.v > point.v
       && point.u < ((pj.u - pi.u) * (point.v - pi.v)) / ((pj.v - pi.v) || EPS) + pi.u;
@@ -129,7 +214,7 @@ export function isPointInPolygonUV(point, polygon) {
 
 export function buildRegionsFromLines(lines) {
   const { vertices, undirectedEdges } = buildSplitGraph(lines);
-  if (!undirectedEdges.size) return [];
+  if (!undirectedEdges.size) return { boundedFaces: [], debug: { totalEdges: 0, totalVertices: vertices.size, totalRegions: 0, outerArea: 0 } };
 
   const halfEdges = new Map();
   const outgoing = new Map();
@@ -156,66 +241,94 @@ export function buildRegionsFromLines(lines) {
 
   const visited = new Set();
   const tracedFaces = [];
-  const maxSteps = halfEdges.size + 4;
 
   for (const startKey of halfEdges.keys()) {
     if (visited.has(startKey)) continue;
 
     const loop = [];
     let currentKey = startKey;
-    let closed = false;
 
-    for (let steps = 0; steps < maxSteps; steps += 1) {
-      if (visited.has(currentKey)) {
-        if (currentKey === startKey) closed = true;
-        break;
-      }
-
+    while (true) {
+      if (visited.has(currentKey)) break;
       visited.add(currentKey);
       loop.push(currentKey);
+
       const current = halfEdges.get(currentKey);
-      const reverseKey = `${current.toKey}>${current.fromKey}`;
+      const incomingDirectionKey = `${current.toKey}>${current.fromKey}`;
       const nextCandidates = outgoing.get(current.toKey);
       if (!nextCandidates?.length) break;
 
-      const reverseIndex = nextCandidates.indexOf(reverseKey);
-      if (reverseIndex === -1) break;
-      currentKey = nextCandidates[(reverseIndex + 1) % nextCandidates.length];
-      if (currentKey === startKey) {
-        closed = true;
+      const incomingIndex = nextCandidates.indexOf(incomingDirectionKey);
+      if (incomingIndex === -1) break;
+
+      const nextIndex = (incomingIndex + 1) % nextCandidates.length;
+      const nextKey = nextCandidates[nextIndex];
+      if (nextKey === startKey) {
+        loop.push(nextKey);
         break;
       }
+      currentKey = nextKey;
     }
 
-    if (!closed || loop.length < 3) continue;
+    if (loop.length < 4 || loop[loop.length - 1] !== startKey) continue;
 
-    const cycleUV = loop.map((edgeKey) => {
+    const cycleUV = loop.slice(0, -1).map((edgeKey) => {
       const edge = halfEdges.get(edgeKey);
       return vertices.get(edge.fromKey) ?? parseVertexKey(edge.fromKey);
     });
 
     const signedArea = polygonSignedArea(cycleUV);
-    if (Math.abs(signedArea) < EPS) continue;
+    if (Math.abs(signedArea) <= EPS) continue;
 
     tracedFaces.push({ cycleUV, signedArea, areaAbs: Math.abs(signedArea) });
   }
 
-  if (!tracedFaces.length) return [];
-  const outsideFace = tracedFaces.reduce((largest, face) => (face.areaAbs > largest.areaAbs ? face : largest), tracedFaces[0]);
+  if (!tracedFaces.length) {
+    return {
+      boundedFaces: [],
+      debug: {
+        totalEdges: undirectedEdges.size,
+        totalVertices: vertices.size,
+        totalRegions: 0,
+        outerArea: 0,
+      },
+    };
+  }
 
-  return tracedFaces
+  const seenCycles = new Set();
+  const dedupedFaces = [];
+  for (const face of tracedFaces) {
+    const key = cycleKey(face.cycleUV);
+    if (seenCycles.has(key)) continue;
+    seenCycles.add(key);
+    dedupedFaces.push(face);
+  }
+
+  const outsideFace = dedupedFaces.reduce((largest, face) => (face.areaAbs > largest.areaAbs ? face : largest), dedupedFaces[0]);
+
+  const boundedFaces = dedupedFaces
     .filter((face) => face !== outsideFace)
-    .filter((face) => face.signedArea > 0)
     .map((face) => ({
       id: hashCycle(face.cycleUV),
       uvCycle: face.cycleUV.map((point) => ({ ...point })),
       area: face.areaAbs,
+      signedArea: face.signedArea,
     }));
+
+  return {
+    boundedFaces,
+    debug: {
+      totalEdges: undirectedEdges.size,
+      totalVertices: vertices.size,
+      totalRegions: boundedFaces.length,
+      outerArea: outsideFace.signedArea,
+    },
+  };
 }
 
 export function findSmallestRegionContainingPoint(regions, pointUV) {
   const containing = regions.filter((region) => isPointInPolygonUV(pointUV, region.uvCycle));
   if (!containing.length) return null;
-  containing.sort((a, b) => a.area - b.area);
+  containing.sort((a, b) => Math.abs(a.area) - Math.abs(b.area));
   return containing[0];
 }

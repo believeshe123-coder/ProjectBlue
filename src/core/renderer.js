@@ -28,6 +28,47 @@ function drawPolygonDebugOutlines(ctx, camera, polygons, { strokeStyle = "#ff3cf
   ctx.restore();
 }
 
+function drawRegionDebugOverlay(ctx, camera, regions = []) {
+  if (!Array.isArray(regions) || regions.length === 0) return;
+
+  ctx.save();
+  ctx.setLineDash([10, 6]);
+  ctx.lineWidth = 2;
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  for (let index = 0; index < regions.length; index += 1) {
+    const region = regions[index];
+    if (!region?.uvCycle || region.uvCycle.length < 3) continue;
+
+    const color = `hsl(${(index * 41) % 360} 95% 60%)`;
+    const worldPoints = region.uvCycle.map((point) => isoUVToWorld(point.u, point.v));
+    const screenPoints = worldPoints.map((point) => camera.worldToScreen(point));
+
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+    for (let i = 1; i < screenPoints.length; i += 1) {
+      ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    const center = screenPoints.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+    center.x /= screenPoints.length;
+    center.y /= screenPoints.length;
+
+    const label = `${index} | ${Math.abs(region.area).toFixed(2)}`;
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillRect(center.x - 44, center.y - 10, 88, 20);
+    ctx.fillStyle = color;
+    ctx.fillText(label, center.x, center.y + 0.5);
+  }
+
+  ctx.restore();
+}
+
 export class Renderer {
   constructor({ ctx, camera, shapeStore, appState, getCanvasMetrics, ensureCanvasSize }) {
     this.ctx = ctx;
@@ -96,7 +137,7 @@ export class Renderer {
     const measurements = shapes.filter((shape) => shape.type === "measurement");
     const others = shapes.filter((shape) => !["polygon", "fillRegion", "line", "measurement"].includes(shape.type));
 
-    this.shapeStore.getComputedRegions();
+    const computedRegions = this.shapeStore.getComputedRegions();
     for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
     for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
     for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
@@ -182,6 +223,10 @@ export class Renderer {
       if (this.appState.flashPolygonDebugOutlines === true) {
         this.appState.flashPolygonDebugOutlines = false;
       }
+    }
+
+    if (this.appState.debugRegions === true) {
+      drawRegionDebugOverlay(this.ctx, this.camera, computedRegions);
     }
 
     if (this.appState.marqueeRect) {
