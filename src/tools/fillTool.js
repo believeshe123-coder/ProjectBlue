@@ -3,9 +3,15 @@ import { FillRegion } from "../models/fillRegion.js";
 import { getIsoSpacingWorld, worldToIsoUV } from "../core/isoGrid.js";
 import { traceContoursFromMask } from "../utils/marchingSquares.js";
 
-const MIN_PIXELS_PER_WORLD = 8;
+const MIN_PIXELS_PER_WORLD = 2;
 const MAX_PIXELS_PER_WORLD = 32;
-const MAX_OFFSCREEN_DIMENSION = 4096;
+const MAX_OFFSCREEN_SIDE = 2048;
+const MAX_OFFSCREEN_PIXELS = 4_000_000;
+const FILL_CHUNK_SIZE = 50_000;
+const MAX_FILL_VISITS = 1_500_000;
+const SPATIAL_RADIUS_CELLS = 200;
+const FILL_TOO_LARGE_MESSAGE = "Fill area too large. Zoom in or draw a smaller closed region.";
+const FILL_TOO_COMPLEX_MESSAGE = "Fill region too complex/large.";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -128,6 +134,25 @@ export class FillTool extends BaseTool {
     super(context);
     this.barrierCanvas = document.createElement("canvas");
     this.barrierCtx = this.barrierCanvas.getContext("2d", { willReadFrequently: true });
+    this.activeFillToken = 0;
+  }
+
+  cancelCurrentFill(reason = "Cancelled") {
+    this.activeFillToken += 1;
+    this.context.appState.fillAbort = true;
+    if (reason) {
+      console.info("[fill] abort requested", reason);
+    }
+  }
+
+  onDeactivate() {
+    this.cancelCurrentFill("tool changed");
+  }
+
+  onKeyDown(event) {
+    if (event.key === "Escape") {
+      this.cancelCurrentFill("Escape key");
+    }
   }
 
   resolveWorldRasterBounds(clickWorld, boundaryShapes) {
@@ -157,9 +182,26 @@ export class FillTool extends BaseTool {
       return expandBounds(containingPolygons[0].bounds, paddingWorld);
     }
 
+    const radius = getIsoSpacingWorld() * SPATIAL_RADIUS_CELLS;
+    const localBounds = {
+      minX: clickWorld.x - radius,
+      minY: clickWorld.y - radius,
+      maxX: clickWorld.x + radius,
+      maxY: clickWorld.y + radius,
+    };
+
     let union = null;
     for (const shape of boundaryShapes) {
-      union = unionBounds(union, getShapeBounds(shape));
+      const bounds = getShapeBounds(shape);
+      if (!bounds) continue;
+      const intersectsRadius = !(
+        bounds.maxX < localBounds.minX
+        || bounds.minX > localBounds.maxX
+        || bounds.maxY < localBounds.minY
+        || bounds.minY > localBounds.maxY
+      );
+      if (!intersectsRadius) continue;
+      union = unionBounds(union, bounds);
     }
 
     if (!union) return null;
@@ -175,13 +217,22 @@ export class FillTool extends BaseTool {
     let offW = Math.max(1, Math.ceil(worldWidth * pixelsPerWorld));
     let offH = Math.max(1, Math.ceil(worldHeight * pixelsPerWorld));
 
-    while ((offW > MAX_OFFSCREEN_DIMENSION || offH > MAX_OFFSCREEN_DIMENSION) && pixelsPerWorld > 1) {
+    while ((offW > MAX_OFFSCREEN_SIDE || offH > MAX_OFFSCREEN_SIDE || offW * offH > MAX_OFFSCREEN_PIXELS) && pixelsPerWorld > MIN_PIXELS_PER_WORLD) {
       pixelsPerWorld -= 1;
       offW = Math.max(1, Math.ceil(worldWidth * pixelsPerWorld));
       offH = Math.max(1, Math.ceil(worldHeight * pixelsPerWorld));
     }
 
-    return { pixelsPerWorld, offW, offH };
+    const fitsLimit = offW <= MAX_OFFSCREEN_SIDE
+      && offH <= MAX_OFFSCREEN_SIDE
+      && offW * offH <= MAX_OFFSCREEN_PIXELS;
+
+    return {
+      pixelsPerWorld,
+      offW,
+      offH,
+      tooLarge: !fitsLimit || pixelsPerWorld < MIN_PIXELS_PER_WORLD,
+    };
   }
 
   drawBoundaryRaster(boundaryShapes, worldBounds, pixelsPerWorld, offW, offH) {
@@ -229,23 +280,72 @@ export class FillTool extends BaseTool {
     }
   }
 
-  floodFill(alpha, width, height, seedX, seedY) {
+  async floodFill(alpha, width, height, seedX, seedY, token) {
     const getAlpha = (x, y) => alpha[(y * width + x) * 4 + 3];
-    if (getAlpha(seedX, seedY) > 0) return null;
+    if (getAlpha(seedX, seedY) > 0) {
+      return { fillMask: null, status: "hit_boundary", visitedCount: 0 };
+    }
 
     const size = width * height;
-    const filledMask = new Uint8Array(size);
-    const queueX = new Int32Array(size);
-    const queueY = new Int32Array(size);
+    const visitedMask = new Uint8Array(size);
+    const queue = new Uint32Array(size);
 
     let head = 0;
     let tail = 0;
     let touchesEdge = false;
+    let visitCount = 0;
+    let processedSinceYield = 0;
 
-    queueX[tail] = seedX;
-    queueY[tail] = seedY;
+    queue[tail] = seedY * width + seedX;
     tail += 1;
-    filledMask[seedY * width + seedX] = 1;
+    visitedMask[seedY * width + seedX] = 1;
+
+    const maxVisits = Math.min(MAX_FILL_VISITS, Math.max(1, Math.floor(size * 0.95)));
+
+    while (head < tail) {
+      const index = queue[head];
+      head += 1;
+      visitCount += 1;
+
+      if (visitCount > maxVisits) {
+        return { fillMask: null, status: "too_complex", visitedCount: visitCount };
+      }
+
+      const x = index % width;
+      const y = Math.floor(index / width);
+
+      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
+        touchesEdge = true;
+      }
+
+      const tryQueueNeighbor = (nx, ny) => {
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) return;
+        const neighborIndex = ny * width + nx;
+        if (visitedMask[neighborIndex]) return;
+        if (getAlpha(nx, ny) > 0) return;
+        visitedMask[neighborIndex] = 1;
+        queue[tail] = neighborIndex;
+        tail += 1;
+      };
+
+      tryQueueNeighbor(x + 1, y);
+      tryQueueNeighbor(x - 1, y);
+      tryQueueNeighbor(x, y + 1);
+      tryQueueNeighbor(x, y - 1);
+
+      processedSinceYield += 1;
+      if (processedSinceYield >= FILL_CHUNK_SIZE) {
+        processedSinceYield = 0;
+        if (this.context.appState.fillAbort || token !== this.activeFillToken) {
+          return { fillMask: null, status: "cancelled", visitedCount: visitCount };
+        }
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+      }
+    }
+
+    if (touchesEdge) {
+      return { fillMask: null, status: "touches_edge", visitedCount: visitCount };
+    }
 
     const dirs = [
       [1, 0],
@@ -254,34 +354,7 @@ export class FillTool extends BaseTool {
       [0, -1],
     ];
 
-    while (head < tail) {
-      const x = queueX[head];
-      const y = queueY[head];
-      head += 1;
-
-      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
-        touchesEdge = true;
-      }
-
-      for (const [dx, dy] of dirs) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-        const index = ny * width + nx;
-        if (filledMask[index]) continue;
-        if (getAlpha(nx, ny) > 0) continue;
-        filledMask[index] = 1;
-        queueX[tail] = nx;
-        queueY[tail] = ny;
-        tail += 1;
-      }
-    }
-
-    if (touchesEdge) {
-      return null;
-    }
-
-    let dilatedMask = filledMask;
+    let dilatedMask = visitedMask;
     for (let iteration = 0; iteration < 2; iteration += 1) {
       const nextMask = dilatedMask.slice();
       for (let y = 0; y < height; y += 1) {
@@ -298,13 +371,25 @@ export class FillTool extends BaseTool {
         }
       }
       dilatedMask = nextMask;
+
+      if (this.context.appState.fillAbort || token !== this.activeFillToken) {
+        return { fillMask: null, status: "cancelled", visitedCount: visitCount };
+      }
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
     }
 
-    return dilatedMask;
+    return { fillMask: dilatedMask, status: "ok", visitedCount: visitCount };
   }
 
-  onMouseDown({ event, worldPoint }) {
+  async onMouseDown({ event, worldPoint }) {
     if (event.button !== 0) return;
+
+    const fillToken = this.activeFillToken + 1;
+    this.activeFillToken = fillToken;
+    this.context.appState.fillAbort = false;
+    this.context.appState.setBusyStatus?.("Filling…");
+
+    const startMs = performance.now();
 
     const { shapeStore, appState } = this.context;
     const clickWorld = worldPoint;
@@ -312,23 +397,58 @@ export class FillTool extends BaseTool {
       .getShapes()
       .filter((shape) => shape.visible !== false && (shape.type === "line" || shape.type === "polygon-shape"));
 
-    if (!boundaryShapes.length) return;
+    if (!boundaryShapes.length) {
+      this.context.appState.clearBusyStatus?.();
+      return;
+    }
 
     const worldBounds = this.resolveWorldRasterBounds(clickWorld, boundaryShapes);
-    if (!worldBounds) return;
+    if (!worldBounds) {
+      appState.notifyStatus?.(FILL_TOO_LARGE_MESSAGE, 2600);
+      console.info("[fill] abort: no local bounds near click");
+      this.context.appState.clearBusyStatus?.();
+      return;
+    }
 
-    const { pixelsPerWorld, offW, offH } = this.getRasterSizing(worldBounds);
+    const { pixelsPerWorld, offW, offH, tooLarge } = this.getRasterSizing(worldBounds);
+    if (tooLarge) {
+      appState.notifyStatus?.(FILL_TOO_LARGE_MESSAGE, 2600);
+      console.info("[fill] abort: raster too large", { offW, offH, pixelsPerWorld });
+      this.context.appState.clearBusyStatus?.();
+      return;
+    }
+
     this.drawBoundaryRaster(boundaryShapes, worldBounds, pixelsPerWorld, offW, offH);
 
     const clickOffX = clamp(Math.round((clickWorld.x - worldBounds.minX) * pixelsPerWorld), 0, offW - 1);
     const clickOffY = clamp(Math.round((clickWorld.y - worldBounds.minY) * pixelsPerWorld), 0, offH - 1);
 
     const imageData = this.barrierCtx.getImageData(0, 0, offW, offH);
-    const fillMask = this.floodFill(imageData.data, offW, offH, clickOffX, clickOffY);
-    if (!fillMask) return;
+    const { fillMask, status, visitedCount } = await this.floodFill(imageData.data, offW, offH, clickOffX, clickOffY, fillToken);
+    if (!fillMask) {
+      if (status === "too_complex") {
+        appState.notifyStatus?.(FILL_TOO_COMPLEX_MESSAGE, 2400);
+        console.info("[fill] abort: max visit cap exceeded", { offW, offH, visitedCount });
+      } else if (status === "cancelled") {
+        appState.notifyStatus?.("Fill cancelled", 1200);
+        console.info("[fill] cancelled", { offW, offH, visitedCount });
+      } else if (status === "touches_edge") {
+        console.info("[fill] abort: region touches raster edge", { offW, offH, visitedCount });
+      }
+      this.context.appState.clearBusyStatus?.();
+      return;
+    }
+
+    if (this.context.appState.fillAbort || fillToken !== this.activeFillToken) {
+      this.context.appState.clearBusyStatus?.();
+      return;
+    }
 
     const contoursPx = traceContoursFromMask(fillMask, offW, offH);
-    if (!contoursPx.length) return;
+    if (!contoursPx.length) {
+      this.context.appState.clearBusyStatus?.();
+      return;
+    }
 
     const epsilonWorld = 0.75 / pixelsPerWorld;
     const contoursWorld = contoursPx
@@ -343,7 +463,10 @@ export class FillTool extends BaseTool {
       .filter((contour) => contour.length >= 3)
       .sort((a, b) => Math.abs(contourArea(b)) - Math.abs(contourArea(a)));
 
-    if (!contoursWorld.length) return;
+    if (!contoursWorld.length) {
+      this.context.appState.clearBusyStatus?.();
+      return;
+    }
 
     const contoursUV = contoursWorld.map((contour) => contour.map((point) => worldToIsoUV(point)));
 
@@ -358,5 +481,15 @@ export class FillTool extends BaseTool {
       zIndex: -1000,
     });
     shapeStore.addShape(fillRegion);
+
+    const elapsed = performance.now() - startMs;
+    console.info("[fill] stats", {
+      offW,
+      offH,
+      pixelsPerWorld,
+      visitedCount,
+      elapsedMs: Number(elapsed.toFixed(1)),
+    });
+    this.context.appState.clearBusyStatus?.();
   }
 }
