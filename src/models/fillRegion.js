@@ -2,7 +2,7 @@ import { Shape } from "./shape.js";
 import { isoUVToWorld } from "../core/isoGrid.js";
 
 export class FillRegion extends Shape {
-  constructor({ id, regionId, uvCycle = [], holesUVCycles = [], color = "#4aa3ff", alpha = 1, createdAt, zIndex = -1000, ...rest }) {
+  constructor({ id, regionId, uvCycle = [], color = "#4aa3ff", alpha = 1, createdAt, zIndex = -1000, ...rest }) {
     super({
       id: id ?? `fill:${regionId}`,
       ...rest,
@@ -17,7 +17,6 @@ export class FillRegion extends Shape {
 
     this.regionId = regionId ?? id ?? null;
     this.uvCycle = uvCycle.map((point) => ({ ...point }));
-    this.holesUVCycles = holesUVCycles.map((hole) => hole.map((point) => ({ ...point })));
     this.color = color;
     this.alpha = Number.isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
     this.createdAt = createdAt ?? Date.now();
@@ -25,15 +24,13 @@ export class FillRegion extends Shape {
     this.syncWorldFromUV();
   }
 
-  setRegionCycle(uvCycle = [], holesUVCycles = []) {
+  setRegionCycle(uvCycle = []) {
     this.uvCycle = uvCycle.map((point) => ({ ...point }));
-    this.holesUVCycles = holesUVCycles.map((hole) => hole.map((point) => ({ ...point })));
     this.syncWorldFromUV();
   }
 
   syncWorldFromUV() {
     this.pointsWorld = this.uvCycle.map((point) => isoUVToWorld(point.u, point.v));
-    this.holesWorld = this.holesUVCycles.map((hole) => hole.map((point) => isoUVToWorld(point.u, point.v)));
     this.updateBounds();
   }
 
@@ -64,21 +61,9 @@ export class FillRegion extends Shape {
       ctx.lineTo(p.x, p.y);
     }
     ctx.closePath();
-
-    for (const holeWorld of this.holesWorld ?? []) {
-      if (!holeWorld || holeWorld.length < 3) continue;
-      const holeFirst = camera.worldToScreen(holeWorld[0]);
-      ctx.moveTo(holeFirst.x, holeFirst.y);
-      for (let i = 1; i < holeWorld.length; i += 1) {
-        const p = camera.worldToScreen(holeWorld[i]);
-        ctx.lineTo(p.x, p.y);
-      }
-      ctx.closePath();
-    }
-
     ctx.globalAlpha = this.alpha;
     ctx.fillStyle = this.color;
-    ctx.fill("evenodd");
+    ctx.fill();
     ctx.restore();
   }
 
@@ -92,7 +77,6 @@ export class FillRegion extends Shape {
       type: "fillRegion",
       regionId: this.regionId,
       uvCycle: this.uvCycle.map((point) => ({ ...point })),
-      holesUVCycles: this.holesUVCycles.map((hole) => hole.map((point) => ({ ...point }))),
       color: this.color,
       alpha: this.alpha,
       createdAt: this.createdAt,
@@ -105,7 +89,6 @@ export class FillRegion extends Shape {
       ...serialized,
       regionId: serialized.regionId ?? serialized.id,
       uvCycle: serialized.uvCycle ?? [],
-      holesUVCycles: serialized.holesUVCycles ?? [],
       color: serialized.color ?? serialized.fillColor ?? "#4aa3ff",
       alpha: serialized.alpha ?? serialized.fillOpacity ?? 1,
     });
