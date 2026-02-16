@@ -90,6 +90,8 @@ export class PolylineTool extends BaseTool {
       strokeWidth: appState.currentStyle.strokeWidth,
       fillColor: appState.currentStyle.fillColor,
       fillAlpha: 1,
+      zIndex: appState.currentStyle.zIndex ?? 0,
+      createdAt: Date.now(),
     });
 
     if (appState.debugFillWorkflow) {
@@ -102,6 +104,7 @@ export class PolylineTool extends BaseTool {
 
     this.context.pushHistoryState?.();
     shapeStore.addShape(polygon);
+    console.log("[CLOSE] committed polygon", polygon.id, "polygons now:", shapeStore.getPolygons().length);
     for (const lineId of this.chainLineIds) {
       const line = shapeStore.getShapeById(lineId);
       if (line?.type === "line") {

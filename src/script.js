@@ -23,6 +23,7 @@ const eraserSizeDisplay = document.getElementById("eraser-size-display");
 const snapGridToggle = document.getElementById("snap-grid-toggle");
 const snapMidToggle = document.getElementById("snap-mid-toggle");
 const debugSnapToggle = document.getElementById("debug-snap-toggle");
+const debugPolygonsToggle = document.getElementById("debug-polygons-toggle");
 const unitPerCellInput = document.getElementById("unit-per-cell");
 const unitNameInput = document.getElementById("unit-name");
 const scaleDisplay = document.getElementById("scale-display");
@@ -109,6 +110,9 @@ const appState = {
   snapToGrid: true,
   snapToMidpoints: true,
   debugSnap: false,
+  debugPolygons: false,
+  debugPolygonStrokeColor: "#ff3cf7",
+  flashPolygonDebugOutlines: false,
   debugFillWorkflow: false,
   snapDebugStatus: "SNAP: OFF",
   unitName: "ft",
@@ -362,7 +366,7 @@ function refreshStatus() {
     return;
   }
 
-  const polygonCount = shapeStore.getShapes().filter((shape) => shape.type === "polygon" && shape.visible !== false).length;
+  const polygonCount = shapeStore.getPolygons().filter((shape) => shape.visible !== false).length;
   statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | polygons: ${polygonCount} | ${getSnapStatusLabel()}`;
 }
 
@@ -1050,6 +1054,11 @@ debugSnapToggle.addEventListener("change", (event) => {
   localStorage.setItem("debugSnapResetV1", "1");
 });
 
+debugPolygonsToggle?.addEventListener("change", (event) => {
+  appState.debugPolygons = event.target.checked;
+  localStorage.setItem("debugPolygons", appState.debugPolygons ? "1" : "0");
+});
+
 continuePolylineToggle.addEventListener("change", (event) => {
   appState.continuePolyline = event.target.checked;
 });
@@ -1302,6 +1311,8 @@ if (debugSnapResetV1 !== "1") {
 }
 appState.debugSnap = localStorage.getItem("debugSnap") === "1";
 debugSnapToggle.checked = appState.debugSnap;
+appState.debugPolygons = localStorage.getItem("debugPolygons") === "1";
+if (debugPolygonsToggle) debugPolygonsToggle.checked = appState.debugPolygons;
 showGridUnitsToggle.checked = appState.showGridUnits;
 updateMeasurementModeControl();
 updateEraseControls();

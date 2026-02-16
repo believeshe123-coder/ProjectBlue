@@ -4,6 +4,30 @@ function zSorted(shapes) {
   return [...shapes].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 }
 
+function drawPolygonDebugOutlines(ctx, camera, polygons, { strokeStyle = "#ff3cf7", lineWidth = 2, alpha = 1 } = {}) {
+  if (!Array.isArray(polygons) || polygons.length === 0) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash([8, 5]);
+
+  for (const polygon of polygons) {
+    if (!polygon?.pointsWorld || polygon.pointsWorld.length < 2) continue;
+    const screenPoints = polygon.pointsWorld.map((point) => camera.worldToScreen(point));
+    ctx.beginPath();
+    ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+    for (let i = 1; i < screenPoints.length; i += 1) {
+      ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 export class Renderer {
   constructor({ ctx, camera, shapeStore, appState, getCanvasMetrics, ensureCanvasSize }) {
     this.ctx = ctx;
@@ -145,6 +169,17 @@ export class Renderer {
       });
     }
 
+    const shouldDrawPolygonDebug = this.appState.debugPolygons === true || this.appState.flashPolygonDebugOutlines === true;
+    if (shouldDrawPolygonDebug) {
+      drawPolygonDebugOutlines(this.ctx, this.camera, polygons, {
+        strokeStyle: this.appState.debugPolygonStrokeColor ?? "#ff3cf7",
+        lineWidth: 2,
+        alpha: this.appState.debugPolygons === true ? 1 : 0.95,
+      });
+      if (this.appState.flashPolygonDebugOutlines === true) {
+        this.appState.flashPolygonDebugOutlines = false;
+      }
+    }
 
     if (this.appState.marqueeRect) {
       const { x, y, width, height } = this.appState.marqueeRect;

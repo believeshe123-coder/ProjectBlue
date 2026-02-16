@@ -1,19 +1,16 @@
 import { BaseTool } from "./baseTool.js";
+import { isPointInPolygon } from "../utils/math.js";
 
 export class FillTool extends BaseTool {
-  onMouseDown({ event, screenPoint, worldPoint }) {
+  onMouseDown({ event, screenPoint }) {
     if (event.button !== 0) return;
 
-    console.log("[FILL] pointerdown reached");
-
     const { shapeStore, camera, appState } = this.context;
-    const worldFromScreen = camera.screenToWorld(screenPoint);
-    const clickWorld = worldPoint ?? worldFromScreen;
-    const toleranceWorld = 6 / Math.max(camera.zoom, 0.001);
-
-    const polys = shapeStore.getShapes()
-      .filter((shape) => shape.type === "polygon" && shape.visible !== false && shape.locked !== true);
+    const polys = shapeStore.getPolygons()
+      .filter((shape) => shape.visible !== false && shape.locked !== true);
     console.log("[FILL] polygons", polys.length);
+
+    const worldPt = camera.screenToWorld(screenPoint);
 
     const hit = polys
       .map((shape, index) => ({ shape, index }))
@@ -23,12 +20,11 @@ export class FillTool extends BaseTool {
         return a.index - b.index;
       })
       .reverse()
-      .find(({ shape }) => shape.hitTest?.(clickWorld, toleranceWorld))?.shape ?? null;
-
-    console.log("[FILL] hit", hit ? { id: hit.id, type: hit.type } : "none");
+      .find(({ shape }) => isPointInPolygon(worldPt, shape.pointsWorld))?.shape ?? null;
 
     if (!hit) {
-      appState.notifyStatus?.("No closed shape found under cursor", 1700);
+      appState.flashPolygonDebugOutlines = true;
+      appState.notifyStatus?.(`No closed shape under cursor (Polygons: ${polys.length}). Use Close Shape.`, 1700);
       return;
     }
 
@@ -37,6 +33,7 @@ export class FillTool extends BaseTool {
     hit.fillAlpha = 1;
     hit.fillOpacity = 1;
     hit.fillEnabled = hit.fillColor !== "transparent";
-    console.log("[FILL] applied", hit.id);
+    appState.setSelection?.([hit.id], hit.id);
+    appState.notifyStatus?.("Filled", 900);
   }
 }

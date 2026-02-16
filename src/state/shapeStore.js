@@ -174,6 +174,10 @@ export class ShapeStore {
     return this.shapes;
   }
 
+  getPolygons() {
+    return this.shapes.filter((shape) => shape.type === "polygon");
+  }
+
   getShapeTargetsForMove(ids = []) {
     const targetIds = new Set();
     for (const id of ids) {
