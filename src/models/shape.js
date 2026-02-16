@@ -15,6 +15,7 @@ export class Shape {
     visible = true,
     locked = false,
     zIndex = 0,
+    createdAt,
     selected = false,
     groupId = null,
   }) {
@@ -32,6 +33,7 @@ export class Shape {
     this.visible = visible;
     this.locked = locked;
     this.zIndex = Number.isFinite(zIndex) ? zIndex : 0;
+    this.createdAt = Number.isFinite(createdAt) ? createdAt : Date.now();
     this.selected = selected;
     this.groupId = groupId ?? null;
   }
@@ -59,6 +61,7 @@ export class Shape {
       visible: this.visible,
       locked: this.locked,
       zIndex: this.zIndex,
+      createdAt: this.createdAt,
       selected: this.selected,
       groupId: this.groupId,
     };

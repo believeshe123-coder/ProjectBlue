@@ -1,7 +1,13 @@
 import { drawIsoGrid, isoUVToWorld, worldToIsoUV } from "./isoGrid.js";
 
 function zSorted(shapes) {
-  return [...shapes].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  return [...shapes].sort((a, b) => {
+    const zDiff = (a.zIndex ?? 0) - (b.zIndex ?? 0);
+    if (zDiff !== 0) return zDiff;
+    const createdDiff = (a.createdAt ?? 0) - (b.createdAt ?? 0);
+    if (createdDiff !== 0) return createdDiff;
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+  });
 }
 
 function drawPolygonDebugOutlines(ctx, camera, polygons, { strokeStyle = "#ff3cf7", lineWidth = 2, alpha = 1 } = {}) {
@@ -69,6 +75,27 @@ function drawRegionDebugOverlay(ctx, camera, regions = []) {
   ctx.restore();
 }
 
+
+
+function drawSelectedRegionOutline(ctx, camera, region) {
+  if (!region?.uvCycle || region.uvCycle.length < 3) return;
+  const worldPoints = region.uvCycle.map((point) => isoUVToWorld(point.u, point.v));
+  const first = camera.worldToScreen(worldPoints[0]);
+  ctx.save();
+  ctx.strokeStyle = "#ffd166";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 5]);
+  ctx.beginPath();
+  ctx.moveTo(first.x, first.y);
+  for (let i = 1; i < worldPoints.length; i += 1) {
+    const point = camera.worldToScreen(worldPoints[i]);
+    ctx.lineTo(point.x, point.y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
 export class Renderer {
   constructor({ ctx, camera, shapeStore, appState, getCanvasMetrics, ensureCanvasSize }) {
     this.ctx = ctx;
@@ -124,7 +151,7 @@ export class Renderer {
       this.ctx.restore();
     }
 
-    const shapes = zSorted(this.shapeStore.getShapes().filter((shape) => shape.visible !== false));
+    const shapes = zSorted(this.shapeStore.getRenderableShapesSorted().filter((shape) => shape.visible !== false));
     const selectedIds = Array.isArray(this.appState.selectedIds) ? this.appState.selectedIds : [];
     const selectionSet = new Set(selectedIds);
     const measurementMode = this.appState.measurementMode ?? "smart";
@@ -133,12 +160,14 @@ export class Renderer {
 
     const polygons = shapes.filter((shape) => shape.type === "polygon");
     const fillRegions = shapes.filter((shape) => shape.type === "fillRegion");
+    const faces = shapes.filter((shape) => shape.type === "face");
     const lines = shapes.filter((shape) => shape.type === "line");
     const measurements = shapes.filter((shape) => shape.type === "measurement");
-    const others = shapes.filter((shape) => !["polygon", "fillRegion", "line", "measurement"].includes(shape.type));
+    const others = shapes.filter((shape) => !["polygon", "fillRegion", "face", "line", "measurement"].includes(shape.type));
 
     const computedRegions = this.shapeStore.getComputedRegions();
     for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
+    for (const face of faces) face.drawFill?.(this.ctx, this.camera, this.appState);
     for (const polygon of polygons) polygon.drawFill?.(this.ctx, this.camera, this.appState);
     for (const polygon of polygons) polygon.drawStroke?.(this.ctx, this.camera, this.appState);
     for (const line of lines) line.drawStroke?.(this.ctx, this.camera, this.appState) ?? line.draw(this.ctx, this.camera, this.appState);
@@ -198,6 +227,11 @@ export class Renderer {
 
     for (const measurement of measurements) measurement.draw(this.ctx, this.camera, this.appState);
     for (const other of others) other.draw(this.ctx, this.camera, this.appState);
+
+    if (this.appState.selectedRegionKey) {
+      const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
+      drawSelectedRegionOutline(this.ctx, this.camera, selectedRegion);
+    }
 
     for (const id of selectedIds) {
       const selectedShape = this.shapeStore.getShapeById(id);

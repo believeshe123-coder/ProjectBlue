@@ -3,7 +3,20 @@ import { PolygonShape } from "../models/polygonShape.js";
 import { Measurement } from "../models/measurement.js";
 import { GroupShape } from "../models/groupShape.js";
 import { FillRegion } from "../models/fillRegion.js";
+import { FaceShape } from "../models/faceShape.js";
 import { buildRegionsFromLines } from "../core/regionBuilder.js";
+
+
+function compareShapeZOrder(a, b, indexA = 0, indexB = 0) {
+  const zDiff = (a?.zIndex ?? 0) - (b?.zIndex ?? 0);
+  if (zDiff !== 0) return zDiff;
+  const createdDiff = (a?.createdAt ?? 0) - (b?.createdAt ?? 0);
+  if (createdDiff !== 0) return createdDiff;
+  const idA = String(a?.id ?? "");
+  const idB = String(b?.id ?? "");
+  if (idA !== idB) return idA.localeCompare(idB);
+  return indexA - indexB;
+}
 
 function hydrateShape(serialized) {
   if (serialized.type === "line") return new Line(serialized);
@@ -11,6 +24,7 @@ function hydrateShape(serialized) {
   if (serialized.type === "measurement") return new Measurement(serialized);
   if (serialized.type === "group") return new GroupShape(serialized);
   if (serialized.type === "fillRegion") return FillRegion.fromJSON(serialized);
+  if (serialized.type === "face") return FaceShape.fromJSON(serialized);
   return null;
 }
 
@@ -175,11 +189,7 @@ export class ShapeStore {
         if (!includeLocked && shape.locked === true) return false;
         return shape.visible !== false;
       })
-      .sort((a, b) => {
-        const zDiff = (a.shape.zIndex ?? 0) - (b.shape.zIndex ?? 0);
-        if (zDiff !== 0) return zDiff;
-        return a.index - b.index;
-      })
+      .sort((a, b) => compareShapeZOrder(a.shape, b.shape, a.index, b.index))
       .reverse();
 
     for (const { shape } of sorted) {
@@ -222,6 +232,10 @@ export class ShapeStore {
 
     if (shape.type === "polygon") {
       return shape.getBounds();
+    }
+
+    if (shape.type === "face") {
+      return shape.getBounds?.() ?? null;
     }
 
     if (shape.type === "fillRegion") {
@@ -285,6 +299,131 @@ export class ShapeStore {
       targetIds.add(shape.id);
     }
     return [...targetIds].map((id) => this.getShapeById(id)).filter(Boolean);
+  }
+
+  getRenderableShapesSorted() {
+    return this.shapes
+      .map((shape, index) => ({ shape, index }))
+      .filter(({ shape }) => shape.type !== "group")
+      .sort((a, b) => compareShapeZOrder(a.shape, b.shape, a.index, b.index))
+      .map(({ shape }) => shape);
+  }
+
+  getExpandedSelectionShapeIds(selectionIds = []) {
+    const selected = new Set();
+    for (const id of selectionIds) {
+      const shape = this.getShapeById(id);
+      if (!shape) continue;
+      if (shape.type === "group") {
+        for (const childId of shape.childIds) selected.add(childId);
+        continue;
+      }
+      if (shape.groupId) {
+        const group = this.getShapeById(shape.groupId);
+        if (group?.type === "group") {
+          for (const childId of group.childIds) selected.add(childId);
+          continue;
+        }
+      }
+      selected.add(shape.id);
+    }
+    return selected;
+  }
+
+  getZOrderBlocks(selectionIds = []) {
+    const ordered = this.getRenderableShapesSorted();
+    const selected = this.getExpandedSelectionShapeIds(selectionIds);
+    const orderedIndex = new Map(ordered.map((shape, index) => [shape.id, index]));
+    const visited = new Set();
+    const blocks = [];
+
+    for (const shape of ordered) {
+      if (visited.has(shape.id)) continue;
+
+      if (shape.groupId) {
+        const group = this.getShapeById(shape.groupId);
+        if (group?.type === "group") {
+          const memberIds = group.childIds
+            .filter((id) => orderedIndex.has(id))
+            .sort((a, b) => orderedIndex.get(a) - orderedIndex.get(b));
+          if (memberIds.length) {
+            memberIds.forEach((id) => visited.add(id));
+            blocks.push({
+              ids: memberIds,
+              selected: memberIds.some((id) => selected.has(id)),
+              groupId: group.id,
+            });
+            continue;
+          }
+        }
+      }
+
+      visited.add(shape.id);
+      blocks.push({ ids: [shape.id], selected: selected.has(shape.id), groupId: null });
+    }
+
+    return blocks;
+  }
+
+  applyBlockOrder(blocks = []) {
+    const orderedIds = blocks.flatMap((block) => block.ids);
+    const idToShape = new Map(this.shapes.map((shape) => [shape.id, shape]));
+
+    orderedIds.forEach((id, index) => {
+      const shape = idToShape.get(id);
+      if (shape) shape.zIndex = index;
+    });
+
+    for (const shape of this.shapes) {
+      if (shape.type !== "group") continue;
+      const childShapes = shape.childIds.map((id) => idToShape.get(id)).filter(Boolean);
+      if (childShapes.length) {
+        shape.zIndex = Math.min(...childShapes.map((child) => child.zIndex ?? 0));
+      }
+    }
+  }
+
+  reorderSelectionZ(selectionIds = [], mode = "front") {
+    const blocks = this.getZOrderBlocks(selectionIds);
+    const selectedBlocks = blocks.filter((block) => block.selected);
+    if (!selectedBlocks.length) return false;
+
+    const firstSelectedIndex = blocks.findIndex((block) => block.selected);
+    const lastSelectedIndex = blocks.length - 1 - [...blocks].reverse().findIndex((block) => block.selected);
+    const unselectedBlocks = blocks.filter((block) => !block.selected);
+    let nextBlocks = null;
+
+    if (mode === "front") {
+      if (lastSelectedIndex === blocks.length - 1) return false;
+      nextBlocks = [...unselectedBlocks, ...selectedBlocks];
+    } else if (mode === "back") {
+      if (firstSelectedIndex === 0) return false;
+      nextBlocks = [...selectedBlocks, ...unselectedBlocks];
+    } else if (mode === "forward") {
+      const neighbor = blocks.slice(lastSelectedIndex + 1).find((block) => !block.selected);
+      if (!neighbor) return false;
+      const neighborIndex = unselectedBlocks.indexOf(neighbor);
+      nextBlocks = [
+        ...unselectedBlocks.slice(0, neighborIndex + 1),
+        ...selectedBlocks,
+        ...unselectedBlocks.slice(neighborIndex + 1),
+      ];
+    } else if (mode === "backward") {
+      const candidates = blocks.slice(0, firstSelectedIndex).filter((block) => !block.selected);
+      const neighbor = candidates[candidates.length - 1];
+      if (!neighbor) return false;
+      const neighborIndex = unselectedBlocks.indexOf(neighbor);
+      nextBlocks = [
+        ...unselectedBlocks.slice(0, neighborIndex),
+        ...selectedBlocks,
+        ...unselectedBlocks.slice(neighborIndex),
+      ];
+    } else {
+      return false;
+    }
+
+    this.applyBlockOrder(nextBlocks);
+    return true;
   }
 
   clear() {
