@@ -64,22 +64,6 @@ function hashCycle(pointsUV) {
   return `region:${canonical.map((point) => vertexKey(point)).join(";")}`;
 }
 
-function polygonCentroid(points = []) {
-  if (!points.length) return { u: 0, v: 0 };
-  let sumU = 0;
-  let sumV = 0;
-  for (const point of points) {
-    sumU += point.u;
-    sumV += point.v;
-  }
-  return { u: sumU / points.length, v: sumV / points.length };
-}
-
-function ensureCounterClockwise(pointsUV) {
-  if (polygonSignedArea(pointsUV) >= 0) return pointsUV.map((point) => ({ ...point }));
-  return [...pointsUV].reverse().map((point) => ({ ...point }));
-}
-
 function toUvPoint(linePoint, maybeUV) {
   return canonicalUv(maybeUV ?? worldToIsoUV(linePoint));
 }
@@ -213,8 +197,6 @@ function buildSplitGraph(lines) {
 }
 
 export function isPointInPolygonUV(point, polygon) {
-  if (!Array.isArray(polygon) || polygon.length < 3) return false;
-
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
     const pi = polygon[i];
@@ -222,23 +204,12 @@ export function isPointInPolygonUV(point, polygon) {
 
     if (pointOnSegmentUv(point, pj, pi)) return true;
 
-    if (Math.abs(pj.v - pi.v) <= EPS) continue;
-
     const intersects =
-      (pi.v > point.v) !== (pj.v > point.v)
-      && point.u <= ((pj.u - pi.u) * (point.v - pi.v)) / (pj.v - pi.v) + pi.u + EPS;
+      pi.v > point.v !== pj.v > point.v
+      && point.u < ((pj.u - pi.u) * (point.v - pi.v)) / ((pj.v - pi.v) || EPS) + pi.u;
     if (intersects) inside = !inside;
   }
   return inside;
-}
-
-function regionContainsPoint(region, pointUV) {
-  if (!isPointInPolygonUV(pointUV, region.uvCycle)) return false;
-  if (!Array.isArray(region.holesUVCycles) || !region.holesUVCycles.length) return true;
-  for (const hole of region.holesUVCycles) {
-    if (isPointInPolygonUV(pointUV, hole)) return false;
-  }
-  return true;
 }
 
 export function buildRegionsFromLines(lines) {
@@ -324,84 +295,25 @@ export function buildRegionsFromLines(lines) {
     };
   }
 
-  const dedupedByGeometry = new Map();
+  const seenCycles = new Set();
+  const dedupedFaces = [];
   for (const face of tracedFaces) {
     const key = cycleKey(face.cycleUV);
-    const existing = dedupedByGeometry.get(key);
-    if (!existing) {
-      dedupedByGeometry.set(key, face);
-      continue;
-    }
-
-    const existingIsCCW = existing.signedArea > EPS;
-    const incomingIsCCW = face.signedArea > EPS;
-    if (!existingIsCCW && incomingIsCCW) dedupedByGeometry.set(key, face);
+    if (seenCycles.has(key)) continue;
+    seenCycles.add(key);
+    dedupedFaces.push(face);
   }
 
-  const dedupedFaces = [...dedupedByGeometry.values()];
-  let boundedCandidates = dedupedFaces.filter((face) => face.signedArea > EPS);
+  const outsideFace = dedupedFaces.reduce((largest, face) => (face.areaAbs > largest.areaAbs ? face : largest), dedupedFaces[0]);
 
-  if (!boundedCandidates.length) {
-    boundedCandidates = dedupedFaces.filter((face) => face.signedArea < -EPS);
-  }
-
-  const normalizedLoops = boundedCandidates.map((face) => {
-    const uvCycle = ensureCounterClockwise(face.cycleUV);
-    return {
-      id: hashCycle(uvCycle),
-      uvCycle,
-      areaAbs: Math.abs(polygonSignedArea(uvCycle)),
-      centroid: polygonCentroid(uvCycle),
-    };
-  });
-
-  const enriched = normalizedLoops
-    .map((loop, index) => {
-      let parentIndex = -1;
-      for (let candidate = 0; candidate < normalizedLoops.length; candidate += 1) {
-        if (candidate === index) continue;
-        const parentLoop = normalizedLoops[candidate];
-        if (parentLoop.areaAbs <= loop.areaAbs + EPS) continue;
-        if (!isPointInPolygonUV(loop.centroid, parentLoop.uvCycle)) continue;
-        if (parentIndex === -1 || normalizedLoops[parentIndex].areaAbs > parentLoop.areaAbs) {
-          parentIndex = candidate;
-        }
-      }
-      return {
-        ...loop,
-        parentIndex,
-        depth: parentIndex === -1 ? 0 : 1,
-      };
-    });
-
-  for (const loop of enriched) {
-    let depth = 0;
-    let currentParent = loop.parentIndex;
-    while (currentParent !== -1) {
-      depth += 1;
-      currentParent = enriched[currentParent].parentIndex;
-    }
-    loop.depth = depth;
-  }
-
-  const boundedFaces = enriched.map((loop, index) => {
-    const holes = enriched
-      .filter((candidate) => candidate.parentIndex === index)
-      .map((candidate) => candidate.uvCycle.map((point) => ({ ...point })));
-
-    const holesArea = holes.reduce((sum, hole) => sum + Math.abs(polygonSignedArea(hole)), 0);
-    const netArea = Math.max(0, loop.areaAbs - holesArea);
-    const holeKeys = holes.map((hole) => hashCycle(hole)).sort().join("|");
-
-    return {
-      id: holeKeys ? `${loop.id}::holes:${holeKeys}` : loop.id,
-      uvCycle: loop.uvCycle.map((point) => ({ ...point })),
-      holesUVCycles: holes,
-      area: netArea,
-      signedArea: netArea,
-      depth: loop.depth,
-    };
-  });
+  const boundedFaces = dedupedFaces
+    .filter((face) => face !== outsideFace)
+    .map((face) => ({
+      id: hashCycle(face.cycleUV),
+      uvCycle: face.cycleUV.map((point) => ({ ...point })),
+      area: face.areaAbs,
+      signedArea: face.signedArea,
+    }));
 
   return {
     boundedFaces,
@@ -409,13 +321,13 @@ export function buildRegionsFromLines(lines) {
       totalEdges: undirectedEdges.size,
       totalVertices: vertices.size,
       totalRegions: boundedFaces.length,
-      outerArea: 0,
+      outerArea: outsideFace.signedArea,
     },
   };
 }
 
 export function findSmallestRegionContainingPoint(regions, pointUV) {
-  const containing = regions.filter((region) => regionContainsPoint(region, pointUV));
+  const containing = regions.filter((region) => isPointInPolygonUV(pointUV, region.uvCycle));
   if (!containing.length) return null;
   containing.sort((a, b) => Math.abs(a.area) - Math.abs(b.area));
   return containing[0];

@@ -9,11 +9,11 @@ export class FillTool extends BaseTool {
     const { shapeStore, camera, appState } = this.context;
     const worldPt = camera.screenToWorld(screenPoint);
     const clickUv = worldToIsoUV(worldPt);
-    const regions = shapeStore.getRegions();
+    const regions = shapeStore.getComputedRegions();
     const hitRegion = findSmallestRegionContainingPoint(regions, clickUv);
 
     if (!hitRegion) {
-      appState.notifyStatus?.("No closed region. Ensure lines fully close.", 1500);
+      appState.notifyStatus?.("No closed region under cursor", 1500);
       return;
     }
 
