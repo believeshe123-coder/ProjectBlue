@@ -21,6 +21,7 @@ export class Renderer {
     const { canvasCssW, canvasCssH, currentDpr } = this.getCanvasMetrics();
 
     this.ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
+    this.ctx.globalAlpha = 1;
     this.ctx.clearRect(0, 0, canvasCssW, canvasCssH);
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH, {
       gridColor: this.appState.theme?.gridColor,
