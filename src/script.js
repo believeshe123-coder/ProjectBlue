@@ -102,6 +102,7 @@ const historyStore = new HistoryStore();
 
 const appState = {
   currentMode: "ISO",
+  fillAbort: false,
   previewShape: null,
   snapIndicator: null,
   snapToGrid: true,
@@ -334,8 +335,14 @@ function refreshScaleDisplay() {
 
 let statusMessage = null;
 let statusMessageTimeout = null;
+let busyStatusMessage = null;
 
 function refreshStatus() {
+  if (busyStatusMessage) {
+    statusEl.textContent = busyStatusMessage;
+    return;
+  }
+
   if (statusMessage) {
     statusEl.textContent = statusMessage;
     return;
@@ -380,6 +387,16 @@ appState.notifyStatus = (message, durationMs = 1400) => {
     statusMessageTimeout = null;
     refreshStatus();
   }, durationMs);
+};
+
+appState.setBusyStatus = (message) => {
+  busyStatusMessage = message;
+  refreshStatus();
+};
+
+appState.clearBusyStatus = () => {
+  busyStatusMessage = null;
+  refreshStatus();
 };
 
 function normalizeShapePayload(shapes = []) {
