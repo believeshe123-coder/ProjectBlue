@@ -2,9 +2,8 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { distance } from "../utils/math.js";
+import { getIsoSpacingWorld } from "../core/isoGrid.js";
 import { getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
-
-const CLOSURE_THRESHOLD_PX = 12;
 
 function createLine(start, end, lineStyle) {
   return new Line({
@@ -41,14 +40,20 @@ export class PolylineTool extends BaseTool {
     this.context.appState.previewShape = null;
   }
 
-  commitClosedPolygon(appState, historyStore, shapeStore) {
-    if (this.chainPoints.length < 3) {
+  hasClosableLoop() {
+    return this.chainPoints.length >= 3 && this.chainStart && this.lastPoint;
+  }
+
+  commitClosedPolygon() {
+    const { appState, shapeStore } = this.context;
+    if (!this.hasClosableLoop()) {
       this.finishChain();
-      return;
+      return false;
     }
 
+    const pointsWorld = [...this.chainPoints];
     const polygon = new PolygonShape({
-      pointsWorld: this.chainPoints,
+      pointsWorld,
       sourceLineIds: [...this.chainLineIds],
       strokeColor: appState.currentStyle.strokeColor,
       strokeWidth: appState.currentStyle.strokeWidth,
@@ -56,13 +61,32 @@ export class PolylineTool extends BaseTool {
       fillAlpha: 0,
     });
 
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.();
     shapeStore.addShape(polygon);
+    for (const lineId of this.chainLineIds) {
+      const line = shapeStore.getShapeById(lineId);
+      if (line?.type === "line") {
+        line.sourceForPolygonId = polygon.id;
+      }
+    }
     this.finishChain();
+    return true;
+  }
+
+  closeShapeNow() {
+    if (!this.hasClosableLoop()) {
+      this.context.appState.notifyStatus?.("Need at least 3 points to close shape", 1200);
+      return false;
+    }
+    const committed = this.commitClosedPolygon();
+    if (committed) {
+      this.context.appState.notifyStatus?.("Shape closed", 1000);
+    }
+    return committed;
   }
 
   onMouseDown({ event, screenPoint }) {
-    const { appState, historyStore, shapeStore, camera } = this.context;
+    const { appState, shapeStore } = this.context;
 
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
@@ -75,10 +99,10 @@ export class PolylineTool extends BaseTool {
       return;
     }
 
-    const thresholdWorld = CLOSURE_THRESHOLD_PX / camera.zoom;
+    const thresholdWorld = getIsoSpacingWorld() * 0.35;
     const shouldClose = this.chainPoints.length >= 3 && distance(snapped.pt, this.chainStart) <= thresholdWorld;
     if (shouldClose) {
-      this.commitClosedPolygon(appState, historyStore, shapeStore);
+      this.commitClosedPolygon();
       return;
     }
 
@@ -89,7 +113,7 @@ export class PolylineTool extends BaseTool {
       return;
     }
 
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+    this.context.pushHistoryState?.();
     const segment = createLine(this.lastPoint, snapped.pt, getLineStyle(appState));
     shapeStore.addShape(segment);
     this.chainLineIds.push(segment.id);
@@ -121,8 +145,8 @@ export class PolylineTool extends BaseTool {
       return;
     }
 
-    if (event.key === "Enter") {
-      this.finishChain();
+    if (event.key === "Enter" || event.key.toLowerCase() === "c") {
+      this.closeShapeNow();
     }
   }
 }

@@ -4,11 +4,11 @@ import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
 import { buildDistanceLabel } from "../utils/measurement.js";
 
 export class PolygonShape extends Shape {
-  constructor({ id, pointsWorld = [], pointsUV = [], sourceLineIds = [], strokeColor, strokeWidth = 1, fillColor, fillAlpha = 1, zIndex = 0, createdAt, ...rest }) {
+  constructor({ id, pointsWorld = [], pointsUV = [], sourceLineIds = [], strokeColor, strokeWidth = 1, fillColor, fillAlpha = 1, zIndex = 0, createdAt, layerId = null, ...rest }) {
     super({
       id,
       ...rest,
-      type: "polygon-shape",
+      type: "polygon",
       strokeColor,
       strokeWidth,
       fillColor,
@@ -20,11 +20,10 @@ export class PolygonShape extends Shape {
     this.syncWorldFromUV();
     this.sourceLineIds = Array.isArray(sourceLineIds) ? [...sourceLineIds] : [];
     this.fillAlpha = Number.isFinite(fillAlpha) ? fillAlpha : 1;
+    this.layerId = layerId ?? null;
     this.zIndex = zIndex;
     this.createdAt = createdAt ?? Date.now();
   }
-
-
 
   syncWorldFromUV() {
     this.pointsWorld = this.pointsUV.map((point) => isoUVToWorld(point.u, point.v));
@@ -39,7 +38,7 @@ export class PolygonShape extends Shape {
     this.syncWorldFromUV();
   }
 
-  get isClosed() {
+  isClosed() {
     return true;
   }
 
@@ -63,8 +62,8 @@ export class PolygonShape extends Shape {
     return { minX, minY, maxX, maxY };
   }
 
-  containsPoint(point, toleranceWorld = 0) {
-    if (isPointInPolygon(point, this.pointsWorld)) {
+  hitTest(pointWorld, toleranceWorld = 0) {
+    if (isPointInPolygon(pointWorld, this.pointsWorld)) {
       return true;
     }
 
@@ -72,11 +71,30 @@ export class PolygonShape extends Shape {
       return false;
     }
 
-    return this.pointsWorld.some((polygonPoint) => distance(point, polygonPoint) <= toleranceWorld);
+    return this.pointsWorld.some((polygonPoint) => distance(pointWorld, polygonPoint) <= toleranceWorld);
   }
 
-  drawFill(_ctx, _camera) {
-    return;
+  containsPoint(point, toleranceWorld = 0) {
+    return this.hitTest(point, toleranceWorld);
+  }
+
+  drawFill(ctx, camera) {
+    if (this.pointsWorld.length < 3 || !this.fillColor || this.fillColor === "transparent" || this.fillAlpha <= 0) {
+      return;
+    }
+
+    const screenPoints = this.pointsWorld.map((point) => camera.worldToScreen(point));
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(screenPoints[0].x, screenPoints[0].y);
+    for (let i = 1; i < screenPoints.length; i += 1) {
+      ctx.lineTo(screenPoints[i].x, screenPoints[i].y);
+    }
+    ctx.closePath();
+    ctx.globalAlpha = this.fillAlpha;
+    ctx.fillStyle = this.fillColor;
+    ctx.fill();
+    ctx.restore();
   }
 
   drawStroke(ctx, camera) {
@@ -96,7 +114,7 @@ export class PolygonShape extends Shape {
     ctx.strokeStyle = this.strokeColor;
     ctx.lineWidth = this.strokeWidth;
     ctx.lineJoin = "miter";
-    ctx.lineCap = "butt";
+    ctx.lineCap = "round";
     ctx.stroke();
     ctx.restore();
   }
@@ -176,17 +194,21 @@ export class PolygonShape extends Shape {
   toJSON() {
     return {
       ...super.toJSON(),
-      type: "polygon-shape",
+      type: "polygon",
       pointsWorld: this.pointsWorld.map((point) => ({ ...point })),
       pointsUV: this.pointsUV.map((point) => ({ ...point })),
       sourceLineIds: [...this.sourceLineIds],
       fillAlpha: this.fillAlpha,
+      layerId: this.layerId,
       zIndex: this.zIndex,
       createdAt: this.createdAt,
     };
   }
 
   static fromJSON(serialized) {
-    return new PolygonShape(serialized);
+    return new PolygonShape({
+      ...serialized,
+      fillAlpha: serialized.fillAlpha ?? serialized.fillOpacity ?? 1,
+    });
   }
 }

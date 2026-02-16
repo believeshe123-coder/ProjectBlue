@@ -256,7 +256,7 @@ export class EraseTool extends BaseTool {
   eraseObject(worldPoint) {
     const { shapeStore, historyStore, camera } = this.context;
     const toleranceWorld = 8 / camera.zoom;
-    const hit = this.getTopmostByType(worldPoint, toleranceWorld, "polygon-shape")
+    const hit = this.getTopmostByType(worldPoint, toleranceWorld, "polygon")
       ?? this.getTopmostByType(worldPoint, toleranceWorld, "line");
 
     if (!hit) return;
