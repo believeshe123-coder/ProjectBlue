@@ -47,11 +47,21 @@ export class ShapeStore {
     this.cachedRegions = regionResult.boundedFaces;
     this.cachedRegionDebug = regionResult.debug;
     this.cachedLinesHash = nextHash;
+    const sortedAreas = this.cachedRegions.map((region) => region.area).sort((a, b) => b - a);
+    const topRegions = this.cachedRegions
+      .slice()
+      .sort((a, b) => b.area - a.area)
+      .slice(0, 10)
+      .map((region) => ({ id: region.id, area: region.area }));
+
     console.log("[RegionBuilder]", {
       totalEdges: this.cachedRegionDebug.totalEdges,
       totalVertices: this.cachedRegionDebug.totalVertices,
       totalRegions: this.cachedRegionDebug.totalRegions,
       outerArea: this.cachedRegionDebug.outerArea,
+      minArea: sortedAreas.length ? sortedAreas[sortedAreas.length - 1] : 0,
+      maxArea: sortedAreas.length ? sortedAreas[0] : 0,
+      topRegions,
     });
 
     const regionById = new Map(this.cachedRegions.map((region) => [region.id, region]));
@@ -59,11 +69,15 @@ export class ShapeStore {
       if (shape.type !== "fillRegion") return true;
       const region = regionById.get(shape.regionId);
       if (!region) return false;
-      shape.setRegionCycle(region.uvCycle);
+      shape.setRegionCycle(region.uvCycle, region.holesUVCycles ?? []);
       return true;
     });
 
     return this.cachedRegions;
+  }
+
+  getRegions() {
+    return this.getComputedRegions();
   }
 
   getRegionDebugStats() {
@@ -86,13 +100,14 @@ export class ShapeStore {
       existing.alpha = alpha;
       existing.fillColor = color;
       existing.fillOpacity = alpha;
-      existing.setRegionCycle(region.uvCycle);
+      existing.setRegionCycle(region.uvCycle, region.holesUVCycles ?? []);
       return existing;
     }
 
     const fill = new FillRegion({
       regionId: region.id,
       uvCycle: region.uvCycle,
+      holesUVCycles: region.holesUVCycles ?? [],
       color,
       alpha,
     });
