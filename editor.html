@@ -55,6 +55,7 @@
               <button class="menu-row menu-row-button" id="measurement-mode-toggle" type="button">Measurements: SMART</button>
               <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
               <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continus line</label>
+              <button class="menu-row menu-row-button" id="reset-tips-btn" type="button">Reset tips</button>
             </div>
             <div class="menu-section">
               <div class="menu-title">Snapping</div>
@@ -104,7 +105,23 @@
 
         <div class="canvas-wrap">
           <canvas id="canvas"></canvas>
-          <div class="status" id="status">Mode: ISO</div>
+          <div class="status-wrap">
+            <div class="status" id="status">Mode: ISO</div>
+            <div class="status-helper" id="status-helper">Select: click-drag to marquee, click to select.</div>
+          </div>
+
+          <div id="onboarding-overlay" class="onboarding-overlay" hidden>
+            <div class="onboarding-card">
+              <div class="onboarding-head">
+                <strong id="onboarding-step-title">Welcome</strong>
+                <button id="onboarding-dismiss-btn" class="onboarding-ghost" type="button" aria-label="Dismiss onboarding">Skip</button>
+              </div>
+              <p id="onboarding-step-body">Use this quick walkthrough to learn the editor basics.</p>
+              <div class="onboarding-actions">
+                <button id="onboarding-next-btn" class="menu-link-btn" type="button">Next</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
