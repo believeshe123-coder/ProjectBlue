@@ -1,10 +1,11 @@
 export class CanvasEngine {
-  constructor({ canvas, canvasWrap, camera, getTool, getToolName, onContextMenuPrevent, onViewChange }) {
+  constructor({ canvas, canvasWrap, camera, getTool, getToolName, getTools, onContextMenuPrevent, onViewChange }) {
     this.canvas = canvas;
     this.canvasWrap = canvasWrap;
     this.camera = camera;
     this.getTool = getTool;
     this.getToolName = getToolName;
+    this.getTools = getTools;
     this.onViewChange = onViewChange;
     this.isPanning = false;
     this.isMiddlePanning = false;
@@ -124,14 +125,16 @@ export class CanvasEngine {
     }
 
     const activeTool = this.getToolName?.();
-    const tool = this.getTool?.();
+    const tools = this.getTools?.() ?? null;
+    const registryTool = activeTool && tools ? tools[activeTool] : null;
+    const tool = registryTool ?? this.getTool?.();
     const pointerDownHandler = tool?.pointerDown ?? tool?.onMouseDown;
     const payload = { event, screenPoint, worldPoint };
 
     if (event.button === 2) {
       if (tool?.usesRightClick) {
         event.preventDefault();
-        console.log("[DISPATCH] tool", activeTool, "calling handler?", typeof pointerDownHandler);
+        console.log("[DISPATCH]", activeTool, "handler?", typeof tools?.[activeTool]?.pointerDown);
         pointerDownHandler?.call(tool, payload);
         return;
       }
@@ -141,7 +144,7 @@ export class CanvasEngine {
       return;
     }
 
-    console.log("[DISPATCH] tool", activeTool, "calling handler?", typeof pointerDownHandler);
+    console.log("[DISPATCH]", activeTool, "handler?", typeof tools?.[activeTool]?.pointerDown);
     pointerDownHandler?.call(tool, payload);
   }
 

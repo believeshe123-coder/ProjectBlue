@@ -194,6 +194,7 @@ const canvasEngine = new CanvasEngine({
   camera,
   getTool: () => currentTool,
   getToolName: () => getCurrentToolName(),
+  getTools: () => tools,
   onViewChange: refreshStatus,
 });
 

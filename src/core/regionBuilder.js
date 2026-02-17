@@ -327,7 +327,9 @@ export function buildRegionsFromLines(lines) {
     dedupedFaces.push(face);
   }
 
-  const outsideFace = dedupedFaces.reduce((largest, face) => (face.areaAbs > largest.areaAbs ? face : largest), dedupedFaces[0]);
+  const outsideFace = dedupedFaces.length > 1
+    ? dedupedFaces.reduce((largest, face) => (face.areaAbs > largest.areaAbs ? face : largest), dedupedFaces[0])
+    : null;
 
   const boundedFaces = dedupedFaces
     .filter((face) => face !== outsideFace)
@@ -344,7 +346,7 @@ export function buildRegionsFromLines(lines) {
       totalEdges: undirectedEdges.size,
       totalVertices: vertices.size,
       totalRegions: boundedFaces.length,
-      outerArea: outsideFace.signedArea,
+      outerArea: outsideFace?.signedArea ?? 0,
     },
   };
 }
