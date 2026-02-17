@@ -9,6 +9,11 @@ export class MeasureTool extends BaseTool {
     this.a = null;
   }
 
+  onActivate() {
+    this.a = null;
+    this.context.appState.previewShape = null;
+  }
+
   onDeactivate() {
     this.a = null;
     this.context.appState.previewShape = null;
@@ -64,7 +69,7 @@ export class MeasureTool extends BaseTool {
   }
 
   onKeyDown(event) {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" || event.key === "Enter") {
       this.a = null;
       this.context.appState.previewShape = null;
     }

@@ -8,6 +8,11 @@ export class IsoLineTool extends BaseTool {
     this.startPoint = null;
   }
 
+  onActivate() {
+    this.startPoint = null;
+    this.context.appState.previewShape = null;
+  }
+
   onDeactivate() {
     this.startPoint = null;
     this.context.appState.previewShape = null;
@@ -38,6 +43,13 @@ export class IsoLineTool extends BaseTool {
     appState.previewShape = null;
     appState.snapIndicator = null;
     appState.snapDebugStatus = "SNAP: OFF";
+  }
+
+  onKeyDown(event) {
+    if (event.key === "Escape" || event.key === "Enter") {
+      this.startPoint = null;
+      this.context.appState.previewShape = null;
+    }
   }
 
   onMouseMove({ screenPoint }) {

@@ -3,6 +3,18 @@ import { worldToIsoUV } from "../core/isoGrid.js";
 import { findSmallestRegionContainingPoint } from "../core/regionBuilder.js";
 
 export class FillTool extends BaseTool {
+  onActivate() {
+    this.context.appState.previewShape = null;
+  }
+
+  onDeactivate() {
+    this.context.appState.previewShape = null;
+  }
+
+  onKeyDown(event) {
+    if (event.key === "Escape") this.context.appState.previewShape = null;
+  }
+
   pointerDown(payload) {
     this.onMouseDown(payload);
   }
