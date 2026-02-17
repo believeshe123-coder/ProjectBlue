@@ -123,11 +123,16 @@ export class CanvasEngine {
       return;
     }
 
+    const activeTool = this.getToolName?.();
+    const tool = this.getTool?.();
+    const pointerDownHandler = tool?.pointerDown ?? tool?.onMouseDown;
+    const payload = { event, screenPoint, worldPoint };
+
     if (event.button === 2) {
-      const tool = this.getTool?.();
       if (tool?.usesRightClick) {
         event.preventDefault();
-        tool.onMouseDown({ event, screenPoint, worldPoint });
+        console.log("[DISPATCH] tool", activeTool, "calling handler?", typeof pointerDownHandler);
+        pointerDownHandler?.call(tool, payload);
         return;
       }
 
@@ -136,7 +141,8 @@ export class CanvasEngine {
       return;
     }
 
-    this.getTool()?.onMouseDown({ event, screenPoint, worldPoint });
+    console.log("[DISPATCH] tool", activeTool, "calling handler?", typeof pointerDownHandler);
+    pointerDownHandler?.call(tool, payload);
   }
 
   handleMouseMove(event) {
