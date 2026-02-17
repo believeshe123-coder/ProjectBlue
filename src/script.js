@@ -456,7 +456,10 @@ function refreshToolHelperText() {
 function dismissOnboarding({ persist = false } = {}) {
   appState.onboarding.active = false;
   if (persist) localStorage.setItem(STORAGE_KEYS.walkthroughSeen, "1");
-  if (onboardingOverlay) onboardingOverlay.hidden = true;
+  if (onboardingOverlay) {
+    onboardingOverlay.hidden = true;
+    onboardingOverlay.style.display = "none";
+  }
   clearOnboardingHighlights();
 }
 
@@ -481,7 +484,10 @@ function startOnboarding({ force = false } = {}) {
   if (alreadySeen && !force) return;
   appState.onboarding.active = true;
   appState.onboarding.stepIndex = 0;
-  if (onboardingOverlay) onboardingOverlay.hidden = false;
+  if (onboardingOverlay) {
+    onboardingOverlay.hidden = false;
+    onboardingOverlay.style.display = "grid";
+  }
   renderOnboardingStep();
 }
 

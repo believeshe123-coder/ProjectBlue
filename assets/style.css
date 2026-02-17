@@ -660,6 +660,10 @@ body {
   pointer-events: none;
 }
 
+.onboarding-overlay[hidden] {
+  display: none;
+}
+
 .onboarding-card {
   width: min(340px, calc(100vw - 32px));
   background: rgba(255, 255, 255, 0.96);
