@@ -54,8 +54,14 @@ export class SelectTool extends BaseTool {
     appState.selectionBoxWorld = null;
     const targetId = hit.id;
     const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
+    const activeGroup = appState.selectedType === "group" && appState.selectedGroupId
+      ? shapeStore.getLineGroup(appState.selectedGroupId)
+      : null;
+    const hitInsideActiveGroup = !!activeGroup && activeGroup.childIds.includes(targetId);
 
-    if (keepSelecting && appState.selectedType === "line") {
+    if (hitInsideActiveGroup) {
+      // Preserve group selection when interacting with a selected group member.
+    } else if (keepSelecting && appState.selectedType === "line") {
       if (hitWasSelected) appState.removeFromSelection?.(targetId);
       else appState.addToSelection?.(targetId, "line");
     } else {
