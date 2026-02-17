@@ -473,6 +473,7 @@ export class ShapeStore {
   getRegionDebugStats() { this.getComputedRegions(); return this.cachedRegionDebug; }
 
   upsertFillRegion(region, { color, alpha }) {
+    console.log("[FILL] upsertFillRegion", region?.id, color, alpha);
     const existing = Object.values(this.nodes).find((n) => n.kind === "shape" && n.shapeType === "fillRegion" && n.style.regionId === region.id);
     if (existing) {
       existing.style.color = color; existing.style.alpha = alpha; existing.style.fillColor = color; existing.style.fillOpacity = alpha;
