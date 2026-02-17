@@ -51,12 +51,9 @@ export class SelectTool extends BaseTool {
 
     if (!hit) {
       appState.closeContextMenu?.();
-      if (keepSelecting) {
-        this.marqueeState = { startWorld: { ...worldPoint }, startScreen: { ...screenPoint } };
-      } else {
-        appState.setSelection?.([], null);
-        appState.updateSelectionBar?.();
-      }
+      this.marqueeState = { startWorld: { ...worldPoint }, startScreen: { ...screenPoint } };
+      if (!keepSelecting) appState.setSelection?.([], null);
+      appState.updateSelectionBar?.();
       return;
     }
 
