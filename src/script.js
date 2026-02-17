@@ -68,6 +68,7 @@ const selectionZBackButton = document.getElementById("selection-z-back-btn");
 const regionSelectToggleButton = document.getElementById("region-select-toggle-btn");
 const regionConvertFaceButton = document.getElementById("region-convert-face-btn");
 const regionClearSelectionButton = document.getElementById("region-clear-selection-btn");
+const makeObjectButton = document.getElementById("selection-make-object-btn");
 
 const menuFileButton = document.getElementById("menuFileBtn");
 const menuFileDropdown = document.getElementById("menuFileDropdown");
@@ -137,6 +138,7 @@ const appState = {
   selectedRegionKey: null,
   lastSelectedId: null,
   marqueeRect: null,
+  selectionBoxWorld: null,
   selectionPanelOpen: false,
   eraseMode: "object",
   eraserSizePx: 16,
@@ -539,7 +541,7 @@ function isSingleSelectedGroup() {
 function updateSelectionBar() {
   if (!selectionBar) return;
   const shouldShow = getCurrentToolName() === "select"
-    && (appState.selectedIds.length > 0 || appState.selectedRegionKey || appState.regionSelectMode === true);
+    && (appState.selectedIds.length > 0 || appState.selectionBoxWorld || appState.selectedRegionKey || appState.regionSelectMode === true);
   selectionBar.hidden = !shouldShow;
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.length})`;
   if (selectionKeepCheckbox) selectionKeepCheckbox.checked = appState.keepSelecting === true;
@@ -547,10 +549,12 @@ function updateSelectionBar() {
   if (selectionUngroupButton) selectionUngroupButton.hidden = !isSingleSelectedGroup();
   if (selectionUngroupButton) selectionUngroupButton.disabled = !isSingleSelectedGroup();
   const hasSelection = appState.selectedIds.length > 0;
+  const hasSelectionBox = !!appState.selectionBoxWorld;
   if (selectionZFrontButton) selectionZFrontButton.disabled = !hasSelection;
   if (selectionZForwardButton) selectionZForwardButton.disabled = !hasSelection;
   if (selectionZBackwardButton) selectionZBackwardButton.disabled = !hasSelection;
   if (selectionZBackButton) selectionZBackButton.disabled = !hasSelection;
+  if (makeObjectButton) makeObjectButton.disabled = !(hasSelection || hasSelectionBox);
   if (regionSelectToggleButton) {
     regionSelectToggleButton.textContent = `Region Select: ${appState.regionSelectMode ? "ON" : "OFF"}`;
   }
@@ -579,6 +583,7 @@ function updateSelectedFlags() {
 }
 
 function setSelection(ids = [], lastId = null) {
+  if (ids.length === 0) appState.selectionBoxWorld = null;
   appState.selectedIds = [...ids];
   appState.selectionSet = new Set(ids);
   appState.lastSelectedId = lastId;
@@ -586,6 +591,7 @@ function setSelection(ids = [], lastId = null) {
 }
 
 function addToSelection(id) {
+  appState.selectionBoxWorld = null;
   if (!appState.selectionSet.has(id)) appState.selectedIds.push(id);
   appState.selectionSet.add(id);
   appState.lastSelectedId = id;
@@ -604,6 +610,7 @@ function clearSelectionState() {
   appState.selectionSet = new Set();
   appState.lastSelectedId = null;
   appState.selectedRegionKey = null;
+  appState.selectionBoxWorld = null;
   shapeStore.clearSelection();
   updateSelectedFlags();
 }
@@ -660,6 +667,66 @@ function createGroupFromSelection() {
   }
   setSelection([group.id], group.id);
   appState.keepSelecting = false;
+  appState.selectionBoxWorld = null;
+}
+
+function makeObjectFromSelection() {
+  const hasSelection = appState.selectedIds.length > 0;
+  const hasSelectionBox = !!appState.selectionBoxWorld;
+  if (!hasSelection && !hasSelectionBox) return;
+
+  const selectionBounds = appState.selectionBoxWorld
+    ?? shapeStore.getSelectionBoundsFromIds(appState.selectedIds);
+  if (!selectionBounds) {
+    appState.notifyStatus?.("No selection bounds", 1200);
+    return;
+  }
+
+  const currentMaxZ = shapeStore.getShapes().reduce((max, shape) => Math.max(max, shape.zIndex ?? 0), 0);
+  const intersectingLineIds = shapeStore.getShapes()
+    .filter((shape) => shape.type === "line" && shape.visible !== false && shape.locked !== true)
+    .filter((shape) => {
+      const bounds = shapeStore.getShapeBounds(shape);
+      if (!bounds) return false;
+      return !(bounds.maxX < selectionBounds.minX
+        || bounds.minX > selectionBounds.maxX
+        || bounds.maxY < selectionBounds.minY
+        || bounds.minY > selectionBounds.maxY);
+    })
+    .map((shape) => shape.id);
+  const filledRegionCount = shapeStore.getFilledRegionCountInBounds(selectionBounds);
+
+  if (!intersectingLineIds.length && !filledRegionCount) {
+    appState.notifyStatus?.("Nothing in selection to group", 1500);
+    return;
+  }
+
+  pushHistoryState();
+
+  const faceIds = shapeStore.captureFilledRegionsAsFacesInBounds(selectionBounds, {
+    zIndexBase: currentMaxZ + 1,
+  });
+
+  const childIds = [...new Set([...intersectingLineIds, ...faceIds])];
+
+  const group = new GroupShape({
+    strokeColor: "#ffffff",
+    strokeWidth: 1,
+    fillColor: appState.currentStyle.fillColor,
+    childIds,
+  });
+  shapeStore.addShape(group);
+  for (const childId of childIds) {
+    const shape = shapeStore.getShapeById(childId);
+    if (!shape) continue;
+    shape.groupId = group.id;
+    shape.selected = false;
+  }
+
+  appState.keepSelecting = false;
+  appState.selectionBoxWorld = null;
+  setSelection([group.id], group.id);
+  appState.notifyStatus?.("Object created", 1400);
 }
 
 function ungroupSelection() {
@@ -1279,6 +1346,10 @@ selectionDeleteButton?.addEventListener("click", () => {
 
 selectionGroupButton?.addEventListener("click", () => {
   createGroupFromSelection();
+  updateSelectionBar();
+});
+makeObjectButton?.addEventListener("click", () => {
+  makeObjectFromSelection();
   updateSelectionBar();
 });
 
