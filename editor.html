@@ -13,7 +13,7 @@
           <button class="menu-item" id="menuFileBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuFileDropdown">File</button>
           <div class="menu-dropdown" id="menuFileDropdown" role="menu" aria-label="File menu" data-open="false">
             <div class="menu-section">
-              <div class="menu-title">Project</div>
+              <div class="panel-header"><div class="menu-title">Project</div><button type="button" class="panel-close-btn" id="menu-file-close-btn" aria-label="Close File menu">×</button></div>
               <button id="project-save-btn" class="menu-link-btn" type="button">Save</button>
               <button id="project-load-btn" class="menu-link-btn" type="button">Load</button>
               <button id="project-reset-btn" class="menu-link-btn" type="button">Reset</button>
@@ -25,7 +25,7 @@
           <button class="menu-item" id="menuEditBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuEditDropdown">Edit</button>
           <div class="menu-dropdown" id="menuEditDropdown" role="menu" aria-label="Edit menu" data-open="false">
             <div class="menu-section">
-              <div class="menu-title">Groups</div>
+              <div class="panel-header"><div class="menu-title">Groups</div><button type="button" class="panel-close-btn" id="menu-edit-close-btn" aria-label="Close Edit menu">×</button></div>
               <button id="clear-groups-btn" class="menu-link-btn" type="button">Clear All Groups</button>
             </div>
             <div class="menu-section">
@@ -51,7 +51,7 @@
           <button class="menu-item" id="menuSettingsBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuSettingsDropdown">Settings</button>
           <div class="menu-dropdown" id="menuSettingsDropdown" role="menu" aria-label="Settings menu" data-open="false">
             <div class="menu-section">
-              <div class="menu-title">Options</div>
+              <div class="panel-header"><div class="menu-title">Options</div><button type="button" class="panel-close-btn" id="menu-settings-close-btn" aria-label="Close Settings menu">×</button></div>
               <button class="menu-row menu-row-button" id="measurement-mode-toggle" type="button">Measurements: SMART</button>
               <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
               <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continus line</label>
@@ -105,7 +105,7 @@
           <canvas id="canvas"></canvas>
           <div class="status" id="status">Mode: ISO</div>
           <div id="selection-panel" class="selection-panel" hidden>
-            <div class="menu-title">Selection</div>
+            <div class="panel-header"><div class="menu-title">Selection</div><button type="button" class="panel-close-btn" id="selection-panel-close-btn" aria-label="Close selection panel">×</button></div>
             <label class="field-inline"><span>Line color</span><input id="selection-line-color" type="color" value="#ffffff" /></label>
             <label class="field-inline"><span>Stroke width</span><input id="selection-stroke-width" type="number" min="1" max="10" value="2" /></label>
             <label class="field-inline"><span>Fill color</span><input id="selection-fill-color" type="color" value="#4aa3ff" /></label>
@@ -126,6 +126,7 @@
 
 
     <div id="z-order-context-menu" class="z-order-context-menu" hidden>
+      <div class="panel-header panel-header--menu"><div class="menu-title">Arrange</div><button type="button" class="panel-close-btn" id="z-order-menu-close-btn" aria-label="Close arrange menu">×</button></div>
       <button id="z-order-front-btn" class="z-order-context-item" type="button">Bring to Front</button>
       <button id="z-order-forward-btn" class="z-order-context-item" type="button">Bring Forward</button>
       <button id="z-order-backward-btn" class="z-order-context-item" type="button">Send Backward</button>
