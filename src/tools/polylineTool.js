@@ -17,6 +17,12 @@ export class PolylineTool extends BaseTool {
     this.lastPoint = null;
   }
 
+  onActivate() {
+    this.finishChain();
+    this.context.appState.snapIndicator = null;
+    this.context.appState.snapDebugStatus = "SNAP: OFF";
+  }
+
   onDeactivate() {
     this.finishChain();
     this.context.appState.snapIndicator = null;

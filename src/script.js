@@ -43,6 +43,10 @@ const customGridColorPicker = document.getElementById("custom-grid-color-picker"
 const themeNameInput = document.getElementById("theme-name-input");
 const saveThemeButton = document.getElementById("save-theme-btn");
 const deleteThemeButton = document.getElementById("delete-theme-btn");
+const toolHelpButton = document.getElementById("tool-help-btn");
+const helpModalBackdrop = document.getElementById("help-modal-backdrop");
+const helpModalCloseButton = document.getElementById("help-modal-close-btn");
+const helpModalContent = document.getElementById("help-modal-content");
 
 const strokeWidthInput = document.getElementById("stroke-width-input");
 const styleSwatches = document.getElementById("style-swatches");
@@ -118,6 +122,16 @@ const BUILTIN_THEMES = [
 ];
 
 let savedThemes = [];
+
+
+const TOOL_METADATA = {
+  select: { displayName: "Select", shortcut: "V", clickSummary: "Select and move lines/groups" },
+  "iso-line": { displayName: "Line", shortcut: "L", clickSummary: "Click start and end points" },
+  polyline: { displayName: "Polyline", shortcut: "P", clickSummary: "Click to chain segments; Enter/Escape to finish" },
+  measure: { displayName: "Measure", shortcut: "M", clickSummary: "Click two points to place measurement" },
+  fill: { displayName: "Fill", shortcut: "F", clickSummary: "Click inside a closed region to fill" },
+  erase: { displayName: "Erase", shortcut: "E", clickSummary: "Click to erase object or drag for segment erase" },
+};
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
@@ -338,7 +352,14 @@ function getNextMeasurementMode(mode) {
 
 function updateMeasurementModeControl() {
   if (!measurementModeToggle) return;
-  measurementModeToggle.textContent = `Measurements: ${appState.measurementMode.toUpperCase()}`;
+  measurementModeToggle.textContent = `Measurement mode: ${appState.measurementMode.toUpperCase()}`;
+}
+
+function updateContinuePolylineControl() {
+  if (!continuePolylineToggle) return;
+  continuePolylineToggle.title = appState.continuePolyline
+    ? "Polyline chaining enabled"
+    : "Polyline chaining disabled";
 }
 
 function getNextEraseMode(mode) {
@@ -394,8 +415,35 @@ function getCurrentToolName() {
 
 function getToolStatusLabel() {
   const toolName = getCurrentToolName();
-  if (toolName === "iso-line") return "Line";
-  return toolName.charAt(0).toUpperCase() + toolName.slice(1);
+  return TOOL_METADATA[toolName]?.displayName ?? toolName;
+}
+
+function getToolShortcutLabel(toolName) {
+  return TOOL_METADATA[toolName]?.shortcut ? ` (${TOOL_METADATA[toolName].shortcut})` : "";
+}
+
+function renderToolButtons() {
+  for (const button of document.querySelectorAll('.tool-grid [data-tool]')) {
+    const toolName = button.dataset.tool;
+    const metadata = TOOL_METADATA[toolName];
+    if (!metadata) continue;
+    button.textContent = metadata.displayName;
+    button.title = `${metadata.displayName} [${metadata.shortcut}] — ${metadata.clickSummary}`;
+    button.setAttribute("aria-label", `${metadata.displayName} tool (${metadata.shortcut})`);
+  }
+}
+
+function renderHelpModal() {
+  if (!helpModalContent) return;
+  const rows = Object.values(TOOL_METADATA)
+    .map((tool) => `<tr><td>${tool.displayName}</td><td><kbd>${tool.shortcut}</kbd></td><td>${tool.clickSummary}</td></tr>`)
+    .join("");
+  helpModalContent.innerHTML = `<table class="help-modal-table"><thead><tr><th>Tool</th><th>Key</th><th>Behavior</th></tr></thead><tbody>${rows}</tbody></table><p>Press <kbd>?</kbd> to toggle this help.</p>`;
+}
+
+function setHelpModalOpen(open) {
+  if (!helpModalBackdrop) return;
+  helpModalBackdrop.hidden = !open;
 }
 
 function getSnapStatusLabel() {
@@ -508,7 +556,7 @@ function refreshStatus() {
 
   const regionCount = shapeStore.getComputedRegions().length;
   const regionStatus = appState.selectedRegionKey ? " | Region Selected" : "";
-  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()} | Zoom: ${camera.zoom.toFixed(2)}x | regions: ${regionCount} boundedFaces: ${regionCount}${regionStatus} | ${getSnapStatusLabel()}`;
+  statusEl.textContent = `Mode: ISO | Tool: ${getToolStatusLabel()}${getToolShortcutLabel(getCurrentToolName())} | Zoom: ${camera.zoom.toFixed(2)}x | Regions: ${regionCount} | Bounded faces: ${regionCount}${regionStatus} | ${getSnapStatusLabel()}`;
 }
 
 appState.setSelection = setSelection;
@@ -1351,6 +1399,12 @@ for (const button of document.querySelectorAll('.tool-grid [data-tool]')) {
   });
 }
 
+toolHelpButton?.addEventListener("click", () => setHelpModalOpen(true));
+helpModalCloseButton?.addEventListener("click", () => setHelpModalOpen(false));
+helpModalBackdrop?.addEventListener("click", (event) => {
+  if (event.target === helpModalBackdrop) setHelpModalOpen(false);
+});
+
 menuFileButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   setSettingsMenuOpen(false);
@@ -1507,6 +1561,7 @@ debugSelectionDragToggle?.addEventListener("change", (event) => {
 
 continuePolylineToggle.addEventListener("change", (event) => {
   appState.continuePolyline = event.target.checked;
+  updateContinuePolylineControl();
 });
 
 showGridUnitsToggle.addEventListener("change", (event) => {
@@ -1663,6 +1718,7 @@ window.addEventListener("keydown", (event) => {
     closeAllMenus();
     closeContextMenu();
     closeSelectionPanel();
+    setHelpModalOpen(false);
     appState.keepSelecting = false;
     appState.selectedRegionKey = null;
     clearSelectionState();
@@ -1684,6 +1740,19 @@ window.addEventListener("keydown", (event) => {
   }
 
   if (!isTypingInInput(event)) {
+    if (event.key === "?" || (event.shiftKey && key === "/")) {
+      event.preventDefault();
+      setHelpModalOpen(helpModalBackdrop?.hidden === true);
+      return;
+    }
+
+    const shortcutTool = Object.entries(TOOL_METADATA).find(([, metadata]) => metadata.shortcut.toLowerCase() === key)?.[0];
+    if (shortcutTool) {
+      event.preventDefault();
+      setActiveTool(shortcutTool);
+      return;
+    }
+
     if (event.key === "]" && event.shiftKey) {
       event.preventDefault();
       reorderSelectionZ("front");
@@ -1791,7 +1860,10 @@ appState.debugSelectionDrag = localStorage.getItem("debugSelectionDrag") === "1"
 if (debugSelectionDragToggle) debugSelectionDragToggle.checked = appState.debugSelectionDrag;
 showGridUnitsToggle.checked = appState.showGridUnits;
 updateMeasurementModeControl();
+updateContinuePolylineControl();
 updateEraseControls();
+renderToolButtons();
+renderHelpModal();
 setActiveTool("select");
 restoreAutosaveIfAvailable();
 renderUiVisibility();

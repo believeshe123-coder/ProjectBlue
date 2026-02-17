@@ -52,7 +52,7 @@
           <div class="menu-dropdown" id="menuSettingsDropdown" role="menu" aria-label="Settings menu" data-open="false">
             <div class="menu-section">
               <div class="panel-header"><div class="menu-title">Options</div><button type="button" class="panel-close-btn" id="menu-settings-close-btn" aria-label="Close Settings menu">×</button></div>
-              <button class="menu-row menu-row-button" id="measurement-mode-toggle" type="button">Measurements: SMART</button>
+              <button class="menu-row menu-row-button" id="measurement-mode-toggle" type="button">Measurement mode: SMART</button>
               <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
               <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continus line</label>
               <button class="menu-row menu-row-button" id="reset-tips-btn" type="button">Reset tips</button>
@@ -74,10 +74,11 @@
         <aside class="sidebar" aria-label="Editor controls">
           <section class="side-section" aria-label="Drawing tools">
             <h2 class="section-title">Tool Grid</h2>
+            <button class="tool-button" id="tool-help-btn" type="button" aria-label="Open tool shortcut help">Tool Help</button>
             <div class="tool-grid">
               <button class="tool-button tool-tile" data-tool="select" type="button">Select</button>
               <button class="tool-button tool-tile" data-tool="iso-line" type="button">Line</button>
-              <button class="tool-button tool-tile" data-tool="polyline" type="button">Continus line</button>
+              <button class="tool-button tool-tile" data-tool="polyline" type="button">Polyline</button>
               <button class="tool-button tool-tile" data-tool="measure" type="button">Measure</button>
               <button class="tool-button tool-tile" data-tool="fill" type="button">Fill</button>
               <button class="tool-button tool-tile" data-tool="erase" type="button">Erase</button>

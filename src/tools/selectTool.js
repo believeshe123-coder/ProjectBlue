@@ -17,6 +17,15 @@ export class SelectTool extends BaseTool {
     this.hoverShapeId = null;
   }
 
+  onActivate() {
+    this.dragState = null;
+    this.marqueeState = null;
+    this.hoverShapeId = null;
+    this.context.appState.marqueeRect = null;
+    this.context.appState.selectionBoxWorld = null;
+    if (this.context.canvas) this.context.canvas.style.cursor = "default";
+  }
+
   onDeactivate() {
     this.dragState = null;
     this.marqueeState = null;
@@ -190,6 +199,12 @@ export class SelectTool extends BaseTool {
   }
 
   onKeyDown(event) {
-    if (event.key === "Escape") this.context.appState.closeSelectionPanel?.();
+    if (event.key === "Escape") {
+      this.dragState = null;
+      this.marqueeState = null;
+      this.context.appState.marqueeRect = null;
+      this.context.appState.selectionBoxWorld = null;
+      this.context.appState.closeSelectionPanel?.();
+    }
   }
 }

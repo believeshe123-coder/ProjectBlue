@@ -306,6 +306,15 @@ export class EraseTool extends BaseTool {
     }
   }
 
+  onKeyDown(event) {
+    if (event.key === "Escape") {
+      this.isSegmentErasing = false;
+      this.strokePoints = [];
+      this.historyPushed = false;
+      this.context.appState.erasePreview = null;
+    }
+  }
+
   onMouseDown({ worldPoint }) {
     const { appState, historyStore, shapeStore } = this.context;
 
