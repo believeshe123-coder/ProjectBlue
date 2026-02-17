@@ -37,6 +37,22 @@ function getFilledRegionHit(shapeStore, worldPoint) {
   return findSmallestRegionContainingPoint(filledRegions, clickUv);
 }
 
+function getDragAffectedIds(shapeStore, selectedType, dragIds = []) {
+  if (selectedType !== "face") return [...dragIds];
+  const affected = new Set(dragIds);
+  for (const id of dragIds) {
+    const node = shapeStore.getNodeById(id);
+    if (!node || node.kind !== "shape" || node.shapeType !== "face") continue;
+    const lineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
+    for (const lineId of lineIds) {
+      if (!shapeStore.getNodeById(lineId)) continue;
+      if (shapeStore.parentById[lineId]) continue;
+      affected.add(lineId);
+    }
+  }
+  return [...affected];
+}
+
 export class SelectTool extends BaseTool {
   constructor(context) {
     super(context);
@@ -76,6 +92,17 @@ export class SelectTool extends BaseTool {
     }
 
     const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
+
+    if (appState.debugSelectionDrag) {
+      const hitNode = hit ? shapeStore.getNodeById(hit.id) : null;
+      console.log("[HIT]", {
+        id: hit?.id ?? null,
+        type: hit?.type ?? null,
+        kind: hitNode?.kind ?? null,
+        parent: hit ? (shapeStore.parentById[hit.id] ?? null) : null,
+        sourceLineIdsLength: hitNode?.meta?.sourceLineIds?.length ?? hitNode?.style?.sourceLineIds?.length ?? 0,
+      });
+    }
 
     if (!hit) {
       appState.setSelection?.([], null);
@@ -164,6 +191,19 @@ export class SelectTool extends BaseTool {
       for (const id of this.dragState.dragIds) {
         if (appState.selectedType === "object") shapeStore.applyWorldDeltaToNode(id, stepDelta);
         else shapeStore.applyWorldDeltaToNode(id, stepDelta);
+      }
+      if (appState.debugSelectionDrag) {
+        const affectedIds = getDragAffectedIds(shapeStore, appState.selectedType, this.dragState.dragIds);
+        console.log("[DRAG]", {
+          selectedType: appState.selectedType,
+          selectedIds: [...(appState.selectedIds ?? [])],
+          dx: stepDelta.x,
+          dy: stepDelta.y,
+          affectedIds,
+        });
+        if (appState.selectedType === "face") {
+          console.log("[DRAG][FACE_BOUNDARY] movedBoundaryLines", affectedIds.length > this.dragState.dragIds.length);
+        }
       }
       this.dragState.totalAppliedDelta = snappedDelta;
 

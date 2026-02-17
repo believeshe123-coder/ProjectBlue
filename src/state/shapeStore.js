@@ -24,6 +24,19 @@ function rectsIntersect(a, b) {
 function uvKey(point) { return `${Math.round(point.u)},${Math.round(point.v)}`; }
 function edgeKey(a, b) { const ak = uvKey(a); const bk = uvKey(b); return ak < bk ? `${ak}|${bk}` : `${bk}|${ak}`; }
 
+function distanceSquared(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return (dx * dx) + (dy * dy);
+}
+
+function segmentMatchesBoundary(line, edgeStart, edgeEnd, tolerance = 1.5) {
+  const tol2 = tolerance * tolerance;
+  const sameDirection = distanceSquared(line.start, edgeStart) <= tol2 && distanceSquared(line.end, edgeEnd) <= tol2;
+  const reversedDirection = distanceSquared(line.start, edgeEnd) <= tol2 && distanceSquared(line.end, edgeStart) <= tol2;
+  return sameDirection || reversedDirection;
+}
+
 function regionCentroid(uvCycle = []) {
   if (!Array.isArray(uvCycle) || uvCycle.length < 3) return null;
   const worldPoints = uvCycle.map((point) => isoUVToWorld(point.u, point.v));
@@ -89,6 +102,16 @@ export class ShapeStore {
     const validIds = ids.filter((id) => this.nodes[id]);
     const rootIndices = validIds.map((id) => this.rootIds.indexOf(id)).filter((i) => i >= 0);
     const insertAt = rootIndices.length ? Math.min(...rootIndices) : this.rootIds.length;
+
+    for (const childId of validIds) {
+      const existingParentId = this.parentById[childId];
+      if (!existingParentId) continue;
+      const existingParent = this.nodes[existingParentId];
+      if (existingParent?.kind === "object") {
+        existingParent.children = (existingParent.children ?? []).filter((id) => id !== childId);
+      }
+      delete this.parentById[childId];
+    }
 
     this.rootIds = this.rootIds.filter((id) => !validIds.includes(id));
     this.nodes[objectId] = {
@@ -159,7 +182,9 @@ export class ShapeStore {
       return {
         id, type: "face", pointsWorld, visible: node.style.visible !== false, locked: node.style.locked === true,
         selected: node.style.selected === true, fillColor: node.style.fillColor, fillAlpha: node.style.fillAlpha ?? node.style.fillOpacity ?? 1,
-        sourceRegionKey: node.style.sourceRegionKey ?? null, createdAt: node.createdAt ?? 0,
+        sourceRegionKey: node.style.sourceRegionKey ?? null,
+        sourceLineIds: [...(node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [])],
+        createdAt: node.createdAt ?? 0,
       };
     }
 
@@ -238,9 +263,155 @@ export class ShapeStore {
       node.transform.y += delta.y;
       return;
     }
+    if (node.kind === "shape" && node.shapeType === "face") {
+      const sourceLineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
+      for (const lineId of sourceLineIds) {
+        const lineNode = this.nodes[lineId];
+        if (!lineNode || lineNode.kind !== "shape" || lineNode.shapeType !== "line") continue;
+        if (this.parentById[lineId]) continue;
+        lineNode.nodeTransform.x += delta.x;
+        lineNode.nodeTransform.y += delta.y;
+      }
+    }
     node.nodeTransform.x += delta.x;
     node.nodeTransform.y += delta.y;
     this.invalidateDerivedData();
+  }
+
+  getDescendantIds(id) {
+    const node = this.nodes[id];
+    if (!node || node.kind !== "object") return [];
+    const out = [];
+    const stack = [...(node.children ?? [])];
+    while (stack.length) {
+      const childId = stack.pop();
+      if (!childId || out.includes(childId)) continue;
+      out.push(childId);
+      const child = this.nodes[childId];
+      if (child?.kind === "object") stack.push(...(child.children ?? []));
+    }
+    return out;
+  }
+
+  buildLineOwnerMap() {
+    const ownersByLineId = new Map();
+    const addOwner = (lineId, ownerKey) => {
+      if (!this.nodes[lineId] || !ownerKey) return;
+      if (!ownersByLineId.has(lineId)) ownersByLineId.set(lineId, new Set());
+      ownersByLineId.get(lineId).add(ownerKey);
+    };
+
+    for (const node of Object.values(this.nodes)) {
+      if (node.kind === "shape" && node.shapeType === "face") {
+        const sourceLineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
+        for (const lineId of sourceLineIds) addOwner(lineId, `face:${node.id}`);
+      }
+      if (node.kind === "object") {
+        for (const childId of node.children ?? []) {
+          const child = this.nodes[childId];
+          if (child?.kind === "shape" && child.shapeType === "line") addOwner(childId, `object:${node.id}`);
+        }
+      }
+    }
+    return ownersByLineId;
+  }
+
+  deleteNodesInEntirety(ids = []) {
+    const targetIds = [...new Set(ids.filter((id) => this.nodes[id]))];
+    if (!targetIds.length) return [];
+
+    const deleteSet = new Set();
+    const explicitLineIds = new Set();
+    const protectedLineIds = new Set();
+    const deletingOwnerKeys = new Set();
+
+    for (const id of targetIds) {
+      const node = this.nodes[id];
+      if (!node) continue;
+      deleteSet.add(id);
+      if (node.kind === "shape" && node.shapeType === "line") explicitLineIds.add(id);
+      if (node.kind === "shape" && node.shapeType === "face") deletingOwnerKeys.add(`face:${id}`);
+      if (node.kind === "object") {
+        deletingOwnerKeys.add(`object:${id}`);
+        for (const childId of this.getDescendantIds(id)) {
+          const child = this.nodes[childId];
+          if (!child) continue;
+          deleteSet.add(childId);
+          if (child.kind === "shape" && child.shapeType === "face") deletingOwnerKeys.add(`face:${childId}`);
+          if (child.kind === "object") deletingOwnerKeys.add(`object:${childId}`);
+        }
+      }
+    }
+
+    const lineOwners = this.buildLineOwnerMap();
+    for (const id of [...deleteSet]) {
+      const node = this.nodes[id];
+      if (!node || node.kind !== "shape" || node.shapeType !== "face") continue;
+      const sourceLineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
+      for (const lineId of sourceLineIds) {
+        const lineNode = this.nodes[lineId];
+        if (!lineNode || lineNode.kind !== "shape" || lineNode.shapeType !== "line") continue;
+        if (explicitLineIds.has(lineId)) {
+          deleteSet.add(lineId);
+          continue;
+        }
+        const owners = lineOwners.get(lineId) ?? new Set();
+        const hasExternalOwners = [...owners].some((ownerKey) => !deletingOwnerKeys.has(ownerKey));
+        if (hasExternalOwners) {
+          protectedLineIds.add(lineId);
+        } else {
+          deleteSet.add(lineId);
+        }
+      }
+    }
+
+    for (const lineId of protectedLineIds) {
+      deleteSet.delete(lineId);
+      const parentId = this.parentById[lineId];
+      if (!parentId || !deleteSet.has(parentId)) continue;
+      const parent = this.nodes[parentId];
+      if (parent?.kind === "object") parent.children = (parent.children ?? []).filter((id) => id !== lineId);
+      delete this.parentById[lineId];
+      if (!this.rootIds.includes(lineId)) this.rootIds.push(lineId);
+    }
+
+    const orderedIds = [...deleteSet].sort((a, b) => {
+      const depth = (id) => {
+        let d = 0;
+        let cursor = id;
+        while (this.parentById[cursor]) {
+          d += 1;
+          cursor = this.parentById[cursor];
+        }
+        return d;
+      };
+      return depth(b) - depth(a);
+    });
+
+    for (const id of orderedIds) {
+      const node = this.nodes[id];
+      if (!node) continue;
+      const parentId = this.parentById[id];
+      if (parentId) {
+        const parent = this.nodes[parentId];
+        if (parent?.kind === "object") parent.children = (parent.children ?? []).filter((cid) => cid !== id);
+      }
+      if (node.kind === "object") {
+        for (const childId of node.children ?? []) {
+          if (deleteSet.has(childId)) delete this.parentById[childId];
+        }
+      }
+      delete this.parentById[id];
+      delete this.nodes[id];
+      this.rootIds = this.rootIds.filter((rid) => rid !== id);
+    }
+
+    for (const [id, parentId] of Object.entries(this.parentById)) {
+      if (!this.nodes[id] || !this.nodes[parentId]) delete this.parentById[id];
+    }
+    this.rootIds = this.rootIds.filter((id) => this.nodes[id] && !this.parentById[id]);
+    this.invalidateDerivedData();
+    return orderedIds;
   }
 
   removeShape(id) {
@@ -296,14 +467,74 @@ export class ShapeStore {
 
   getFillRegions() { return this.getShapes().filter((shape) => shape.type === "fillRegion"); }
 
-  markRegionBoundaryLinesOwnedByFace(uvCycle, faceId) {
+  getFaceBySourceRegionKey(regionKey) {
+    if (!regionKey) return null;
+    const faceNode = Object.values(this.nodes).find((node) => node.kind === "shape" && node.shapeType === "face" && node.style?.sourceRegionKey === regionKey);
+    return faceNode ? this.toShapeView(faceNode.id) : null;
+  }
+
+  createFaceFromRegion(region, fillStyle = {}) {
+    if (!region?.uvCycle || region.uvCycle.length < 3) return null;
+    const pointsWorld = region.uvCycle.map((p) => isoUVToWorld(p.u, p.v));
+    const nodeId = makeId("face");
+    const sourceLineIds = this.getBoundaryLineIdsForRegion(region.uvCycle);
+    this.nodes[nodeId] = {
+      id: nodeId,
+      kind: "shape",
+      shapeType: "face",
+      localGeom: { points: pointsWorld },
+      nodeTransform: { ...IDENTITY_TRANSFORM },
+      style: {
+        id: nodeId,
+        type: "face",
+        fillColor: fillStyle.fillColor ?? fillStyle.color ?? "#4aa3ff",
+        fillAlpha: fillStyle.fillAlpha ?? fillStyle.alpha ?? fillStyle.fillOpacity ?? 1,
+        sourceRegionKey: region.id,
+        sourceLineIds,
+        visible: true,
+        locked: false,
+      },
+      meta: { sourceLineIds },
+      createdAt: Date.now(),
+    };
+    this.rootIds.push(nodeId);
+    this.markRegionBoundaryLinesOwnedByFace(sourceLineIds, nodeId);
+    return nodeId;
+  }
+
+  getBoundaryLineIdsForRegion(uvCycle) {
+    const boundaryIds = new Set();
     const edges = new Set();
     for (let i = 0; i < uvCycle.length; i += 1) edges.add(edgeKey(uvCycle[i], uvCycle[(i + 1) % uvCycle.length]));
+
+    const regionWorldEdges = [];
+    for (let i = 0; i < uvCycle.length; i += 1) {
+      regionWorldEdges.push([
+        isoUVToWorld(uvCycle[i].u, uvCycle[i].v),
+        isoUVToWorld(uvCycle[(i + 1) % uvCycle.length].u, uvCycle[(i + 1) % uvCycle.length].v),
+      ]);
+    }
+
     for (const node of Object.values(this.nodes)) {
       if (node.kind !== "shape" || node.shapeType !== "line") continue;
-      if (edges.has(edgeKey(node.localGeom.a, node.localGeom.b))) {
-        node.localGeom.ownedByFaceIds = [...new Set([...(node.localGeom.ownedByFaceIds ?? []), faceId])];
+      const shape = this.toShapeView(node.id);
+      if (!shape) continue;
+      if (edges.has(edgeKey(shape.startUV, shape.endUV))) {
+        boundaryIds.add(node.id);
+        continue;
       }
+      if (regionWorldEdges.some(([a, b]) => segmentMatchesBoundary(shape, a, b))) {
+        boundaryIds.add(node.id);
+      }
+    }
+    return [...boundaryIds];
+  }
+
+  markRegionBoundaryLinesOwnedByFace(lineIds, faceId) {
+    for (const lineId of lineIds) {
+      const node = this.nodes[lineId];
+      if (!node || node.kind !== "shape" || node.shapeType !== "line") continue;
+      node.localGeom.ownedByFaceIds = [...new Set([...(node.localGeom.ownedByFaceIds ?? []), faceId])];
     }
   }
 
@@ -331,15 +562,15 @@ export class ShapeStore {
       if (!fill) continue;
       const c = regionCentroid(region.uvCycle);
       if (!c || c.x < normalized.minX || c.x > normalized.maxX || c.y < normalized.minY || c.y > normalized.maxY) continue;
-      const pointsWorld = region.uvCycle.map((p) => isoUVToWorld(p.u, p.v));
-      const nodeId = makeId("face");
-      this.nodes[nodeId] = {
-        id: nodeId, kind: "shape", shapeType: "face", localGeom: { points: pointsWorld }, nodeTransform: { ...IDENTITY_TRANSFORM },
-        style: { id: nodeId, type: "face", fillColor: fill.color ?? fill.fillColor ?? "#4aa3ff", fillAlpha: fill.alpha ?? fill.fillOpacity ?? 1, sourceRegionKey: region.id, visible: true, locked: false },
-        createdAt: Date.now(),
-      };
-      this.rootIds.push(nodeId);
-      this.markRegionBoundaryLinesOwnedByFace(region.uvCycle, nodeId);
+      const nodeId = this.createFaceFromRegion(region, {
+        color: fill.color,
+        alpha: fill.alpha,
+        fillColor: fill.fillColor,
+        fillOpacity: fill.fillOpacity,
+      });
+      if (!nodeId) continue;
+      const fillNode = Object.values(this.nodes).find((node) => node.kind === "shape" && node.shapeType === "fillRegion" && node.style.regionId === region.id);
+      if (fillNode) this.removeShape(fillNode.id);
       ids.push(nodeId);
     }
     return ids;
