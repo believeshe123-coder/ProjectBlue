@@ -12,7 +12,7 @@ export class FillTool extends BaseTool {
 
     const { shapeStore, camera, appState } = this.context;
     if (!appState.enableFill) {
-      appState.notifyStatus?.("Fill is disabled", 1500);
+      appState.notifyStatus?.("Fill is disabled in stability mode", 1500);
       return;
     }
 
