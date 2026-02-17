@@ -57,14 +57,12 @@ const selectionBar = document.getElementById("selection-bar");
 const selectionBarCountEl = document.getElementById("selection-bar-count");
 const selectionKeepCheckbox = document.getElementById("selection-keep-checkbox");
 const selectionGroupButton = document.getElementById("selection-group-btn");
+const selectionMakeFaceButton = document.getElementById("selection-make-face-btn");
 const zOrderMenu = document.getElementById("z-order-context-menu");
 const zOrderFrontButton = document.getElementById("z-order-front-btn");
 const zOrderForwardButton = document.getElementById("z-order-forward-btn");
 const zOrderBackwardButton = document.getElementById("z-order-backward-btn");
 const zOrderBackButton = document.getElementById("z-order-back-btn");
-const regionSelectToggleButton = document.getElementById("region-select-toggle-btn");
-const regionConvertFaceButton = document.getElementById("region-convert-face-btn");
-const regionClearSelectionButton = document.getElementById("region-clear-selection-btn");
 
 const menuFileButton = document.getElementById("menuFileBtn");
 const menuFileDropdown = document.getElementById("menuFileDropdown");
@@ -130,7 +128,6 @@ const appState = {
   selectedType: null,
   selectedIds: new Set(),
   keepSelecting: false,
-  regionSelectMode: false,
   selectedRegionKey: null,
   lastSelectedId: null,
   marqueeRect: null,
@@ -479,7 +476,6 @@ function undo() {
   if (!previous) return;
   applySnapshot(previous);
   appState.previewShape = null;
-  appState.regionSelectMode = false;
   appState.selectedRegionKey = null;
   clearSelectionState();
 }
@@ -489,7 +485,6 @@ function redo() {
   if (!next) return;
   applySnapshot(next);
   appState.previewShape = null;
-  appState.regionSelectMode = false;
   appState.selectedRegionKey = null;
   clearSelectionState();
 }
@@ -553,6 +548,7 @@ function getSelectedTypeLabel() {
     line: "Line",
     face: "Face",
     group: "Group",
+    region: "Region",
   };
   return labelByType[appState.selectedType] ?? "Item";
 }
@@ -565,19 +561,19 @@ function updateSelectionBar() {
   selectionBar.hidden = false;
   selectionBar.classList.toggle("is-visible", shouldShow);
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selected: ${getSelectedTypeLabel()} (${appState.selectedIds.size})`;
-  if (selectionKeepCheckbox) selectionKeepCheckbox.checked = appState.keepSelecting === true;
+  const isRegionSelection = appState.selectedType === "region";
+  if (selectionKeepCheckbox) {
+    selectionKeepCheckbox.checked = appState.keepSelecting === true;
+    selectionKeepCheckbox.disabled = isRegionSelection;
+    const keepLabel = selectionKeepCheckbox.closest("label");
+    if (keepLabel) keepLabel.hidden = isRegionSelection;
+  }
   if (selectionGroupButton) selectionGroupButton.disabled = !canGroupSelection();
-  if (regionSelectToggleButton) {
-    regionSelectToggleButton.textContent = `Region Select: ${appState.regionSelectMode ? "ON" : "OFF"}`;
-  }
-  const hasRegion = !!appState.selectedRegionKey;
-  if (regionConvertFaceButton) {
-    regionConvertFaceButton.hidden = !hasRegion;
-    regionConvertFaceButton.disabled = !hasRegion;
-  }
-  if (regionClearSelectionButton) {
-    regionClearSelectionButton.hidden = !hasRegion;
-    regionClearSelectionButton.disabled = !hasRegion;
+  if (selectionGroupButton) selectionGroupButton.hidden = isRegionSelection;
+  if (selectionMakeFaceButton) {
+    const showMakeFace = appState.selectedType === "region" && !!appState.selectedRegionKey;
+    selectionMakeFaceButton.hidden = !showMakeFace;
+    selectionMakeFaceButton.disabled = !showMakeFace;
   }
 }
 
@@ -596,6 +592,7 @@ function updateSelectedFlags() {
 
 function setSelection(ids = [], type = null, lastId = null) {
   if (ids.length === 0) appState.selectionBoxWorld = null;
+  if (type !== "region") appState.selectedRegionKey = null;
   appState.selectedType = ids.length > 0 ? type : null;
   appState.selectedIds = new Set(ids);
   appState.lastSelectedId = lastId;
@@ -840,24 +837,12 @@ function runContextMenuZOrder(mode) {
   closeContextMenu();
 }
 
-function toggleRegionSelectMode() {
-  appState.regionSelectMode = !appState.regionSelectMode;
-  if (!appState.regionSelectMode) {
-    appState.selectedRegionKey = null;
-  }
-  updateSelectionBar();
-}
-
-function clearRegionSelection() {
-  appState.selectedRegionKey = null;
-  updateSelectionBar();
-}
-
 function convertSelectedRegionToFace() {
   const regionKey = appState.selectedRegionKey;
   if (!regionKey) return;
 
-  const existingFace = shapeStore.getShapes().find((shape) => shape.type === "face" && shape.regionKey === regionKey);
+  const existingFace = shapeStore.getFaceBySourceRegionKey?.(regionKey)
+    ?? shapeStore.getShapes().find((shape) => shape.type === "face" && shape.sourceRegionKey === regionKey);
   if (existingFace) {
     setSelection([existingFace.id], "face", existingFace.id);
     appState.selectedRegionKey = null;
@@ -883,7 +868,7 @@ function convertSelectedRegionToFace() {
     fillColor: sourceFill.color ?? sourceFill.fillColor ?? "#4aa3ff",
     fillAlpha: sourceFill.alpha ?? sourceFill.fillOpacity ?? 1,
     zIndex: maxZ + 1,
-    regionKey,
+    sourceRegionKey: regionKey,
   });
 
   pushHistoryState();
@@ -965,7 +950,6 @@ function applyProjectData(project, { announce = true } = {}) {
   historyStore.undoStack = [];
   historyStore.redoStack = [];
   appState.previewShape = null;
-  appState.regionSelectMode = false;
   appState.selectedRegionKey = null;
   clearSelectionState();
   const toolName = normalizeToolName(settings.lastTool || "select");
@@ -1425,9 +1409,7 @@ zOrderFrontButton?.addEventListener("click", () => runContextMenuZOrder("front")
 zOrderForwardButton?.addEventListener("click", () => runContextMenuZOrder("forward"));
 zOrderBackwardButton?.addEventListener("click", () => runContextMenuZOrder("backward"));
 zOrderBackButton?.addEventListener("click", () => runContextMenuZOrder("back"));
-regionSelectToggleButton?.addEventListener("click", toggleRegionSelectMode);
-regionConvertFaceButton?.addEventListener("click", convertSelectedRegionToFace);
-regionClearSelectionButton?.addEventListener("click", clearRegionSelection);
+selectionMakeFaceButton?.addEventListener("click", convertSelectedRegionToFace);
 
 paletteColorButton?.addEventListener("click", () => {
   customColorPicker?.click();

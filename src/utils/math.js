@@ -48,6 +48,20 @@ export function isPointInPolygon(point, polygonPoints) {
     return false;
   }
 
+  const epsilon = 1e-6;
+
+  for (let i = 0, j = polygonPoints.length - 1; i < polygonPoints.length; j = i, i += 1) {
+    const a = polygonPoints[j];
+    const b = polygonPoints[i];
+    const cross = (point.y - a.y) * (b.x - a.x) - (point.x - a.x) * (b.y - a.y);
+    if (Math.abs(cross) > epsilon) continue;
+    const dot = (point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y);
+    if (dot < -epsilon) continue;
+    const lenSq = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+    if (dot - lenSq > epsilon) continue;
+    return true;
+  }
+
   let inside = false;
 
   for (let i = 0, j = polygonPoints.length - 1; i < polygonPoints.length; j = i, i += 1) {

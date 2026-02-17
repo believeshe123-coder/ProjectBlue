@@ -213,6 +213,11 @@ export class ShapeStore {
     return this.shapes.find((shape) => shape.id === id) ?? null;
   }
 
+  getFaceBySourceRegionKey(regionKey) {
+    if (typeof regionKey !== "string" || !regionKey) return null;
+    return this.shapes.find((shape) => shape.type === "face" && shape.sourceRegionKey === regionKey) ?? null;
+  }
+
   clearSelection() {
     for (const shape of this.shapes) shape.selected = false;
   }

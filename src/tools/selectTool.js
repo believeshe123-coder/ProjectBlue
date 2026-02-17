@@ -43,6 +43,31 @@ function filterShapesBySelectionPriority(shapes = []) {
   return { type: null, shapes: [] };
 }
 
+function getFilledRegionHit(shapeStore, worldPoint) {
+  const clickUv = worldToIsoUV(worldPoint);
+  const filledRegionIds = new Set(
+    shapeStore.getShapes()
+      .filter((shape) => shape.type === "fillRegion" && shape.visible !== false)
+      .map((shape) => shape.regionId),
+  );
+  if (!filledRegionIds.size) return null;
+  const filledRegions = shapeStore.getComputedRegions().filter((region) => filledRegionIds.has(region.id));
+  return findSmallestRegionContainingPoint(filledRegions, clickUv);
+}
+
+function getTopmostFaceHit(shapeStore, worldPoint) {
+  const faces = shapeStore.getShapes()
+    .filter((shape) => shape.type === "face" && shape.visible !== false && shape.locked !== true)
+    .sort((a, b) => {
+      const zDiff = (b.zIndex ?? 0) - (a.zIndex ?? 0);
+      if (zDiff !== 0) return zDiff;
+      const createdDiff = (b.createdAt ?? 0) - (a.createdAt ?? 0);
+      if (createdDiff !== 0) return createdDiff;
+      return String(b.id ?? "").localeCompare(String(a.id ?? ""));
+    });
+  return faces.find((shape) => shape.containsPoint?.(worldPoint, 0.75)) ?? null;
+}
+
 export class SelectTool extends BaseTool {
   constructor(context) {
     super(context);
@@ -64,26 +89,60 @@ export class SelectTool extends BaseTool {
     const { shapeStore, camera, appState } = this.context;
     const allowOwnedLines = event?.altKey === true;
     const toleranceWorld = 8 / camera.zoom;
+    const keepSelecting = appState.keepSelecting === true;
+
+    const faceHit = getTopmostFaceHit(shapeStore, worldPoint);
+    if (faceHit) {
+      const targetId = shapeStore.getSelectionTargetId(faceHit.id) ?? faceHit.id;
+      const targetShape = shapeStore.getShapeById(targetId) ?? faceHit;
+      const hitType = getSelectionTypeForShape(targetShape);
+      const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
+      const currentType = appState.selectedType ?? null;
+
+      if (keepSelecting) {
+        if (currentType && currentType !== hitType) {
+          appState.setSelection?.([targetId], hitType, targetId);
+        } else if (hitWasSelected) {
+          appState.removeFromSelection?.(targetId);
+        } else {
+          appState.addToSelection?.(targetId, hitType);
+        }
+      } else {
+        appState.setSelection?.([targetId], hitType, targetId);
+      }
+
+      appState.selectedRegionKey = null;
+      appState.updateSelectionBar?.();
+      if (!isMovableShape(targetShape)) {
+        this.dragState = null;
+        return;
+      }
+
+      this.dragState = {
+        shapeId: targetShape.id,
+        startMouseWorld: { ...worldPoint },
+        startScreen: { ...screenPoint },
+        clickedShapeId: targetId,
+        didDrag: false,
+        historyPushed: false,
+      };
+      return;
+    }
+
+    const filledRegionHit = getFilledRegionHit(shapeStore, worldPoint);
+    if (filledRegionHit) {
+      appState.selectedRegionKey = filledRegionHit.id;
+      appState.setSelection?.([filledRegionHit.id], "region", filledRegionHit.id);
+      appState.updateSelectionBar?.();
+      return;
+    }
+
     const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, {
       includeLocked: false,
       allowOwnedLines,
     });
-    const keepSelecting = appState.keepSelecting === true;
-    const regionSelectMode = appState.regionSelectMode === true;
-
-    if (regionSelectMode && hit?.type !== "face") {
-      const clickUv = worldToIsoUV(worldPoint);
-      const hitRegion = findSmallestRegionContainingPoint(shapeStore.getComputedRegions(), clickUv);
-      if (hitRegion) {
-        appState.selectedRegionKey = hitRegion.id;
-        appState.setSelection?.([], null);
-        appState.updateSelectionBar?.();
-        return;
-      }
-    }
 
     if (!hit) {
-      appState.selectedRegionKey = null;
       appState.setSelection?.([], null);
       appState.closeContextMenu?.();
       appState.updateSelectionBar?.();
