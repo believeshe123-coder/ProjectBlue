@@ -810,6 +810,7 @@ function convertSelectedRegionToFace() {
 
   pushHistoryState();
   shapeStore.addShape(face);
+  shapeStore.markRegionBoundaryLinesOwnedByFace(region.uvCycle, face.id);
   setSelection([face.id], face.id);
   appState.selectedRegionKey = null;
   appState.notifyStatus?.("Converted to Face", 1600);

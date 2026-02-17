@@ -27,6 +27,16 @@ function rectsIntersect(a, b) {
   return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
 }
 
+function uvKey(point) {
+  return `${Math.round(point.u)},${Math.round(point.v)}`;
+}
+
+function edgeKey(a, b) {
+  const aKey = uvKey(a);
+  const bKey = uvKey(b);
+  return aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
+}
+
 function regionCentroid(uvCycle = []) {
   if (!Array.isArray(uvCycle) || uvCycle.length < 3) return null;
   const worldPoints = uvCycle.map((point) => isoUVToWorld(point.u, point.v));
@@ -230,7 +240,26 @@ export class ShapeStore {
     return group?.type === "group" ? group : shape;
   }
 
-  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false } = {}) {
+  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false, allowOwnedLines = false } = {}) {
+    const faces = this.shapes
+      .map((shape, index) => ({ shape, index }))
+      .filter(({ shape }) => {
+        if (shape.type !== "face") return false;
+        if (!includeLocked && shape.locked === true) return false;
+        return shape.visible !== false;
+      })
+      .sort((a, b) => compareShapeZOrder(a.shape, b.shape, a.index, b.index))
+      .reverse();
+
+    for (const { shape } of faces) {
+      if (!this.shapeContainsPoint(shape, point, toleranceWorld)) continue;
+      if (shape.groupId) {
+        const group = this.getShapeById(shape.groupId);
+        if (group?.type === "group") return group;
+      }
+      return shape;
+    }
+
     const sorted = this.shapes
       .map((shape, index) => ({ shape, index }))
       .filter(({ shape }) => {
@@ -241,6 +270,7 @@ export class ShapeStore {
       .reverse();
 
     for (const { shape } of sorted) {
+      if (!allowOwnedLines && shape.type === "line" && shape.isOwnedByFace?.()) continue;
       if (!this.shapeContainsPoint(shape, point, toleranceWorld)) continue;
       if (shape.type === "group") return shape;
       if (shape.groupId) {
@@ -306,12 +336,13 @@ export class ShapeStore {
     return null;
   }
 
-  getShapesIntersectingRect(rect) {
+  getShapesIntersectingRect(rect, { allowOwnedLines = false } = {}) {
     const normalizedRect = normalizeRect(rect);
     if (!normalizedRect) return [];
     const hitIds = new Set();
     for (const shape of this.shapes) {
       if (shape.visible === false || shape.locked === true) continue;
+      if (!allowOwnedLines && shape.type === "line" && shape.isOwnedByFace?.()) continue;
       const bounds = this.getShapeBounds(shape);
       if (!bounds) continue;
       const intersects = rectsIntersect(bounds, normalizedRect);
@@ -320,6 +351,25 @@ export class ShapeStore {
       if (target) hitIds.add(target.id);
     }
     return [...hitIds].map((id) => this.getShapeById(id)).filter(Boolean);
+  }
+
+  markRegionBoundaryLinesOwnedByFace(uvCycle, faceId) {
+    if (!Array.isArray(uvCycle) || uvCycle.length < 2 || typeof faceId !== "string" || !faceId) return;
+    const boundaryByKey = new Map();
+
+    for (let i = 0; i < uvCycle.length; i += 1) {
+      const current = uvCycle[i];
+      const next = uvCycle[(i + 1) % uvCycle.length];
+      if (!current || !next) continue;
+      if (uvKey(current) === uvKey(next)) continue;
+      boundaryByKey.set(edgeKey(current, next), true);
+    }
+
+    for (const shape of this.shapes) {
+      if (shape.type !== "line") continue;
+      if (!boundaryByKey.has(edgeKey(shape.startUV, shape.endUV))) continue;
+      shape.addOwnedByFaceId?.(faceId);
+    }
   }
 
   getSelectionBoundsFromIds(selectionIds = []) {
@@ -400,6 +450,7 @@ export class ShapeStore {
       });
       faceOffset += 1;
       this.addShape(face);
+      this.markRegionBoundaryLinesOwnedByFace(region.uvCycle, face.id);
       capturedFaceIds.push(face.id);
     }
 

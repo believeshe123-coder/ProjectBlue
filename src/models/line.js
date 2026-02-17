@@ -3,13 +3,34 @@ import { distancePointToSegment } from "../utils/math.js";
 import { isoUVToWorld, snapIsoUV, worldToIsoUV } from "../core/isoGrid.js";
 import { buildDistanceLabel } from "../utils/measurement.js";
 
+function normalizeOwnedByFaceIds(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.filter((entry) => typeof entry === "string" && entry))];
+  }
+  if (typeof value === "string" && value) {
+    return [value];
+  }
+  return [];
+}
+
 export class Line extends Shape {
-  constructor({ start, end, startUV, endUV, sourceForPolygonId = null, ...rest }) {
+  constructor({ start, end, startUV, endUV, sourceForPolygonId = null, ownedByFaceId = null, ownedByFaceIds = null, ...rest }) {
     super({ ...rest, type: "line" });
     this.startUV = snapIsoUV(startUV ?? worldToIsoUV(start), 0.5);
     this.endUV = snapIsoUV(endUV ?? worldToIsoUV(end), 0.5);
     this.syncWorldFromUV();
-    this.sourceForPolygonId = null;
+    this.sourceForPolygonId = sourceForPolygonId;
+    this.ownedByFaceIds = normalizeOwnedByFaceIds(ownedByFaceIds ?? ownedByFaceId);
+  }
+
+  isOwnedByFace() {
+    return this.ownedByFaceIds.length > 0;
+  }
+
+  addOwnedByFaceId(faceId) {
+    if (typeof faceId !== "string" || !faceId) return;
+    if (this.ownedByFaceIds.includes(faceId)) return;
+    this.ownedByFaceIds.push(faceId);
   }
 
   syncWorldFromUV() {
@@ -128,6 +149,8 @@ export class Line extends Shape {
       startUV: { ...this.startUV },
       endUV: { ...this.endUV },
       sourceForPolygonId: this.sourceForPolygonId,
+      ownedByFaceIds: [...this.ownedByFaceIds],
+      ownedByFaceId: this.ownedByFaceIds[0] ?? null,
     };
   }
 }

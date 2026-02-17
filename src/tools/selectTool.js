@@ -39,10 +39,14 @@ export class SelectTool extends BaseTool {
     if (this.context.canvas) this.context.canvas.style.cursor = "default";
   }
 
-  onMouseDown({ worldPoint, screenPoint }) {
+  onMouseDown({ event, worldPoint, screenPoint }) {
     const { shapeStore, camera, appState } = this.context;
+    const allowOwnedLines = event?.altKey === true;
     const toleranceWorld = 8 / camera.zoom;
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, {
+      includeLocked: false,
+      allowOwnedLines,
+    });
     const selectionSet = getSelectionSet(appState);
     const keepSelecting = appState.keepSelecting === true;
     const regionSelectMode = appState.regionSelectMode === true;
@@ -129,8 +133,9 @@ export class SelectTool extends BaseTool {
     }
   }
 
-  onMouseMove({ worldPoint, screenPoint }) {
+  onMouseMove({ event, worldPoint, screenPoint }) {
     const { canvas, shapeStore, camera, appState } = this.context;
+    const allowOwnedLines = event?.altKey === true;
     const toleranceWorld = 8 / camera.zoom;
 
     if (this.marqueeState) {
@@ -182,21 +187,25 @@ export class SelectTool extends BaseTool {
       return;
     }
 
-    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
+    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, {
+      includeLocked: false,
+      allowOwnedLines,
+    });
     this.hoverShapeId = hover?.id ?? null;
     if (canvas) canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
   }
 
-  onMouseUp({ worldPoint }) {
+  onMouseUp({ worldPoint, event }) {
     const { appState, shapeStore } = this.context;
     if (this.marqueeState) {
+      const allowOwnedLines = event?.altKey === true;
       const rect = {
         minX: Math.min(this.marqueeState.startWorld.x, worldPoint.x),
         minY: Math.min(this.marqueeState.startWorld.y, worldPoint.y),
         maxX: Math.max(this.marqueeState.startWorld.x, worldPoint.x),
         maxY: Math.max(this.marqueeState.startWorld.y, worldPoint.y),
       };
-      const hitShapes = shapeStore.getShapesIntersectingRect(rect);
+      const hitShapes = shapeStore.getShapesIntersectingRect(rect, { allowOwnedLines });
       const hitIds = hitShapes.map((shape) => shape.id);
       if (appState.keepSelecting === true) {
         for (const id of hitIds) {
