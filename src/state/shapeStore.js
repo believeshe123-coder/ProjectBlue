@@ -1,4 +1,5 @@
 import { FillRegion } from "../models/fillRegion.js";
+import { PolygonShape } from "../models/polygonShape.js";
 import { buildRegionsFromLines } from "../core/regionBuilder.js";
 import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
 import { distancePointToSegment, isPointInPolygon } from "../utils/math.js";
@@ -105,6 +106,20 @@ export class ShapeStore {
       this.rootIds.push(shape.id);
       return shape;
     }
+
+    if (shape.type === "polygon") {
+      this.nodes[shape.id] = {
+        id: shape.id,
+        kind: "shape",
+        shapeType: "polygon",
+        localGeom: { points: (shape.pointsWorld ?? shape.points ?? []).map((point) => ({ ...point })) },
+        nodeTransform: { x: 0, y: 0, rot: 0 },
+        style: shape.toJSON(),
+        createdAt: shape.createdAt ?? Date.now(),
+      };
+      this.rootIds.push(shape.id);
+      return shape;
+    }
     return shape;
   }
 
@@ -199,6 +214,17 @@ export class ShapeStore {
       };
     }
 
+    if (node.shapeType === "polygon") {
+      const localPoints = node.localGeom.points
+        ?? (node.style.pointsUV ?? []).map((point) => isoUVToWorld(point.u, point.v));
+      const pointsWorld = localPoints.map((point) => applyTransformPoint(worldTx, point));
+      return new PolygonShape({
+        ...node.style,
+        id,
+        pointsWorld,
+      });
+    }
+
     return null;
   }
 
@@ -237,6 +263,13 @@ export class ShapeStore {
         const a = isoUVToWorld(node.localGeom.a.u, node.localGeom.a.v);
         const b = isoUVToWorld(node.localGeom.b.u, node.localGeom.b.v);
         if (distancePointToSegment(localPt, a, b) <= toleranceWorld) return this.toShapeView(id);
+      } else if (node.shapeType === "polygon") {
+        const points = node.localGeom.points
+          ?? (node.style.pointsUV ?? []).map((uvPoint) => isoUVToWorld(uvPoint.u, uvPoint.v));
+        if (isPointInPolygon(localPt, points)) return this.toShapeView(id);
+      } else if (node.shapeType === "fillRegion") {
+        const points = (node.localGeom.uvCycle ?? []).map((uvPoint) => isoUVToWorld(uvPoint.u, uvPoint.v));
+        if (isPointInPolygon(localPt, points)) return this.toShapeView(id);
       }
     }
     return null;
@@ -252,7 +285,10 @@ export class ShapeStore {
       const xs = shape.pointsWorld.map((p) => p.x); const ys = shape.pointsWorld.map((p) => p.y);
       return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
     }
-    if (shape.type === "fillRegion") return shape.bounds ?? null;
+    if (shape.type === "fillRegion" || shape.type === "polygon") {
+      if (shape.getBounds) return shape.getBounds();
+      return shape.bounds ?? null;
+    }
     return null;
   }
 
@@ -766,6 +802,17 @@ export class ShapeStore {
         this.nodes[shape.id] = {
           id: shape.id, kind: "shape", shapeType: "fillRegion", localGeom: { uvCycle: shape.uvCycle ?? [] },
           nodeTransform: { x: 0, y: 0, rot: 0 }, style: { ...shape }, createdAt: shape.createdAt ?? Date.now(),
+        };
+        this.rootIds.push(shape.id);
+      } else if (shape.type === "polygon") {
+        this.nodes[shape.id] = {
+          id: shape.id,
+          kind: "shape",
+          shapeType: "polygon",
+          localGeom: { points: (shape.pointsWorld ?? shape.points ?? []).map((point) => ({ ...point })) },
+          nodeTransform: { x: 0, y: 0, rot: 0 },
+          style: { ...shape },
+          createdAt: shape.createdAt ?? Date.now(),
         };
         this.rootIds.push(shape.id);
       } else if (shape.type === "group") {

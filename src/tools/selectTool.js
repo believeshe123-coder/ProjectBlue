@@ -1,12 +1,19 @@
 import { BaseTool } from "./baseTool.js";
 import { snapWorldToIso } from "../core/isoGrid.js";
 
+const MOVABLE_TYPES = new Set(["line"]);
+
 function isMovableShape(shape) {
-  return shape && shape.type === "line" && shape.locked !== true;
+  return !!shape && MOVABLE_TYPES.has(shape.type) && shape.locked !== true;
 }
 
 function getSelectedIds(appState) {
   return appState.selectedIds instanceof Set ? [...appState.selectedIds] : [];
+}
+
+function notifyNonMovable(appState, shape) {
+  if (!shape?.type) return;
+  appState.notifyStatus?.(`${shape.type} is selectable but not movable`, 1400);
 }
 
 export class SelectTool extends BaseTool {
@@ -40,6 +47,8 @@ export class SelectTool extends BaseTool {
     if (!shape) return null;
     if (shape.type === "line") return { ...shape.start };
     if (shape.type === "face") return shape.pointsWorld?.[0] ? { ...shape.pointsWorld[0] } : null;
+    if (shape.type === "polygon") return shape.pointsWorld?.[0] ? { ...shape.pointsWorld[0] } : null;
+    if (shape.type === "fillRegion") return shape.pointsWorld?.[0] ? { ...shape.pointsWorld[0] } : null;
     return null;
   }
 
@@ -47,7 +56,7 @@ export class SelectTool extends BaseTool {
     const { shapeStore, camera, appState } = this.context;
     const toleranceWorld = 8 / camera.zoom;
     const keepSelecting = appState.keepSelecting === true;
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: true });
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
 
     if (!hit) {
       appState.closeContextMenu?.();
@@ -62,6 +71,7 @@ export class SelectTool extends BaseTool {
 
     appState.selectionBoxWorld = null;
     const targetId = hit.id;
+    const targetType = hit.type;
     const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
     const activeGroup = appState.selectedType === "group" && appState.selectedGroupId
       ? shapeStore.getLineGroup(appState.selectedGroupId)
@@ -70,16 +80,17 @@ export class SelectTool extends BaseTool {
 
     if (hitInsideActiveGroup) {
       // Preserve group selection when interacting with a selected group member.
-    } else if (keepSelecting && appState.selectedType === "line") {
+    } else if (keepSelecting && appState.selectedType === targetType) {
       if (hitWasSelected) appState.removeFromSelection?.(targetId);
-      else appState.addToSelection?.(targetId, "line");
+      else appState.addToSelection?.(targetId, targetType);
     } else {
-      appState.setSelection?.([targetId], "line", targetId);
+      appState.setSelection?.([targetId], targetType, targetId);
     }
 
     appState.updateSelectionBar?.();
     if (!isMovableShape(hit)) {
       this.dragState = null;
+      notifyNonMovable(appState, hit);
       return;
     }
 
@@ -144,24 +155,18 @@ export class SelectTool extends BaseTool {
       for (const id of this.dragState.dragIds) {
         shapeStore.applyWorldDeltaToNode(id, stepDelta, { lineOnly: true });
       }
-      if (appState.debugSelectionDrag) {
-        console.log("[DRAG]", {
-          selectedType: appState.selectedType,
-          selectedIds: [...(appState.selectedIds ?? [])],
-          dx: stepDelta.x,
-          dy: stepDelta.y,
-          affectedIds: this.dragState.dragIds,
-        });
-      }
       this.dragState.totalAppliedDelta = snappedDelta;
 
       if (canvas) canvas.style.cursor = "grabbing";
       return;
     }
 
-    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: true });
+    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
     this.hoverShapeId = hover?.id ?? null;
-    if (canvas) canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
+    if (canvas) {
+      if (!hover) canvas.style.cursor = "default";
+      else canvas.style.cursor = isMovableShape(hover) ? "grab" : "not-allowed";
+    }
   }
 
   onMouseUp({ worldPoint, screenPoint }) {
@@ -173,15 +178,19 @@ export class SelectTool extends BaseTool {
         maxX: Math.max(this.marqueeState.startWorld.x, worldPoint.x),
         maxY: Math.max(this.marqueeState.startWorld.y, worldPoint.y),
       };
-      const hitShapes = shapeStore.getShapesIntersectingRect(rect, { lineOnly: true });
-      const hitIds = hitShapes.map((shape) => shape.id);
-      if (appState.keepSelecting && appState.selectedType === "line") {
+      const hitShapes = shapeStore.getShapesIntersectingRect(rect);
+      const baseType = appState.keepSelecting ? appState.selectedType : null;
+      const selectionType = baseType ?? hitShapes[0]?.type ?? null;
+      const hitIds = hitShapes
+        .filter((shape) => !selectionType || shape.type === selectionType)
+        .map((shape) => shape.id);
+      if (appState.keepSelecting && selectionType && appState.selectedType === selectionType) {
         for (const id of hitIds) {
           if (appState.selectedIds.has(id)) appState.removeFromSelection?.(id);
-          else appState.addToSelection?.(id, "line");
+          else appState.addToSelection?.(id, selectionType);
         }
       } else {
-        appState.setSelection?.(hitIds, hitIds.length ? "line" : null, hitIds[hitIds.length - 1] ?? null);
+        appState.setSelection?.(hitIds, hitIds.length ? selectionType : null, hitIds[hitIds.length - 1] ?? null);
       }
       appState.selectionBoxWorld = rect;
       appState.marqueeRect = null;
@@ -195,7 +204,11 @@ export class SelectTool extends BaseTool {
     }
 
     this.dragState = null;
-    if (this.context.canvas) this.context.canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
+    if (this.context.canvas) {
+      const hoverShape = this.hoverShapeId ? this.context.shapeStore.getShapeById(this.hoverShapeId) : null;
+      if (!hoverShape) this.context.canvas.style.cursor = "default";
+      else this.context.canvas.style.cursor = isMovableShape(hoverShape) ? "grab" : "not-allowed";
+    }
   }
 
   onKeyDown(event) {
