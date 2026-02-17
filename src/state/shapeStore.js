@@ -30,6 +30,16 @@ function distanceSquared(a, b) {
   return (dx * dx) + (dy * dy);
 }
 
+function compareByZMeta(a, b) {
+  const zA = Number.isFinite(a?.zIndex) ? a.zIndex : 0;
+  const zB = Number.isFinite(b?.zIndex) ? b.zIndex : 0;
+  if (zA !== zB) return zA - zB;
+  const createdA = Number.isFinite(a?.createdAt) ? a.createdAt : 0;
+  const createdB = Number.isFinite(b?.createdAt) ? b.createdAt : 0;
+  if (createdA !== createdB) return createdA - createdB;
+  return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
+}
+
 function segmentMatchesBoundary(line, edgeStart, edgeEnd, tolerance = 1.5) {
   const tol2 = tolerance * tolerance;
   const sameDirection = distanceSquared(line.start, edgeStart) <= tol2 && distanceSquared(line.end, edgeEnd) <= tol2;
@@ -173,7 +183,7 @@ export class ShapeStore {
       return {
         id, type: "line", start, end, startUV, endUV, visible: node.style.visible !== false,
         locked: node.style.locked === true, selected: node.style.selected === true,
-        strokeColor: node.style.strokeColor, strokeWidth: node.style.strokeWidth,
+        strokeColor: node.style.strokeColor, strokeWidth: node.style.strokeWidth, zIndex: node.style.zIndex ?? 0,
         ownedByFaceIds: node.localGeom.ownedByFaceIds ?? [], createdAt: node.createdAt ?? 0,
       };
     }
@@ -209,10 +219,12 @@ export class ShapeStore {
   }
 
   getTopmostHitShape(point, toleranceWorld = 6, options = {}) {
-    const drawList = this.getDrawList();
     const lineOnly = options?.lineOnly === true;
-    for (let i = drawList.length - 1; i >= 0; i -= 1) {
-      const id = drawList[i];
+    const orderedIds = lineOnly
+      ? this.getLineOrderIds()
+      : this.getDrawList();
+    for (let i = orderedIds.length - 1; i >= 0; i -= 1) {
+      const id = orderedIds[i];
       const node = this.nodes[id];
       if (!node || node.kind !== "shape") continue;
       if (node.style?.visible === false || node.style?.locked === true) continue;
@@ -451,7 +463,63 @@ export class ShapeStore {
     return true;
   }
 
-  getRenderableShapesSorted() { return this.getShapes().filter((shape) => shape.type !== "fillRegion"); }
+  getRenderableShapesSorted() {
+    const lines = this.getShapes().filter((shape) => shape.type === "line").sort(compareByZMeta);
+    const others = this.getShapes().filter((shape) => shape.type !== "fillRegion" && shape.type !== "line");
+    return [...others, ...lines];
+  }
+
+  getLineOrderIds() {
+    return this.getShapes()
+      .filter((shape) => shape.type === "line")
+      .sort(compareByZMeta)
+      .map((shape) => shape.id);
+  }
+
+  setLineOrder(lineIds = []) {
+    let changed = false;
+    for (let i = 0; i < lineIds.length; i += 1) {
+      const id = lineIds[i];
+      const node = this.nodes[id];
+      if (!node?.style) continue;
+      if (node.style.zIndex !== i) {
+        node.style.zIndex = i;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  reorderLineBlock(lineIds = [], mode = "front") {
+    const order = this.getLineOrderIds();
+    const idSet = new Set(lineIds.filter((id) => this.nodes[id]?.shapeType === "line"));
+    const selected = order.filter((id) => idSet.has(id));
+    if (!selected.length) return false;
+
+    const unselected = order.filter((id) => !idSet.has(id));
+    const firstSelectedIndex = order.findIndex((id) => idSet.has(id));
+    const compactPos = order.slice(0, firstSelectedIndex).filter((id) => !idSet.has(id)).length;
+    let insertAt = compactPos;
+
+    if (mode === "front") insertAt = unselected.length;
+    else if (mode === "back") insertAt = 0;
+    else if (mode === "forward") insertAt = Math.min(compactPos + 1, unselected.length);
+    else if (mode === "backward") insertAt = Math.max(compactPos - 1, 0);
+    else return false;
+
+    const nextOrder = [...unselected];
+    nextOrder.splice(insertAt, 0, ...selected);
+    if (nextOrder.join("|") === order.join("|")) return false;
+    return this.setLineOrder(nextOrder);
+  }
+
+  bringToFront(lineIds = []) { return this.reorderLineBlock(lineIds, "front"); }
+
+  bringForward(lineIds = []) { return this.reorderLineBlock(lineIds, "forward"); }
+
+  sendBackward(lineIds = []) { return this.reorderLineBlock(lineIds, "backward"); }
+
+  sendToBack(lineIds = []) { return this.reorderLineBlock(lineIds, "back"); }
 
   getSelectionTargetId(shapeId) { return shapeId; }
 
@@ -654,14 +722,11 @@ export class ShapeStore {
   }
 
   reorderSelectionZ(selectionIds = [], mode = "front") {
-    const selected = new Set(selectionIds);
-    const selectedRoots = this.rootIds.filter((id) => selected.has(id));
-    if (!selectedRoots.length) return false;
-    const unselected = this.rootIds.filter((id) => !selected.has(id));
-    if (mode === "front") this.rootIds = [...unselected, ...selectedRoots];
-    else if (mode === "back") this.rootIds = [...selectedRoots, ...unselected];
-    else return false;
-    return true;
+    if (mode === "front") return this.bringToFront(selectionIds);
+    if (mode === "forward") return this.bringForward(selectionIds);
+    if (mode === "backward") return this.sendBackward(selectionIds);
+    if (mode === "back") return this.sendToBack(selectionIds);
+    return false;
   }
 
   clear() { this.nodes = {}; this.parentById = {}; this.rootIds = []; this.lineGroups = {}; this.invalidateDerivedData(); }

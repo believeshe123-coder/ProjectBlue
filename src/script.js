@@ -12,7 +12,9 @@ import { FillTool } from "./tools/fillTool.js";
 
 const DISABLE_SCENE_GRAPH = true;
 const ENABLE_GROUPING = true;
+const STABILITY_MODE = true;
 const ENABLE_FILL = true;
+const FILL_ENABLED = STABILITY_MODE === true ? ENABLE_FILL === true : true;
 
 const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
@@ -116,7 +118,7 @@ const historyStore = new HistoryStore();
 const appState = {
   disableSceneGraph: DISABLE_SCENE_GRAPH,
   enableGrouping: ENABLE_GROUPING,
-  enableFill: ENABLE_FILL,
+  enableFill: FILL_ENABLED,
   activeTool: "select",
   currentMode: "ISO",
   previewShape: null,
@@ -195,6 +197,13 @@ const canvasEngine = new CanvasEngine({
   getTool: () => currentTool,
   getToolName: () => getCurrentToolName(),
   getTools: () => tools,
+  onContextMenuPrevent: (event) => {
+    const point = canvasEngine.getScreenPointFromEvent(event);
+    const worldPoint = camera.screenToWorld(point);
+    const toleranceWorld = 8 / camera.zoom;
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { lineOnly: true });
+    openContextMenuForSelection(point, hit?.id ?? null);
+  },
   onViewChange: refreshStatus,
 });
 
@@ -346,7 +355,7 @@ function setActiveTool(toolName) {
   const normalizedToolName = normalizeToolName(toolName);
   if (!tools[normalizedToolName]) return;
   if (!appState.enableFill && normalizedToolName === "fill") {
-    appState.notifyStatus?.("Fill is disabled", 1500);
+    appState.notifyStatus?.("Fill is disabled in stability mode", 1500);
     return;
   }
   currentTool.onDeactivate();
@@ -774,7 +783,9 @@ function clampMenuPosition(x, y) {
 }
 
 function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
-  if (!zOrderMenu || appState.selectedType === null || appState.selectedIds.size === 0) {
+  const isLineSelection = appState.selectedType === "line" && appState.selectedIds.size > 0;
+  const isGroupSelection = appState.selectedType === "group" && !!appState.selectedGroupId;
+  if (!zOrderMenu || (!isLineSelection && !isGroupSelection)) {
     closeContextMenu();
     return;
   }
@@ -782,6 +793,18 @@ function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
   if (clickedShapeId && !appState.selectedIds.has(clickedShapeId)) {
     closeContextMenu();
     return;
+  }
+
+  let targetIds = [...appState.selectedIds];
+  let targetType = appState.selectedType;
+  if (isGroupSelection) {
+    const group = shapeStore.getLineGroup(appState.selectedGroupId);
+    if (!group) {
+      closeContextMenu();
+      return;
+    }
+    targetIds = [...group.childIds];
+    targetType = "group";
   }
 
   appState.ui.arrangeOpen = true;
@@ -793,10 +816,32 @@ function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
     open: true,
     x,
     y,
-    targetType: appState.selectedType,
-    targetIds: [...appState.selectedIds],
+    targetType,
+    targetIds,
   };
   renderUiVisibility();
+}
+
+function hidePanel(panelId) {
+  if (panelId === "file") {
+    setFileMenuOpen(false);
+    return;
+  }
+  if (panelId === "edit") {
+    setEditMenuOpen(false);
+    return;
+  }
+  if (panelId === "settings") {
+    setSettingsMenuOpen(false);
+    return;
+  }
+  if (panelId === "selection") {
+    closeSelectionPanel();
+    return;
+  }
+  if (panelId === "arrange") {
+    closeContextMenu();
+  }
 }
 
 function reorderSelectionZ(mode, idsOverride = null) {
@@ -1270,27 +1315,27 @@ menuEditDropdown?.addEventListener("click", (event) => {
 
 menuFileCloseButton?.addEventListener("click", (event) => {
   event.stopPropagation();
-  setFileMenuOpen(false);
+  hidePanel("file");
 });
 
 menuEditCloseButton?.addEventListener("click", (event) => {
   event.stopPropagation();
-  setEditMenuOpen(false);
+  hidePanel("edit");
 });
 
 menuSettingsCloseButton?.addEventListener("click", (event) => {
   event.stopPropagation();
-  setSettingsMenuOpen(false);
+  hidePanel("settings");
 });
 
 selectionPanelCloseButton?.addEventListener("click", (event) => {
   event.stopPropagation();
-  closeSelectionPanel();
+  hidePanel("selection");
 });
 
 zOrderMenuCloseButton?.addEventListener("click", (event) => {
   event.stopPropagation();
-  closeContextMenu();
+  hidePanel("arrange");
 });
 
 clearGroupsButton?.addEventListener("click", () => {
