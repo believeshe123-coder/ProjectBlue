@@ -473,10 +473,15 @@ export class ShapeStore {
   getRegionDebugStats() { this.getComputedRegions(); return this.cachedRegionDebug; }
 
   upsertFillRegion(region, { color, alpha }) {
-    console.log("[FILL] upsertFillRegion", region?.id, color, alpha);
+    const id = region?.id ?? null;
+    const fillColor = color;
+    const fillAlpha = alpha;
+    console.log("[FILL] upsert", id, fillColor, fillAlpha);
+    if (!region?.id || !Array.isArray(region.uvCycle) || region.uvCycle.length < 3) return null;
     const existing = Object.values(this.nodes).find((n) => n.kind === "shape" && n.shapeType === "fillRegion" && n.style.regionId === region.id);
     if (existing) {
       existing.style.color = color; existing.style.alpha = alpha; existing.style.fillColor = color; existing.style.fillOpacity = alpha;
+      existing.style.uvCycle = region.uvCycle.map((point) => ({ ...point }));
       existing.localGeom.uvCycle = region.uvCycle;
       return FillRegion.fromJSON(existing.style);
     }

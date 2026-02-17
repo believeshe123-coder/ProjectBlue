@@ -89,7 +89,6 @@ export class Renderer {
     this.getCanvasMetrics = getCanvasMetrics;
     this.ensureCanvasSize = ensureCanvasSize;
     this.renderFrameId = 0;
-    this.lastLoggedFillRegionCount = -1;
   }
 
   renderFrame() {
@@ -120,11 +119,7 @@ export class Renderer {
         .map((node) => this.shapeStore.toShapeView(node.id))
         .filter(Boolean);
       const fillRegions = this.shapeStore.getFillRegions();
-      if (fillRegions.length && this.lastLoggedFillRegionCount !== fillRegions.length) {
-        console.log("[RENDER] fillRegions", fillRegions.length);
-        this.lastLoggedFillRegionCount = fillRegions.length;
-      }
-      if (!fillRegions.length) this.lastLoggedFillRegionCount = 0;
+      if (fillRegions?.length) console.log("[RENDER] fillRegions", fillRegions.length);
       computedRegions = this.shapeStore.getComputedRegions();
       if (this.appState.enableFill) {
         for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
@@ -138,11 +133,7 @@ export class Renderer {
     } else {
       const shapes = this.shapeStore.getRenderableShapesSorted().filter((shape) => shape.visible !== false);
       const fillRegions = this.shapeStore.getFillRegions();
-      if (fillRegions.length && this.lastLoggedFillRegionCount !== fillRegions.length) {
-        console.log("[RENDER] fillRegions", fillRegions.length);
-        this.lastLoggedFillRegionCount = fillRegions.length;
-      }
-      if (!fillRegions.length) this.lastLoggedFillRegionCount = 0;
+      if (fillRegions?.length) console.log("[RENDER] fillRegions", fillRegions.length);
       const faces = shapes.filter((shape) => shape.type === "face");
       const lines = shapes.filter((shape) => shape.type === "line");
 
