@@ -5,6 +5,54 @@ import { GroupShape } from "../models/groupShape.js";
 import { FillRegion } from "../models/fillRegion.js";
 import { FaceShape } from "../models/faceShape.js";
 import { buildRegionsFromLines } from "../core/regionBuilder.js";
+import { isoUVToWorld } from "../core/isoGrid.js";
+
+function normalizeRect(rect) {
+  if (!rect) return null;
+  return {
+    minX: Math.min(rect.minX, rect.maxX),
+    minY: Math.min(rect.minY, rect.maxY),
+    maxX: Math.max(rect.minX, rect.maxX),
+    maxY: Math.max(rect.minY, rect.maxY),
+  };
+}
+
+function isPointInRect(point, rect) {
+  if (!point || !rect) return false;
+  return point.x >= rect.minX && point.x <= rect.maxX && point.y >= rect.minY && point.y <= rect.maxY;
+}
+
+function rectsIntersect(a, b) {
+  if (!a || !b) return false;
+  return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
+}
+
+function regionCentroid(uvCycle = []) {
+  if (!Array.isArray(uvCycle) || uvCycle.length < 3) return null;
+  const worldPoints = uvCycle.map((point) => isoUVToWorld(point.u, point.v));
+  let twiceArea = 0;
+  let cx = 0;
+  let cy = 0;
+
+  for (let i = 0; i < worldPoints.length; i += 1) {
+    const a = worldPoints[i];
+    const b = worldPoints[(i + 1) % worldPoints.length];
+    const cross = (a.x * b.y) - (b.x * a.y);
+    twiceArea += cross;
+    cx += (a.x + b.x) * cross;
+    cy += (a.y + b.y) * cross;
+  }
+
+  if (Math.abs(twiceArea) < 1e-9) {
+    const avg = worldPoints.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+    return { x: avg.x / worldPoints.length, y: avg.y / worldPoints.length };
+  }
+
+  return {
+    x: cx / (3 * twiceArea),
+    y: cy / (3 * twiceArea),
+  };
+}
 
 
 function compareShapeZOrder(a, b, indexA = 0, indexB = 0) {
@@ -259,17 +307,103 @@ export class ShapeStore {
   }
 
   getShapesIntersectingRect(rect) {
+    const normalizedRect = normalizeRect(rect);
+    if (!normalizedRect) return [];
     const hitIds = new Set();
     for (const shape of this.shapes) {
       if (shape.visible === false || shape.locked === true) continue;
       const bounds = this.getShapeBounds(shape);
       if (!bounds) continue;
-      const intersects = !(bounds.maxX < rect.minX || bounds.minX > rect.maxX || bounds.maxY < rect.minY || bounds.minY > rect.maxY);
+      const intersects = rectsIntersect(bounds, normalizedRect);
       if (!intersects) continue;
       const target = this.resolveSelectionTargetShape(shape);
       if (target) hitIds.add(target.id);
     }
     return [...hitIds].map((id) => this.getShapeById(id)).filter(Boolean);
+  }
+
+  getSelectionBoundsFromIds(selectionIds = []) {
+    const targets = this.getShapeTargetsForMove(selectionIds);
+    const bounds = targets
+      .map((shape) => this.getShapeBounds(shape))
+      .filter(Boolean);
+    if (!bounds.length) return null;
+    return {
+      minX: Math.min(...bounds.map((entry) => entry.minX)),
+      minY: Math.min(...bounds.map((entry) => entry.minY)),
+      maxX: Math.max(...bounds.map((entry) => entry.maxX)),
+      maxY: Math.max(...bounds.map((entry) => entry.maxY)),
+    };
+  }
+
+
+  getFilledRegionCountInBounds(rect) {
+    const normalizedRect = normalizeRect(rect);
+    if (!normalizedRect) return 0;
+
+    const fillsByRegionId = new Map(
+      this.shapes
+        .filter((shape) => shape.type === "fillRegion")
+        .map((shape) => [shape.regionId, shape]),
+    );
+
+    let count = 0;
+    const regions = this.getComputedRegions();
+    for (const region of regions) {
+      const fill = fillsByRegionId.get(region.id);
+      if (!fill?.uvCycle?.length) continue;
+      const centroidWorld = regionCentroid(region.uvCycle);
+      if (isPointInRect(centroidWorld, normalizedRect)) count += 1;
+    }
+    return count;
+  }
+
+  captureFilledRegionsAsFacesInBounds(rect, { zIndexBase = 0 } = {}) {
+    const normalizedRect = normalizeRect(rect);
+    if (!normalizedRect) return [];
+
+    const fillsByRegionId = new Map(
+      this.shapes
+        .filter((shape) => shape.type === "fillRegion")
+        .map((shape) => [shape.regionId, shape]),
+    );
+
+    const regions = this.getComputedRegions();
+    const capturedFaceIds = [];
+    let faceOffset = 0;
+
+    for (const region of regions) {
+      const fill = fillsByRegionId.get(region.id);
+      if (!fill?.uvCycle?.length) continue;
+      const centroidWorld = regionCentroid(region.uvCycle);
+      if (!isPointInRect(centroidWorld, normalizedRect)) continue;
+
+      const pointsWorld = region.uvCycle.map((point) => isoUVToWorld(point.u, point.v));
+      const existing = this.shapes.find((shape) => (
+        shape.type === "face"
+        && shape.sourceRegionKey === region.id
+        && Array.isArray(shape.pointsWorld)
+        && shape.pointsWorld.length === pointsWorld.length
+      ));
+
+      if (existing) {
+        capturedFaceIds.push(existing.id);
+        continue;
+      }
+
+      const face = new FaceShape({
+        pointsWorld,
+        fillColor: fill.color ?? fill.fillColor ?? "#4aa3ff",
+        fillAlpha: fill.alpha ?? fill.fillOpacity ?? 1,
+        sourceRegionKey: region.id,
+        zIndex: zIndexBase + faceOffset,
+      });
+      faceOffset += 1;
+      this.addShape(face);
+      capturedFaceIds.push(face.id);
+    }
+
+    return capturedFaceIds;
   }
 
   getShapes() {

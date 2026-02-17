@@ -2,7 +2,7 @@ import { Shape } from "./shape.js";
 import { isPointInPolygon } from "../utils/math.js";
 
 export class FaceShape extends Shape {
-  constructor({ id, pointsWorld = [], fillColor = "#4aa3ff", fillAlpha = 1, regionKey = null, ...rest }) {
+  constructor({ id, pointsWorld = [], fillColor = "#4aa3ff", fillAlpha = 1, sourceRegionKey = null, regionKey = null, ...rest }) {
     super({
       id,
       ...rest,
@@ -16,7 +16,9 @@ export class FaceShape extends Shape {
 
     this.pointsWorld = Array.isArray(pointsWorld) ? pointsWorld.map((point) => ({ ...point })) : [];
     this.fillAlpha = Number.isFinite(fillAlpha) ? Math.max(0, Math.min(1, fillAlpha)) : 1;
-    this.regionKey = typeof regionKey === "string" ? regionKey : null;
+    const normalizedRegionKey = sourceRegionKey ?? regionKey;
+    this.sourceRegionKey = typeof normalizedRegionKey === "string" ? normalizedRegionKey : null;
+    this.regionKey = this.sourceRegionKey;
   }
 
   drawFill(ctx, camera) {
@@ -80,7 +82,8 @@ export class FaceShape extends Shape {
       type: "face",
       pointsWorld: this.pointsWorld.map((point) => ({ ...point })),
       fillAlpha: this.fillAlpha,
-      regionKey: this.regionKey,
+      sourceRegionKey: this.sourceRegionKey,
+      regionKey: this.sourceRegionKey,
     };
   }
 
@@ -88,7 +91,7 @@ export class FaceShape extends Shape {
     return new FaceShape({
       ...serialized,
       fillAlpha: serialized.fillAlpha ?? serialized.fillOpacity ?? 1,
-      regionKey: serialized.regionKey ?? null,
+      sourceRegionKey: serialized.sourceRegionKey ?? serialized.regionKey ?? null,
     });
   }
 }

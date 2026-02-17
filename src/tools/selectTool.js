@@ -35,6 +35,7 @@ export class SelectTool extends BaseTool {
     this.marqueeState = null;
     this.hoverShapeId = null;
     this.context.appState.marqueeRect = null;
+    this.context.appState.selectionBoxWorld = null;
     if (this.context.canvas) this.context.canvas.style.cursor = "default";
   }
 
@@ -69,6 +70,8 @@ export class SelectTool extends BaseTool {
       };
       return;
     }
+
+    appState.selectionBoxWorld = null;
 
     const targetId = shapeStore.getSelectionTargetId(hit.id) ?? hit.id;
     const hitWasSelected = selectionSet.has(targetId);
@@ -203,6 +206,7 @@ export class SelectTool extends BaseTool {
       } else {
         appState.setSelection?.(hitIds, hitIds[hitIds.length - 1] ?? null);
       }
+      appState.selectionBoxWorld = rect;
       appState.marqueeRect = null;
       this.marqueeState = null;
     }
