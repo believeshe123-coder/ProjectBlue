@@ -103,29 +103,40 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH, { gridColor: this.appState.theme?.gridColor });
 
-    const shapes = this.shapeStore.getRenderableShapesSorted().filter((shape) => shape.visible !== false);
     const selectedIds = this.appState.selectedIds instanceof Set ? [...this.appState.selectedIds] : [];
     const selectionSet = new Set(selectedIds);
 
-    const fillRegions = this.shapeStore.getFillRegions();
-    const faces = shapes.filter((shape) => shape.type === "face");
-    const lines = shapes.filter((shape) => shape.type === "line");
+    const stabilityMode = this.appState.stabilityMode === true;
+    let computedRegions = [];
 
-    const computedRegions = this.shapeStore.getComputedRegions();
-    for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
-    for (const face of faces) drawFace(this.ctx, this.camera, face, selectionSet.has(face.id));
-    for (const line of lines) drawLine(this.ctx, this.camera, line, selectionSet.has(line.id));
+    if (stabilityMode) {
+      const lines = Object.values(this.shapeStore.nodes)
+        .filter((node) => node?.kind === "shape" && node.shapeType === "line" && node.style?.visible !== false)
+        .map((node) => this.shapeStore.toShapeView(node.id))
+        .filter(Boolean);
+      for (const line of lines) drawLine(this.ctx, this.camera, line, selectionSet.has(line.id));
+    } else {
+      const shapes = this.shapeStore.getRenderableShapesSorted().filter((shape) => shape.visible !== false);
+      const fillRegions = this.shapeStore.getFillRegions();
+      const faces = shapes.filter((shape) => shape.type === "face");
+      const lines = shapes.filter((shape) => shape.type === "line");
 
-    if (this.appState.selectedRegionKey) {
-      const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
-      drawSelectedRegionOutline(this.ctx, this.camera, selectedRegion);
+      computedRegions = this.shapeStore.getComputedRegions();
+      for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
+      for (const face of faces) drawFace(this.ctx, this.camera, face, selectionSet.has(face.id));
+      for (const line of lines) drawLine(this.ctx, this.camera, line, selectionSet.has(line.id));
+
+      if (this.appState.selectedRegionKey) {
+        const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
+        drawSelectedRegionOutline(this.ctx, this.camera, selectedRegion);
+      }
     }
 
     if (this.appState.previewShape) {
       this.appState.previewShape.draw(this.ctx, this.camera, { ...this.appState, forceMeasurements: true });
     }
 
-    if (this.appState.debugRegions === true) drawRegionDebugOverlay(this.ctx, this.camera, computedRegions);
+    if (!stabilityMode && this.appState.debugRegions === true) drawRegionDebugOverlay(this.ctx, this.camera, computedRegions);
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
       const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);

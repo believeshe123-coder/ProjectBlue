@@ -10,6 +10,8 @@ import { PolylineTool } from "./tools/polylineTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
 
+const STABILITY_MODE = true;
+
 const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
 const statusEl = document.getElementById("status");
@@ -110,6 +112,7 @@ const shapeStore = new ShapeStore();
 const historyStore = new HistoryStore();
 
 const appState = {
+  stabilityMode: STABILITY_MODE,
   activeTool: "select",
   currentMode: "ISO",
   previewShape: null,
@@ -336,6 +339,9 @@ function toggleEraseMode() {
 function setActiveTool(toolName) {
   const normalizedToolName = normalizeToolName(toolName);
   if (!tools[normalizedToolName]) return;
+  if (appState.stabilityMode && normalizedToolName === "fill") {
+    appState.notifyStatus?.("Disabled in stability mode", 1500);
+  }
   currentTool.onDeactivate();
   currentTool = tools[normalizedToolName];
   appState.activeTool = normalizedToolName;
@@ -408,6 +414,7 @@ function openSelectionPanel(screenPoint) {
   if (!selectionPanel) return;
   appState.ui.selectionOpen = true;
   appState.selectionPanelOpen = true;
+  selectionPanel.style.display = "";
   if (screenPoint) {
     selectionPanel.style.left = `${Math.max(12, screenPoint.x + 12)}px`;
     selectionPanel.style.top = `${Math.max(36, screenPoint.y + 12)}px`;
@@ -420,6 +427,7 @@ function closeSelectionPanel() {
   if (!selectionPanel) return;
   appState.ui.selectionOpen = false;
   appState.selectionPanelOpen = false;
+  selectionPanel.style.display = "none";
   renderUiVisibility();
 }
 
@@ -571,15 +579,15 @@ function updateSelectionBar() {
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selected: ${getSelectedTypeLabel()} (${appState.selectedIds.size})`;
   const isRegionSelection = appState.selectedType === "region";
   if (selectionKeepCheckbox) {
-    selectionKeepCheckbox.checked = appState.keepSelecting === true;
-    selectionKeepCheckbox.disabled = isRegionSelection;
+    selectionKeepCheckbox.checked = appState.stabilityMode ? false : appState.keepSelecting === true;
+    selectionKeepCheckbox.disabled = isRegionSelection || appState.stabilityMode;
     const keepLabel = selectionKeepCheckbox.closest("label");
     if (keepLabel) keepLabel.hidden = isRegionSelection;
   }
-  if (selectionGroupButton) selectionGroupButton.disabled = !canGroupSelection();
+  if (selectionGroupButton) selectionGroupButton.disabled = appState.stabilityMode || !canGroupSelection();
   if (selectionGroupButton) selectionGroupButton.hidden = isRegionSelection;
   if (selectionMakeFaceButton) {
-    const showMakeFace = appState.selectedType === "region" && !!appState.selectedRegionKey;
+    const showMakeFace = !appState.stabilityMode && appState.selectedType === "region" && !!appState.selectedRegionKey;
     selectionMakeFaceButton.hidden = !showMakeFace;
     selectionMakeFaceButton.disabled = !showMakeFace;
   }
@@ -599,6 +607,13 @@ function updateSelectedFlags() {
 }
 
 function setSelection(ids = [], type = null, lastId = null) {
+  if (appState.stabilityMode) {
+    const firstLineId = ids.find((id) => shapeStore.getShapeById(id)?.type === "line") ?? null;
+    ids = firstLineId ? [firstLineId] : [];
+    type = firstLineId ? "line" : null;
+    lastId = firstLineId;
+    appState.keepSelecting = false;
+  }
   if (ids.length === 0) appState.selectionBoxWorld = null;
   if (type !== "region") appState.selectedRegionKey = null;
   appState.selectedType = ids.length > 0 ? type : null;
@@ -608,6 +623,10 @@ function setSelection(ids = [], type = null, lastId = null) {
 }
 
 function addToSelection(id, type) {
+  if (appState.stabilityMode) {
+    setSelection(id ? [id] : [], type, id ?? null);
+    return;
+  }
   if (appState.selectedType && appState.selectedType !== type) {
     setSelection([id], type, id);
     return;
@@ -666,6 +685,10 @@ function applyToSelected(updater) {
 }
 
 function createGroupFromSelection() {
+  if (appState.stabilityMode) {
+    appState.notifyStatus?.("Disabled in stability mode", 1500);
+    return;
+  }
   const selectedShapes = getSelectedShapes();
   if (!canGroupSelection()) return;
   pushHistoryState();
@@ -685,6 +708,10 @@ function createGroupFromSelection() {
 }
 
 function makeObjectFromSelection() {
+  if (appState.stabilityMode) {
+    appState.notifyStatus?.("Disabled in stability mode", 1500);
+    return;
+  }
   const hasSelection = appState.selectedIds.size > 0;
   const hasSelectionBox = !!appState.selectionBoxWorld;
   if (!hasSelection && !hasSelectionBox) return;
@@ -729,6 +756,10 @@ function makeObjectFromSelection() {
 }
 
 function ungroupSelection() {
+  if (appState.stabilityMode) {
+    appState.notifyStatus?.("Disabled in stability mode", 1500);
+    return;
+  }
   if (!isSingleSelectedGroup()) return;
   const [groupId] = appState.selectedIds;
   const group = shapeStore.getNodeById(groupId);
@@ -739,6 +770,10 @@ function ungroupSelection() {
 }
 
 function clearAllGroups() {
+  if (appState.stabilityMode) {
+    appState.notifyStatus?.("Disabled in stability mode", 1500);
+    return;
+  }
   const groups = shapeStore.rootIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
   if (!groups.length) return;
   pushHistoryState();
@@ -825,6 +860,10 @@ function runContextMenuZOrder(mode) {
 }
 
 function convertSelectedRegionToFace() {
+  if (appState.stabilityMode) {
+    appState.notifyStatus?.("Disabled in stability mode", 1500);
+    return;
+  }
   const regionKey = appState.selectedRegionKey;
   if (!regionKey) return;
 
@@ -1426,9 +1465,36 @@ selectionFillColor?.addEventListener("input", (event) => {
 });
 selectionFillColor?.addEventListener("change", () => pushHistoryState());
 
+
+if (appState.stabilityMode) {
+  appState.keepSelecting = false;
+  if (saveGroupButton) {
+    saveGroupButton.disabled = true;
+    saveGroupButton.title = "Disabled in stability mode";
+  }
+  if (selectionGroupButton) {
+    selectionGroupButton.disabled = true;
+    selectionGroupButton.title = "Disabled in stability mode";
+  }
+  if (clearGroupsButton) {
+    clearGroupsButton.disabled = true;
+    clearGroupsButton.title = "Disabled in stability mode";
+  }
+  if (selectionMakeFaceButton) {
+    selectionMakeFaceButton.disabled = true;
+    selectionMakeFaceButton.title = "Disabled in stability mode";
+  }
+}
+
 saveGroupButton?.addEventListener("click", createGroupFromSelection);
 
 selectionKeepCheckbox?.addEventListener("change", (event) => {
+  if (appState.stabilityMode) {
+    event.target.checked = false;
+    appState.keepSelecting = false;
+    updateSelectionBar();
+    return;
+  }
   appState.keepSelecting = event.target.checked;
   updateSelectionBar();
 });

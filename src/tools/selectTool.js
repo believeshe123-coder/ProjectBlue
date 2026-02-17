@@ -4,7 +4,7 @@ import { findSmallestRegionContainingPoint } from "../core/regionBuilder.js";
 import { snapWorldToIso } from "../core/isoGrid.js";
 
 function isMovableShape(shape) {
-  return shape && ["line", "face"].includes(shape.type) && shape.locked !== true;
+  return shape && shape.type === "line" && shape.locked !== true;
 }
 
 function getSelectedIds(appState) {
@@ -81,9 +81,11 @@ export class SelectTool extends BaseTool {
   onMouseDown({ event, worldPoint, screenPoint }) {
     const { shapeStore, camera, appState } = this.context;
     const toleranceWorld = 8 / camera.zoom;
-    const keepSelecting = appState.keepSelecting === true;
+    const keepSelecting = appState.stabilityMode ? false : appState.keepSelecting === true;
 
-    const filledRegionHit = getFilledRegionHit(shapeStore, worldPoint);
+    if (appState.stabilityMode) appState.selectedRegionKey = null;
+
+    const filledRegionHit = appState.stabilityMode ? null : getFilledRegionHit(shapeStore, worldPoint);
     if (filledRegionHit) {
       appState.selectedRegionKey = filledRegionHit.id;
       appState.setSelection?.([filledRegionHit.id], "region", filledRegionHit.id);
@@ -91,7 +93,7 @@ export class SelectTool extends BaseTool {
       return;
     }
 
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: appState.stabilityMode });
 
     if (appState.debugSelectionDrag) {
       const hitNode = hit ? shapeStore.getNodeById(hit.id) : null;
@@ -116,7 +118,7 @@ export class SelectTool extends BaseTool {
 
     const targetId = shapeStore.getSelectionTargetId(hit.id) ?? hit.id;
     const targetShape = shapeStore.getShapeById(targetId) ?? hit;
-    const hitType = getSelectionTypeForShape(targetShape);
+    const hitType = appState.stabilityMode ? "line" : getSelectionTypeForShape(targetShape);
     const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
     const currentType = appState.selectedType ?? null;
 
@@ -173,8 +175,9 @@ export class SelectTool extends BaseTool {
         x: this.dragState.anchorOriginal.x + rawDelta.x,
         y: this.dragState.anchorOriginal.y + rawDelta.y,
       };
-      const anchorSnappedResult = snapWorldToIso(anchorMoved);
-      const anchorSnapped = anchorSnappedResult.point;
+      const anchorSnapped = appState.snapToGrid
+        ? snapWorldToIso(anchorMoved).point
+        : anchorMoved;
       const snappedDelta = {
         x: anchorSnapped.x - this.dragState.anchorOriginal.x,
         y: anchorSnapped.y - this.dragState.anchorOriginal.y,
@@ -189,8 +192,7 @@ export class SelectTool extends BaseTool {
       }
 
       for (const id of this.dragState.dragIds) {
-        if (appState.selectedType === "object") shapeStore.applyWorldDeltaToNode(id, stepDelta);
-        else shapeStore.applyWorldDeltaToNode(id, stepDelta);
+        shapeStore.applyWorldDeltaToNode(id, stepDelta, { lineOnly: appState.stabilityMode });
       }
       if (appState.debugSelectionDrag) {
         const affectedIds = getDragAffectedIds(shapeStore, appState.selectedType, this.dragState.dragIds);
@@ -211,7 +213,7 @@ export class SelectTool extends BaseTool {
       return;
     }
 
-    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
+    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: appState.stabilityMode });
     this.hoverShapeId = hover?.id ?? null;
     if (canvas) canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
   }
@@ -225,7 +227,7 @@ export class SelectTool extends BaseTool {
         maxX: Math.max(this.marqueeState.startWorld.x, worldPoint.x),
         maxY: Math.max(this.marqueeState.startWorld.y, worldPoint.y),
       };
-      const hitShapes = shapeStore.getShapesIntersectingRect(rect);
+      const hitShapes = shapeStore.getShapesIntersectingRect(rect, { lineOnly: appState.stabilityMode });
       const { type, shapes } = filterShapesBySelectionPriority(hitShapes);
       const hitIds = shapes.map((shape) => shape.id);
 

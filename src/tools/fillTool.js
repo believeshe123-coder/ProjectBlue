@@ -7,6 +7,10 @@ export class FillTool extends BaseTool {
     if (event.button !== 0) return;
 
     const { shapeStore, camera, appState } = this.context;
+    if (appState.stabilityMode) {
+      appState.notifyStatus?.("Disabled in stability mode", 1500);
+      return;
+    }
     const worldPt = camera.screenToWorld(screenPoint);
     const clickUv = worldToIsoUV(worldPt);
     const regions = shapeStore.getComputedRegions();
