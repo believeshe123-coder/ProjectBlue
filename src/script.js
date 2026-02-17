@@ -19,6 +19,7 @@ const FILL_ENABLED = STABILITY_MODE === true ? ENABLE_FILL === true : true;
 const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
 const statusEl = document.getElementById("status");
+const statusHelperEl = document.getElementById("status-helper");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
 const eraseModeToggle = document.getElementById("erase-mode-toggle");
@@ -87,8 +88,14 @@ const clearGroupsButton = document.getElementById("clear-groups-btn");
 const menuFileCloseButton = document.getElementById("menu-file-close-btn");
 const menuEditCloseButton = document.getElementById("menu-edit-close-btn");
 const menuSettingsCloseButton = document.getElementById("menu-settings-close-btn");
+const resetTipsButton = document.getElementById("reset-tips-btn");
 const selectionPanelCloseButton = document.getElementById("selection-panel-close-btn");
 const zOrderMenuCloseButton = document.getElementById("z-order-menu-close-btn");
+const onboardingOverlay = document.getElementById("onboarding-overlay");
+const onboardingStepTitle = document.getElementById("onboarding-step-title");
+const onboardingStepBody = document.getElementById("onboarding-step-body");
+const onboardingNextButton = document.getElementById("onboarding-next-btn");
+const onboardingDismissButton = document.getElementById("onboarding-dismiss-btn");
 
 
 const calmPalette = [
@@ -105,6 +112,7 @@ const STORAGE_KEYS = {
   savedThemes: "bp_savedThemes",
   activeThemeId: "bp_activeThemeId",
   autosaveProject: "bp_autosave_project",
+  walkthroughSeen: "bp_walkthrough_seen_v1",
 };
 
 const BUILTIN_THEMES = [
@@ -167,6 +175,10 @@ const appState = {
     settingsOpen: false,
     selectionOpen: false,
     arrangeOpen: false,
+  },
+  onboarding: {
+    active: false,
+    stepIndex: 0,
   },
   eraseMode: "object",
   eraserSizePx: 16,
@@ -392,6 +404,7 @@ function setActiveTool(toolName) {
     button.classList.toggle("active", button.dataset.tool === normalizedToolName);
   });
   refreshStatus();
+  refreshToolHelperText();
   closeContextMenu();
   updateSelectionBar();
 }
@@ -445,6 +458,85 @@ function getSnapStatusLabel() {
 
 function refreshScaleDisplay() {
   scaleDisplay.textContent = `1 grid = ${appState.unitPerCell} ${appState.unitName}`;
+}
+
+const TOOL_HELPER_TEXT = {
+  select: "Select: click-drag to marquee, click to select.",
+  "iso-line": "Line: click once to start, click again to finish.",
+  polyline: "Polyline: click-click to add segments, double-click to finish.",
+  measure: "Measure: click and drag to measure between points.",
+  fill: "Fill: click inside an enclosed region to fill it.",
+  erase: "Erase: click-drag over shapes to remove them.",
+};
+
+const ONBOARDING_STEPS = [
+  {
+    title: "Tool selection",
+    body: "Pick tools from the Tool Grid. Start with Select, then Line or Polyline for drawing.",
+    selector: ".tool-grid",
+  },
+  {
+    title: "Snap toggles",
+    body: "Open Settings and tune Snap to grid / Snap to midpoint for precise placement.",
+    selector: "#menuSettingsBtn",
+  },
+  {
+    title: "Scale setup",
+    body: "Open Edit and set Unit / grid plus Unit so measurements match your plan.",
+    selector: "#menuEditBtn",
+  },
+  {
+    title: "Save and load",
+    body: "Use File → Save and File → Load to export or reopen your drawing JSON.",
+    selector: "#menuFileBtn",
+  },
+];
+
+function clearOnboardingHighlights() {
+  document.querySelectorAll(".onboarding-highlight").forEach((el) => el.classList.remove("onboarding-highlight"));
+}
+
+function refreshToolHelperText() {
+  if (!statusHelperEl) return;
+  statusHelperEl.textContent = TOOL_HELPER_TEXT[getCurrentToolName()] || TOOL_HELPER_TEXT.select;
+}
+
+function dismissOnboarding({ persist = false } = {}) {
+  appState.onboarding.active = false;
+  if (persist) localStorage.setItem(STORAGE_KEYS.walkthroughSeen, "1");
+  if (onboardingOverlay) {
+    onboardingOverlay.hidden = true;
+    onboardingOverlay.style.display = "none";
+  }
+  clearOnboardingHighlights();
+}
+
+function renderOnboardingStep() {
+  if (!appState.onboarding.active || !onboardingOverlay) return;
+  const step = ONBOARDING_STEPS[appState.onboarding.stepIndex];
+  if (!step) {
+    dismissOnboarding({ persist: true });
+    return;
+  }
+
+  onboardingStepTitle.textContent = step.title;
+  onboardingStepBody.textContent = step.body;
+  onboardingNextButton.textContent = appState.onboarding.stepIndex === ONBOARDING_STEPS.length - 1 ? "Done" : "Next";
+  clearOnboardingHighlights();
+  const highlightTarget = step.selector ? document.querySelector(step.selector) : null;
+  if (highlightTarget) highlightTarget.classList.add("onboarding-highlight");
+}
+
+function startOnboarding({ force = false } = {}) {
+  const alreadySeen = localStorage.getItem(STORAGE_KEYS.walkthroughSeen) === "1";
+  if (alreadySeen && !force) return;
+  appState.onboarding.active = true;
+  appState.onboarding.stepIndex = 0;
+  if (onboardingOverlay) {
+    onboardingOverlay.hidden = false;
+    onboardingOverlay.style.display = "grid";
+  }
+  renderOnboardingStep();
 }
 
 let statusMessage = null;
@@ -996,6 +1088,7 @@ function updateControlsFromState() {
   refreshScaleDisplay();
   updateEraseControls();
   refreshStatus();
+  refreshToolHelperText();
 }
 
 function applyProjectData(project, { announce = true } = {}) {
@@ -1382,6 +1475,27 @@ menuSettingsCloseButton?.addEventListener("click", (event) => {
   hidePanel("settings");
 });
 
+
+resetTipsButton?.addEventListener("click", () => {
+  localStorage.removeItem(STORAGE_KEYS.walkthroughSeen);
+  startOnboarding({ force: true });
+  closeAllMenus();
+});
+
+onboardingNextButton?.addEventListener("click", () => {
+  if (!appState.onboarding.active) return;
+  if (appState.onboarding.stepIndex >= ONBOARDING_STEPS.length - 1) {
+    dismissOnboarding({ persist: true });
+    return;
+  }
+  appState.onboarding.stepIndex += 1;
+  renderOnboardingStep();
+});
+
+onboardingDismissButton?.addEventListener("click", () => {
+  dismissOnboarding({ persist: true });
+});
+
 selectionPanelCloseButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   hidePanel("selection");
@@ -1754,6 +1868,12 @@ setActiveTool("select");
 restoreAutosaveIfAvailable();
 renderUiVisibility();
 updateControlsFromState();
+startOnboarding();
+
+const entryAction = new URLSearchParams(window.location.search).get("start");
+if (entryAction === "open") {
+  window.setTimeout(() => projectLoadInput?.click(), 120);
+}
 
 function frame() {
   queueAutosave();

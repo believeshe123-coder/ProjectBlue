@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Blueprint Builder Editor</title>
-    <link rel="stylesheet" href="./assets/style.css" />
+    <link rel="stylesheet" href="./assets/style.css?v=2" />
   </head>
   <body>
     <div class="app">
@@ -54,7 +54,8 @@
               <div class="panel-header"><div class="menu-title">Options</div><button type="button" class="panel-close-btn" id="menu-settings-close-btn" aria-label="Close Settings menu">×</button></div>
               <button class="menu-row menu-row-button" id="measurement-mode-toggle" type="button">Measurement mode: SMART</button>
               <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
-              <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continue polyline</label>
+              <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continus line</label>
+              <button class="menu-row menu-row-button" id="reset-tips-btn" type="button">Reset tips</button>
             </div>
             <div class="menu-section">
               <div class="menu-title">Snapping</div>
@@ -105,7 +106,23 @@
 
         <div class="canvas-wrap">
           <canvas id="canvas"></canvas>
-          <div class="status" id="status">Mode: ISO | Tool: Select</div>
+          <div class="status-wrap">
+            <div class="status" id="status">Mode: ISO</div>
+            <div class="status-helper" id="status-helper">Select: click-drag to marquee, click to select.</div>
+          </div>
+
+          <div id="onboarding-overlay" class="onboarding-overlay" hidden>
+            <div class="onboarding-card">
+              <div class="onboarding-head">
+                <strong id="onboarding-step-title">Welcome</strong>
+                <button id="onboarding-dismiss-btn" class="onboarding-ghost" type="button" aria-label="Dismiss onboarding">Skip</button>
+              </div>
+              <p id="onboarding-step-body">Use this quick walkthrough to learn the editor basics.</p>
+              <div class="onboarding-actions">
+                <button id="onboarding-next-btn" class="menu-link-btn" type="button">Next</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -129,14 +146,6 @@
       <button id="z-order-back-btn" class="z-order-context-item" type="button">Send to Back</button>
     </div>
 
-
-    <div class="help-modal-backdrop" id="help-modal-backdrop" hidden>
-      <div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
-        <div class="panel-header"><div class="menu-title" id="help-modal-title">Tool Shortcuts</div><button type="button" class="panel-close-btn" id="help-modal-close-btn" aria-label="Close tool shortcut help">×</button></div>
-        <div id="help-modal-content"></div>
-      </div>
-    </div>
-
-    <script type="module" src="./src/script.js"></script>
+    <script type="module" src="./src/script.js?v=2"></script>
   </body>
 </html>
