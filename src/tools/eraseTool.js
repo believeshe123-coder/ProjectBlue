@@ -239,26 +239,15 @@ export class EraseTool extends BaseTool {
     this.context.appState.erasePreview = null;
   }
 
-  getTopmostByType(point, toleranceWorld, type) {
-    const { shapeStore } = this.context;
-    return shapeStore.getShapes()
-      .map((shape, index) => ({ shape, index }))
-      .filter(({ shape }) => shape.type === type && shape.visible !== false && shape.locked !== true)
-      .sort((a, b) => {
-        const zDiff = (a.shape.zIndex ?? 0) - (b.shape.zIndex ?? 0);
-        if (zDiff !== 0) return zDiff;
-        return a.index - b.index;
-      })
-      .reverse()
-      .find(({ shape }) => shape.containsPoint(point, toleranceWorld))?.shape ?? null;
+  getObjectEraseCandidate(worldPoint) {
+    const { shapeStore, camera } = this.context;
+    const toleranceWorld = 8 / camera.zoom;
+    return shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
   }
 
   eraseObject(worldPoint) {
-    const { shapeStore, historyStore, camera } = this.context;
-    const toleranceWorld = 8 / camera.zoom;
-    const hit = this.getTopmostByType(worldPoint, toleranceWorld, "fillRegion")
-      ?? this.getTopmostByType(worldPoint, toleranceWorld, "polygon")
-      ?? this.getTopmostByType(worldPoint, toleranceWorld, "line");
+    const { shapeStore, historyStore } = this.context;
+    const hit = this.getObjectEraseCandidate(worldPoint);
 
     if (!hit) return;
 
@@ -337,11 +326,14 @@ export class EraseTool extends BaseTool {
 
   onMouseMove({ worldPoint }) {
     const { appState, camera } = this.context;
+    const objectCandidate = appState.eraseMode === "object" ? this.getObjectEraseCandidate(worldPoint) : null;
     appState.erasePreview = {
       point: worldPoint,
       sizePx: appState.eraserSizePx,
       mode: appState.eraseMode,
-      affectedLineIds: appState.erasePreview?.affectedLineIds ?? [],
+      affectedLineIds: appState.eraseMode === "segment" ? (appState.erasePreview?.affectedLineIds ?? []) : [],
+      targetObjectId: objectCandidate?.id ?? null,
+      targetObjectType: objectCandidate?.type ?? null,
     };
 
     if (!this.isSegmentErasing || appState.eraseMode !== "segment") return;
