@@ -14,12 +14,33 @@ function snapDelta(delta, step) {
   return Math.round(delta / step) * step;
 }
 
-function getSelectionSet(appState) {
-  return appState.selectionSet instanceof Set ? appState.selectionSet : new Set();
+function getSelectedIds(appState) {
+  return appState.selectedIds instanceof Set ? [...appState.selectedIds] : [];
 }
 
-function getSelectedIds(appState) {
-  return Array.isArray(appState.selectedIds) ? appState.selectedIds : [];
+function getSelectionTypeForShape(shape) {
+  if (!shape) return null;
+  if (shape.type === "line" || shape.type === "face" || shape.type === "group") return shape.type;
+  return null;
+}
+
+function filterShapesBySelectionPriority(shapes = []) {
+  const byType = {
+    face: [],
+    line: [],
+    group: [],
+  };
+
+  for (const shape of shapes) {
+    const type = getSelectionTypeForShape(shape);
+    if (!type) continue;
+    byType[type].push(shape);
+  }
+
+  if (byType.face.length) return { type: "face", shapes: byType.face };
+  if (byType.line.length) return { type: "line", shapes: byType.line };
+  if (byType.group.length) return { type: "group", shapes: byType.group };
+  return { type: null, shapes: [] };
 }
 
 export class SelectTool extends BaseTool {
@@ -47,7 +68,6 @@ export class SelectTool extends BaseTool {
       includeLocked: false,
       allowOwnedLines,
     });
-    const selectionSet = getSelectionSet(appState);
     const keepSelecting = appState.keepSelecting === true;
     const regionSelectMode = appState.regionSelectMode === true;
 
@@ -64,10 +84,9 @@ export class SelectTool extends BaseTool {
 
     if (!hit) {
       appState.selectedRegionKey = null;
+      appState.setSelection?.([], null);
+      appState.closeContextMenu?.();
       appState.updateSelectionBar?.();
-      if (!keepSelecting) {
-        appState.setSelection?.([], null);
-      }
       this.marqueeState = {
         startWorld: { ...worldPoint },
         startScreen: { ...screenPoint },
@@ -78,25 +97,35 @@ export class SelectTool extends BaseTool {
     appState.selectionBoxWorld = null;
 
     const targetId = shapeStore.getSelectionTargetId(hit.id) ?? hit.id;
-    const hitWasSelected = selectionSet.has(targetId);
+    const targetShape = shapeStore.getShapeById(targetId) ?? hit;
+    const hitType = getSelectionTypeForShape(targetShape);
+    const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
+    const currentType = appState.selectedType ?? null;
+
     if (keepSelecting) {
-      if (hitWasSelected) appState.removeFromSelection?.(targetId);
-      else appState.addToSelection?.(targetId);
-    } else if (!hitWasSelected || selectionSet.size > 1) {
-      appState.setSelection?.([targetId], targetId);
+      if (currentType && currentType !== hitType) {
+        appState.setSelection?.([targetId], hitType, targetId);
+      } else if (hitWasSelected) {
+        appState.removeFromSelection?.(targetId);
+      } else {
+        appState.addToSelection?.(targetId, hitType);
+      }
+    } else {
+      appState.setSelection?.([targetId], hitType, targetId);
     }
 
     appState.selectedRegionKey = null;
     appState.updateSelectionBar?.();
-    const moveShape = shapeStore.getShapeById(targetId) ?? hit;
-    if (!isMovableShape(moveShape)) {
+    if (!isMovableShape(targetShape)) {
       this.dragState = null;
       return;
     }
 
     this.dragState = {
-      shapeId: moveShape.id,
+      shapeId: targetShape.id,
       startMouseWorld: { ...worldPoint },
+      startScreen: { ...screenPoint },
+      clickedShapeId: targetId,
       didDrag: false,
       historyPushed: false,
     };
@@ -195,7 +224,7 @@ export class SelectTool extends BaseTool {
     if (canvas) canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
   }
 
-  onMouseUp({ worldPoint, event }) {
+  onMouseUp({ worldPoint, screenPoint, event }) {
     const { appState, shapeStore } = this.context;
     if (this.marqueeState) {
       const allowOwnedLines = event?.altKey === true;
@@ -206,18 +235,17 @@ export class SelectTool extends BaseTool {
         maxY: Math.max(this.marqueeState.startWorld.y, worldPoint.y),
       };
       const hitShapes = shapeStore.getShapesIntersectingRect(rect, { allowOwnedLines });
-      const hitIds = hitShapes.map((shape) => shape.id);
-      if (appState.keepSelecting === true) {
-        for (const id of hitIds) {
-          if (appState.selectionSet.has(id)) appState.removeFromSelection?.(id);
-          else appState.addToSelection?.(id);
-        }
-      } else {
-        appState.setSelection?.(hitIds, hitIds[hitIds.length - 1] ?? null);
-      }
+      const { type, shapes } = filterShapesBySelectionPriority(hitShapes);
+      const hitIds = shapes.map((shape) => shape.id);
+
+      appState.setSelection?.(hitIds, type, hitIds[hitIds.length - 1] ?? null);
       appState.selectionBoxWorld = rect;
       appState.marqueeRect = null;
       this.marqueeState = null;
+    }
+
+    if (this.dragState && !this.dragState.didDrag && !this.marqueeState) {
+      appState.openContextMenuForSelection?.(screenPoint, this.dragState.clickedShapeId);
     }
 
     this.dragState = null;

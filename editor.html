@@ -116,23 +116,19 @@
     </div>
 
     <div id="selection-bar" class="selection-bar" hidden>
-      <div id="selection-bar-count" class="selection-bar-count">Selection (0)</div>
+      <div id="selection-bar-count" class="selection-bar-count">Selected: Item (0)</div>
       <label class="selection-bar-keep"><input id="selection-keep-checkbox" type="checkbox" /> Keep selecting</label>
       <div class="selection-bar-actions">
-        <button id="selection-done-btn" class="menu-link-btn" type="button">Done</button>
-        <button id="selection-clear-btn" class="menu-link-btn" type="button">Clear</button>
-        <button id="selection-delete-btn" class="menu-link-btn" type="button">Delete</button>
         <button id="selection-group-btn" class="menu-link-btn" type="button">Group</button>
-        <button id="selection-make-object-btn" class="menu-link-btn" type="button">Make Object</button>
-        <button id="selection-ungroup-btn" class="menu-link-btn" type="button">Ungroup</button>
-        <button id="selection-z-front-btn" class="menu-link-btn" type="button">Front</button>
-        <button id="selection-z-forward-btn" class="menu-link-btn" type="button">Forward</button>
-        <button id="selection-z-backward-btn" class="menu-link-btn" type="button">Backward</button>
-        <button id="selection-z-back-btn" class="menu-link-btn" type="button">Back</button>
-        <button id="region-select-toggle-btn" class="menu-link-btn" type="button">Region Select: OFF</button>
-        <button id="region-convert-face-btn" class="menu-link-btn" type="button" hidden>Convert to Face</button>
-        <button id="region-clear-selection-btn" class="menu-link-btn" type="button" hidden>Clear Region Selection</button>
       </div>
+    </div>
+
+
+    <div id="z-order-context-menu" class="z-order-context-menu" hidden>
+      <button id="z-order-front-btn" class="z-order-context-item" type="button">Bring to Front</button>
+      <button id="z-order-forward-btn" class="z-order-context-item" type="button">Bring Forward</button>
+      <button id="z-order-backward-btn" class="z-order-context-item" type="button">Send Backward</button>
+      <button id="z-order-back-btn" class="z-order-context-item" type="button">Send to Back</button>
     </div>
 
     <script type="module" src="./src/script.js"></script>

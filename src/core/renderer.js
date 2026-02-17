@@ -152,7 +152,7 @@ export class Renderer {
     }
 
     const shapes = zSorted(this.shapeStore.getRenderableShapesSorted().filter((shape) => shape.visible !== false));
-    const selectedIds = Array.isArray(this.appState.selectedIds) ? this.appState.selectedIds : [];
+    const selectedIds = this.appState.selectedIds instanceof Set ? [...this.appState.selectedIds] : [];
     const selectionSet = new Set(selectedIds);
     const measurementMode = this.appState.measurementMode ?? "smart";
     const currentlyDrawing = !!this.appState.previewShape;
