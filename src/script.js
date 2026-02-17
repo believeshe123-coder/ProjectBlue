@@ -9,9 +9,6 @@ import { MeasureTool } from "./tools/measureTool.js";
 import { PolylineTool } from "./tools/polylineTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
-import { GroupShape } from "./models/groupShape.js";
-import { FaceShape } from "./models/faceShape.js";
-import { isoUVToWorld } from "./core/isoGrid.js";
 
 const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
@@ -76,6 +73,11 @@ const menuSettingsDropdown = document.getElementById("menuSettingsDropdown");
 const menuEditButton = document.getElementById("menuEditBtn");
 const menuEditDropdown = document.getElementById("menuEditDropdown");
 const clearGroupsButton = document.getElementById("clear-groups-btn");
+const menuFileCloseButton = document.getElementById("menu-file-close-btn");
+const menuEditCloseButton = document.getElementById("menu-edit-close-btn");
+const menuSettingsCloseButton = document.getElementById("menu-settings-close-btn");
+const selectionPanelCloseButton = document.getElementById("selection-panel-close-btn");
+const zOrderMenuCloseButton = document.getElementById("z-order-menu-close-btn");
 
 
 const calmPalette = [
@@ -436,9 +438,10 @@ appState.clearBusyStatus = () => {
   refreshStatus();
 };
 
-function normalizeShapePayload(shapes = []) {
-  if (!Array.isArray(shapes)) return [];
-  return shapes.map((shape) => {
+function normalizeShapePayload(payload = []) {
+  if (payload && payload.nodes && Array.isArray(payload.rootIds)) return payload;
+  if (!Array.isArray(payload)) return [];
+  return payload.map((shape) => {
     if (!shape || typeof shape !== "object") return shape;
     const { layerId, ...rest } = shape;
     return rest;
@@ -447,7 +450,7 @@ function normalizeShapePayload(shapes = []) {
 
 function getSnapshot() {
   return {
-    shapes: shapeStore.serialize().map(({ layerId, ...shape }) => shape),
+    shapes: shapeStore.serialize(),
     selectedIds: [...appState.selectedIds],
     selectedType: appState.selectedType,
     keepSelecting: appState.keepSelecting === true,
@@ -527,27 +530,21 @@ function isShapeInteractive(shape) {
 }
 
 function canGroupSelection() {
-  if (appState.selectedType === null || appState.selectedIds.size < 2) return false;
-  for (const id of appState.selectedIds) {
-    const shape = shapeStore.getShapeById(id);
-    if (!shape) return false;
-    if (shape.groupId && appState.selectedType !== "group") return false;
-  }
-  return true;
+  return appState.selectedType !== null && appState.selectedType !== "region" && appState.selectedIds.size >= 2;
 }
 
 function isSingleSelectedGroup() {
   if (appState.selectedIds.size !== 1) return false;
   const [id] = appState.selectedIds;
-  const shape = shapeStore.getShapeById(id);
-  return shape?.type === "group";
+  const node = shapeStore.getNodeById(id);
+  return node?.kind === "object";
 }
 
 function getSelectedTypeLabel() {
   const labelByType = {
     line: "Line",
     face: "Face",
-    group: "Group",
+    object: "Object",
     region: "Region",
   };
   return labelByType[appState.selectedType] ?? "Item";
@@ -630,7 +627,9 @@ function clearSelectionState() {
 }
 
 function getSelectedShapes() {
-  return [...appState.selectedIds].map((id) => shapeStore.getShapeById(id)).filter(Boolean);
+  return [...appState.selectedIds]
+    .map((id) => shapeStore.getShapeById(id) ?? shapeStore.getNodeById(id))
+    .filter(Boolean);
 }
 
 function getSelectedMeasurableShape() {
@@ -644,7 +643,7 @@ function deleteSelection() {
   if (!selectedShapes.length) return;
   pushHistoryState();
   for (const selectedShape of selectedShapes) {
-    if (selectedShape.type === "group") {
+    if (selectedShape.type === "group" || selectedShape.kind === "object") {
       shapeStore.removeShape(selectedShape.id);
       continue;
     }
@@ -668,18 +667,8 @@ function createGroupFromSelection() {
   if (!canGroupSelection()) return;
   pushHistoryState();
   const childIds = selectedShapes.map((shape) => shape.id);
-  const group = new GroupShape({
-    strokeColor: "#ffffff",
-    strokeWidth: 1,
-    fillColor: appState.currentStyle.fillColor,
-    childIds,
-  });
-  shapeStore.addShape(group);
-  for (const shape of selectedShapes) {
-    shape.groupId = group.id;
-    shape.selected = false;
-  }
-  setSelection([group.id], "group", group.id);
+  const objectId = shapeStore.createObjectFromIds(childIds, { name: "Object" });
+  setSelection([objectId], "object", objectId);
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
 }
@@ -696,7 +685,6 @@ function makeObjectFromSelection() {
     return;
   }
 
-  const currentMaxZ = shapeStore.getShapes().reduce((max, shape) => Math.max(max, shape.zIndex ?? 0), 0);
   const intersectingLineIds = shapeStore.getShapes()
     .filter((shape) => shape.type === "line" && shape.visible !== false && shape.locked !== true)
     .filter((shape) => {
@@ -717,47 +705,33 @@ function makeObjectFromSelection() {
 
   pushHistoryState();
 
-  const faceIds = shapeStore.captureFilledRegionsAsFacesInBounds(selectionBounds, {
-    zIndexBase: currentMaxZ + 1,
-  });
+  const faceIds = shapeStore.captureFilledRegionsAsFacesInBounds(selectionBounds);
 
   const childIds = [...new Set([...intersectingLineIds, ...faceIds])];
 
-  const group = new GroupShape({
-    strokeColor: "#ffffff",
-    strokeWidth: 1,
-    fillColor: appState.currentStyle.fillColor,
-    childIds,
-  });
-  shapeStore.addShape(group);
-  for (const childId of childIds) {
-    const shape = shapeStore.getShapeById(childId);
-    if (!shape) continue;
-    shape.groupId = group.id;
-    shape.selected = false;
-  }
+  const objectId = shapeStore.createObjectFromIds(childIds, { name: "Object" });
 
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
-  setSelection([group.id], "group", group.id);
+  setSelection([objectId], "object", objectId);
   appState.notifyStatus?.("Object created", 1400);
 }
 
 function ungroupSelection() {
   if (!isSingleSelectedGroup()) return;
   const [groupId] = appState.selectedIds;
-  const group = shapeStore.getShapeById(groupId);
-  if (!group || group.type !== "group") return;
+  const group = shapeStore.getNodeById(groupId);
+  if (!group || group.kind !== "object") return;
   pushHistoryState();
   shapeStore.removeShape(group.id);
   clearSelectionState();
 }
 
 function clearAllGroups() {
-  const groups = shapeStore.getShapes().filter((shape) => shape.type === "group");
+  const groups = shapeStore.rootIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
   if (!groups.length) return;
   pushHistoryState();
-  shapeStore.clearAllGroups();
+  for (const id of groups) shapeStore.removeShape(id);
   appState.keepSelecting = false;
   clearSelectionState();
 }
@@ -916,7 +890,7 @@ function updateControlsFromState() {
 }
 
 function applyProjectData(project, { announce = true } = {}) {
-  if (!project || !Array.isArray(project.shapes)) {
+  if (!project || !project.shapes) {
     throw new Error("Unsupported project file");
   }
 
@@ -1258,6 +1232,31 @@ menuSettingsDropdown?.addEventListener("click", (event) => {
 
 menuEditDropdown?.addEventListener("click", (event) => {
   event.stopPropagation();
+});
+
+
+menuFileCloseButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setFileMenuOpen(false);
+});
+
+menuEditCloseButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setEditMenuOpen(false);
+});
+
+menuSettingsCloseButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setSettingsMenuOpen(false);
+});
+
+selectionPanelCloseButton?.addEventListener("click", () => {
+  closeSelectionPanel();
+});
+
+zOrderMenuCloseButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  closeContextMenu();
 });
 
 clearGroupsButton?.addEventListener("click", () => {

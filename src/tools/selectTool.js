@@ -1,17 +1,10 @@
 import { BaseTool } from "./baseTool.js";
-import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
+import { worldToIsoUV } from "../core/isoGrid.js";
 import { findSmallestRegionContainingPoint } from "../core/regionBuilder.js";
+import { snapWorldToIso } from "../core/isoGrid.js";
 
 function isMovableShape(shape) {
-  return shape && ["line", "polygon", "face", "group"].includes(shape.type) && shape.locked !== true;
-}
-
-function getStep(appState) {
-  return appState.snapToMidpoints ? 0.5 : 1;
-}
-
-function snapDelta(delta, step) {
-  return Math.round(delta / step) * step;
+  return shape && ["line", "face"].includes(shape.type) && shape.locked !== true;
 }
 
 function getSelectedIds(appState) {
@@ -20,26 +13,15 @@ function getSelectedIds(appState) {
 
 function getSelectionTypeForShape(shape) {
   if (!shape) return null;
-  if (shape.type === "line" || shape.type === "face" || shape.type === "group") return shape.type;
+  if (shape.type === "line" || shape.type === "face") return shape.type;
   return null;
 }
 
 function filterShapesBySelectionPriority(shapes = []) {
-  const byType = {
-    face: [],
-    line: [],
-    group: [],
-  };
-
-  for (const shape of shapes) {
-    const type = getSelectionTypeForShape(shape);
-    if (!type) continue;
-    byType[type].push(shape);
-  }
-
-  if (byType.face.length) return { type: "face", shapes: byType.face };
-  if (byType.line.length) return { type: "line", shapes: byType.line };
-  if (byType.group.length) return { type: "group", shapes: byType.group };
+  const faces = shapes.filter((shape) => shape.type === "face");
+  if (faces.length) return { type: "face", shapes: faces };
+  const lines = shapes.filter((shape) => shape.type === "line");
+  if (lines.length) return { type: "line", shapes: lines };
   return { type: null, shapes: [] };
 }
 
@@ -53,19 +35,6 @@ function getFilledRegionHit(shapeStore, worldPoint) {
   if (!filledRegionIds.size) return null;
   const filledRegions = shapeStore.getComputedRegions().filter((region) => filledRegionIds.has(region.id));
   return findSmallestRegionContainingPoint(filledRegions, clickUv);
-}
-
-function getTopmostFaceHit(shapeStore, worldPoint) {
-  const faces = shapeStore.getShapes()
-    .filter((shape) => shape.type === "face" && shape.visible !== false && shape.locked !== true)
-    .sort((a, b) => {
-      const zDiff = (b.zIndex ?? 0) - (a.zIndex ?? 0);
-      if (zDiff !== 0) return zDiff;
-      const createdDiff = (b.createdAt ?? 0) - (a.createdAt ?? 0);
-      if (createdDiff !== 0) return createdDiff;
-      return String(b.id ?? "").localeCompare(String(a.id ?? ""));
-    });
-  return faces.find((shape) => shape.containsPoint?.(worldPoint, 0.75)) ?? null;
 }
 
 export class SelectTool extends BaseTool {
@@ -85,49 +54,18 @@ export class SelectTool extends BaseTool {
     if (this.context.canvas) this.context.canvas.style.cursor = "default";
   }
 
+  getAnchorWorld(id) {
+    const shape = this.context.shapeStore.getShapeById(id);
+    if (!shape) return null;
+    if (shape.type === "line") return { ...shape.start };
+    if (shape.type === "face") return shape.pointsWorld?.[0] ? { ...shape.pointsWorld[0] } : null;
+    return null;
+  }
+
   onMouseDown({ event, worldPoint, screenPoint }) {
     const { shapeStore, camera, appState } = this.context;
-    const allowOwnedLines = event?.altKey === true;
     const toleranceWorld = 8 / camera.zoom;
     const keepSelecting = appState.keepSelecting === true;
-
-    const faceHit = getTopmostFaceHit(shapeStore, worldPoint);
-    if (faceHit) {
-      const targetId = shapeStore.getSelectionTargetId(faceHit.id) ?? faceHit.id;
-      const targetShape = shapeStore.getShapeById(targetId) ?? faceHit;
-      const hitType = getSelectionTypeForShape(targetShape);
-      const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
-      const currentType = appState.selectedType ?? null;
-
-      if (keepSelecting) {
-        if (currentType && currentType !== hitType) {
-          appState.setSelection?.([targetId], hitType, targetId);
-        } else if (hitWasSelected) {
-          appState.removeFromSelection?.(targetId);
-        } else {
-          appState.addToSelection?.(targetId, hitType);
-        }
-      } else {
-        appState.setSelection?.([targetId], hitType, targetId);
-      }
-
-      appState.selectedRegionKey = null;
-      appState.updateSelectionBar?.();
-      if (!isMovableShape(targetShape)) {
-        this.dragState = null;
-        return;
-      }
-
-      this.dragState = {
-        shapeId: targetShape.id,
-        startMouseWorld: { ...worldPoint },
-        startScreen: { ...screenPoint },
-        clickedShapeId: targetId,
-        didDrag: false,
-        historyPushed: false,
-      };
-      return;
-    }
 
     const filledRegionHit = getFilledRegionHit(shapeStore, worldPoint);
     if (filledRegionHit) {
@@ -137,19 +75,13 @@ export class SelectTool extends BaseTool {
       return;
     }
 
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, {
-      includeLocked: false,
-      allowOwnedLines,
-    });
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
 
     if (!hit) {
       appState.setSelection?.([], null);
       appState.closeContextMenu?.();
       appState.updateSelectionBar?.();
-      this.marqueeState = {
-        startWorld: { ...worldPoint },
-        startScreen: { ...screenPoint },
-      };
+      this.marqueeState = { startWorld: { ...worldPoint }, startScreen: { ...screenPoint } };
       return;
     }
 
@@ -162,68 +94,37 @@ export class SelectTool extends BaseTool {
     const currentType = appState.selectedType ?? null;
 
     if (keepSelecting) {
-      if (currentType && currentType !== hitType) {
-        appState.setSelection?.([targetId], hitType, targetId);
-      } else if (hitWasSelected) {
-        appState.removeFromSelection?.(targetId);
-      } else {
-        appState.addToSelection?.(targetId, hitType);
-      }
+      if (currentType && currentType !== hitType) appState.setSelection?.([targetId], hitType, targetId);
+      else if (hitWasSelected) appState.removeFromSelection?.(targetId);
+      else appState.addToSelection?.(targetId, hitType);
     } else {
       appState.setSelection?.([targetId], hitType, targetId);
     }
 
     appState.selectedRegionKey = null;
     appState.updateSelectionBar?.();
-    if (!isMovableShape(targetShape)) {
+    if (!isMovableShape(targetShape) && appState.selectedType !== "object") {
       this.dragState = null;
       return;
     }
 
+    const selectedIds = getSelectedIds(appState);
+    const dragIds = selectedIds.includes(targetId) ? selectedIds : [targetId];
+    const anchorId = dragIds[0];
+
     this.dragState = {
-      shapeId: targetShape.id,
       startMouseWorld: { ...worldPoint },
       startScreen: { ...screenPoint },
       clickedShapeId: targetId,
+      dragIds,
+      anchorOriginal: this.getAnchorWorld(anchorId) ?? { ...worldPoint },
       didDrag: false,
-      historyPushed: false,
+      totalAppliedDelta: { x: 0, y: 0 },
     };
   }
 
-  moveShape(shape, du, dv) {
-    if (shape.type === "line") {
-      shape.setUVPoints(
-        { u: shape.startUV.u + du, v: shape.startUV.v + dv },
-        { u: shape.endUV.u + du, v: shape.endUV.v + dv },
-      );
-      return;
-    }
-
-    if (shape.type === "polygon") {
-      shape.setUVPoints(shape.pointsUV.map((point) => ({ u: point.u + du, v: point.v + dv })));
-      return;
-    }
-
-    if (shape.type === "face") {
-      const deltaWorld = isoUVToWorld(du, dv);
-      shape.pointsWorld = shape.pointsWorld.map((point) => ({
-        x: point.x + deltaWorld.x,
-        y: point.y + deltaWorld.y,
-      }));
-      return;
-    }
-
-    if (shape.type === "group") {
-      const members = shape.childIds
-        .map((id) => this.context.shapeStore.getShapeById(id))
-        .filter(Boolean);
-      for (const member of members) this.moveShape(member, du, dv);
-    }
-  }
-
-  onMouseMove({ event, worldPoint, screenPoint }) {
+  onMouseMove({ worldPoint, screenPoint }) {
     const { canvas, shapeStore, camera, appState } = this.context;
-    const allowOwnedLines = event?.altKey === true;
     const toleranceWorld = 8 / camera.zoom;
 
     if (this.marqueeState) {
@@ -237,63 +138,54 @@ export class SelectTool extends BaseTool {
     }
 
     if (this.dragState) {
-      const shape = shapeStore.getShapeById(this.dragState.shapeId);
-      if (!shape || !isMovableShape(shape)) {
-        this.dragState = null;
-        return;
-      }
-
-      const mouseDeltaWorld = {
+      const rawDelta = {
         x: worldPoint.x - this.dragState.startMouseWorld.x,
         y: worldPoint.y - this.dragState.startMouseWorld.y,
       };
+      const anchorMoved = {
+        x: this.dragState.anchorOriginal.x + rawDelta.x,
+        y: this.dragState.anchorOriginal.y + rawDelta.y,
+      };
+      const anchorSnappedResult = snapWorldToIso(anchorMoved);
+      const anchorSnapped = anchorSnappedResult.point;
+      const snappedDelta = {
+        x: anchorSnapped.x - this.dragState.anchorOriginal.x,
+        y: anchorSnapped.y - this.dragState.anchorOriginal.y,
+      };
+      const stepDelta = {
+        x: snappedDelta.x - this.dragState.totalAppliedDelta.x,
+        y: snappedDelta.y - this.dragState.totalAppliedDelta.y,
+      };
 
-      const rawDeltaUV = worldToIsoUV(mouseDeltaWorld);
-      const step = getStep(appState);
-      const du = snapDelta(rawDeltaUV.u, step);
-      const dv = snapDelta(rawDeltaUV.v, step);
-
-      if (Math.abs(du) > Number.EPSILON || Math.abs(dv) > Number.EPSILON) {
+      if (Math.abs(stepDelta.x) > Number.EPSILON || Math.abs(stepDelta.y) > Number.EPSILON) {
         this.dragState.didDrag = true;
-        if (!this.dragState.historyPushed) {
-          this.context.pushHistoryState?.();
-          this.dragState.historyPushed = true;
-        }
       }
 
-      const selectedIds = getSelectedIds(appState);
-      const dragIds = selectedIds.includes(this.dragState.shapeId) ? selectedIds : [this.dragState.shapeId];
-      const moveTargets = shapeStore.getShapeTargetsForMove(dragIds);
-      for (const target of moveTargets) {
-        if (!isMovableShape(target)) continue;
-        this.moveShape(target, du, dv);
+      for (const id of this.dragState.dragIds) {
+        if (appState.selectedType === "object") shapeStore.applyWorldDeltaToNode(id, stepDelta);
+        else shapeStore.applyWorldDeltaToNode(id, stepDelta);
       }
-      shapeStore.invalidateDerivedData?.();
-      this.dragState.startMouseWorld = { ...worldPoint };
+      this.dragState.totalAppliedDelta = snappedDelta;
 
       if (canvas) canvas.style.cursor = "grabbing";
       return;
     }
 
-    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, {
-      includeLocked: false,
-      allowOwnedLines,
-    });
+    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
     this.hoverShapeId = hover?.id ?? null;
     if (canvas) canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
   }
 
-  onMouseUp({ worldPoint, screenPoint, event }) {
+  onMouseUp({ worldPoint, screenPoint }) {
     const { appState, shapeStore } = this.context;
     if (this.marqueeState) {
-      const allowOwnedLines = event?.altKey === true;
       const rect = {
         minX: Math.min(this.marqueeState.startWorld.x, worldPoint.x),
         minY: Math.min(this.marqueeState.startWorld.y, worldPoint.y),
         maxX: Math.max(this.marqueeState.startWorld.x, worldPoint.x),
         maxY: Math.max(this.marqueeState.startWorld.y, worldPoint.y),
       };
-      const hitShapes = shapeStore.getShapesIntersectingRect(rect, { allowOwnedLines });
+      const hitShapes = shapeStore.getShapesIntersectingRect(rect);
       const { type, shapes } = filterShapesBySelectionPriority(hitShapes);
       const hitIds = shapes.map((shape) => shape.id);
 
@@ -303,19 +195,17 @@ export class SelectTool extends BaseTool {
       this.marqueeState = null;
     }
 
+    if (this.dragState?.didDrag) this.context.pushHistoryState?.();
+
     if (this.dragState && !this.dragState.didDrag && !this.marqueeState) {
       appState.openContextMenuForSelection?.(screenPoint, this.dragState.clickedShapeId);
     }
 
     this.dragState = null;
-    if (this.context.canvas) {
-      this.context.canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
-    }
+    if (this.context.canvas) this.context.canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
   }
 
   onKeyDown(event) {
-    if (event.key === "Escape") {
-      this.context.appState.closeSelectionPanel?.();
-    }
+    if (event.key === "Escape") this.context.appState.closeSelectionPanel?.();
   }
 }
