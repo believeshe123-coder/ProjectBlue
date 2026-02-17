@@ -52,6 +52,7 @@ export class ShapeStore {
     this.cachedRegions = [];
     this.cachedRegionDebug = { totalEdges: 0, totalVertices: 0, totalRegions: 0, outerArea: 0 };
     this.cachedLinesHash = "";
+    this.lineGroups = {};
   }
 
   invalidateDerivedData() { this.cachedLinesHash = ""; }
@@ -416,6 +417,18 @@ export class ShapeStore {
       if (!this.nodes[id] || !this.nodes[parentId]) delete this.parentById[id];
     }
     this.rootIds = this.rootIds.filter((id) => this.nodes[id] && !this.parentById[id]);
+
+    for (const group of Object.values(this.lineGroups)) {
+      group.childIds = (group.childIds ?? []).filter((lineId) => this.nodes[lineId]);
+      if (group.childIds.length < 2) {
+        for (const lineId of group.childIds) {
+          const node = this.nodes[lineId];
+          if (node?.style?.groupId === group.id) node.style.groupId = null;
+        }
+        delete this.lineGroups[group.id];
+      }
+    }
+
     this.invalidateDerivedData();
     return orderedIds;
   }
@@ -588,6 +601,52 @@ export class ShapeStore {
     return { minX: Math.min(...bounds.map((b) => b.minX)), minY: Math.min(...bounds.map((b) => b.minY)), maxX: Math.max(...bounds.map((b) => b.maxX)), maxY: Math.max(...bounds.map((b) => b.maxY)) };
   }
 
+
+  createLineGroup(childIds = []) {
+    const ids = [...new Set(childIds)].filter((id) => {
+      const node = this.nodes[id];
+      return node?.kind === "shape" && node.shapeType === "line";
+    });
+    if (ids.length < 2) return null;
+    const id = makeId("group");
+    const createdAt = Date.now();
+    this.lineGroups[id] = { id, childIds: ids, createdAt };
+    for (const lineId of ids) {
+      const node = this.nodes[lineId];
+      if (node?.style) node.style.groupId = id;
+    }
+    return id;
+  }
+
+  getLineGroup(id) {
+    return this.lineGroups[id] ?? null;
+  }
+
+  hasLineGroups() {
+    return Object.keys(this.lineGroups).length > 0;
+  }
+
+  deleteLineGroup(id) {
+    const group = this.lineGroups[id];
+    if (!group) return false;
+    for (const lineId of group.childIds ?? []) {
+      const node = this.nodes[lineId];
+      if (node?.style?.groupId === id) node.style.groupId = null;
+    }
+    delete this.lineGroups[id];
+    return true;
+  }
+
+  clearAllLineGroups() {
+    for (const group of Object.values(this.lineGroups)) {
+      for (const lineId of group.childIds ?? []) {
+        const node = this.nodes[lineId];
+        if (node?.style?.groupId === group.id) node.style.groupId = null;
+      }
+    }
+    this.lineGroups = {};
+  }
+
   reorderSelectionZ(selectionIds = [], mode = "front") {
     const selected = new Set(selectionIds);
     const selectedRoots = this.rootIds.filter((id) => selected.has(id));
@@ -599,10 +658,10 @@ export class ShapeStore {
     return true;
   }
 
-  clear() { this.nodes = {}; this.parentById = {}; this.rootIds = []; this.invalidateDerivedData(); }
+  clear() { this.nodes = {}; this.parentById = {}; this.rootIds = []; this.lineGroups = {}; this.invalidateDerivedData(); }
 
   serialize() {
-    return { nodes: this.nodes, parentById: this.parentById, rootIds: this.rootIds };
+    return { nodes: this.nodes, parentById: this.parentById, rootIds: this.rootIds, lineGroups: this.lineGroups };
   }
 
   replaceFromSerialized(serialized) {
@@ -610,6 +669,7 @@ export class ShapeStore {
       this.nodes = serialized.nodes;
       this.parentById = serialized.parentById ?? {};
       this.rootIds = serialized.rootIds;
+      this.lineGroups = serialized.lineGroups ?? {};
       this.invalidateDerivedData();
       return;
     }

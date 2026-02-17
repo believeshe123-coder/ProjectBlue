@@ -52,12 +52,12 @@ const selectionPanel = document.getElementById("selection-panel");
 const selectionLineColor = document.getElementById("selection-line-color");
 const selectionStrokeWidth = document.getElementById("selection-stroke-width");
 const selectionFillColor = document.getElementById("selection-fill-color");
-const saveGroupButton = document.getElementById("save-group-btn");
 const selectionBar = document.getElementById("selection-bar");
 const selectionBarCountEl = document.getElementById("selection-bar-count");
 const selectionKeepCheckbox = document.getElementById("selection-keep-checkbox");
 const selectionGroupButton = document.getElementById("selection-group-btn");
-const selectionMakeFaceButton = document.getElementById("selection-make-face-btn");
+const selectionDoneButton = document.getElementById("selection-done-btn");
+const selectionDeleteButton = document.getElementById("selection-delete-btn");
 const zOrderMenu = document.getElementById("z-order-context-menu");
 const zOrderFrontButton = document.getElementById("z-order-front-btn");
 const zOrderForwardButton = document.getElementById("z-order-forward-btn");
@@ -134,6 +134,7 @@ const appState = {
   showGridUnits: false,
   selectedType: null,
   selectedIds: new Set(),
+  selectedGroupId: null,
   keepSelecting: false,
   selectedRegionKey: null,
   lastSelectedId: null,
@@ -473,6 +474,7 @@ function getSnapshot() {
     selectedIds: [...appState.selectedIds],
     selectedType: appState.selectedType,
     keepSelecting: appState.keepSelecting === true,
+    selectedGroupId: appState.selectedGroupId ?? null,
   };
 }
 
@@ -487,6 +489,7 @@ function applySnapshot(snapshot) {
   shapeStore.replaceFromSerialized(normalizeShapePayload(snapshot.shapes ?? []));
   appState.keepSelecting = snapshot.keepSelecting === true;
   appState.selectedType = snapshot.selectedType ?? null;
+  appState.selectedGroupId = snapshot.selectedGroupId ?? null;
 }
 
 function pushHistoryState() {
@@ -549,24 +552,7 @@ function isShapeInteractive(shape) {
 }
 
 function canGroupSelection() {
-  return appState.selectedType !== null && appState.selectedType !== "region" && appState.selectedIds.size >= 2;
-}
-
-function isSingleSelectedGroup() {
-  if (appState.selectedIds.size !== 1) return false;
-  const [id] = appState.selectedIds;
-  const node = shapeStore.getNodeById(id);
-  return node?.kind === "object";
-}
-
-function getSelectedTypeLabel() {
-  const labelByType = {
-    line: "Line",
-    face: "Face",
-    object: "Object",
-    region: "Region",
-  };
-  return labelByType[appState.selectedType] ?? "Item";
+  return appState.selectedType === "line" && appState.selectedIds.size >= 2;
 }
 
 function updateSelectionBar() {
@@ -576,21 +562,9 @@ function updateSelectionBar() {
   if (!hasSelection) closeContextMenu();
   selectionBar.hidden = false;
   selectionBar.classList.toggle("is-visible", shouldShow);
-  if (selectionBarCountEl) selectionBarCountEl.textContent = `Selected: ${getSelectedTypeLabel()} (${appState.selectedIds.size})`;
-  const isRegionSelection = appState.selectedType === "region";
-  if (selectionKeepCheckbox) {
-    selectionKeepCheckbox.checked = appState.stabilityMode ? false : appState.keepSelecting === true;
-    selectionKeepCheckbox.disabled = isRegionSelection || appState.stabilityMode;
-    const keepLabel = selectionKeepCheckbox.closest("label");
-    if (keepLabel) keepLabel.hidden = isRegionSelection;
-  }
-  if (selectionGroupButton) selectionGroupButton.disabled = appState.stabilityMode || !canGroupSelection();
-  if (selectionGroupButton) selectionGroupButton.hidden = isRegionSelection;
-  if (selectionMakeFaceButton) {
-    const showMakeFace = !appState.stabilityMode && appState.selectedType === "region" && !!appState.selectedRegionKey;
-    selectionMakeFaceButton.hidden = !showMakeFace;
-    selectionMakeFaceButton.disabled = !showMakeFace;
-  }
+  if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.size})`;
+  if (selectionKeepCheckbox) selectionKeepCheckbox.checked = appState.keepSelecting === true;
+  if (selectionGroupButton) selectionGroupButton.disabled = !canGroupSelection();
 }
 
 appState.updateSelectionBar = updateSelectionBar;
@@ -607,26 +581,15 @@ function updateSelectedFlags() {
 }
 
 function setSelection(ids = [], type = null, lastId = null) {
-  if (appState.stabilityMode) {
-    const firstLineId = ids.find((id) => shapeStore.getShapeById(id)?.type === "line") ?? null;
-    ids = firstLineId ? [firstLineId] : [];
-    type = firstLineId ? "line" : null;
-    lastId = firstLineId;
-    appState.keepSelecting = false;
-  }
   if (ids.length === 0) appState.selectionBoxWorld = null;
-  if (type !== "region") appState.selectedRegionKey = null;
   appState.selectedType = ids.length > 0 ? type : null;
   appState.selectedIds = new Set(ids);
+  appState.selectedGroupId = appState.selectedType === "group" ? (lastId ?? ids[0] ?? null) : null;
   appState.lastSelectedId = lastId;
   updateSelectedFlags();
 }
 
 function addToSelection(id, type) {
-  if (appState.stabilityMode) {
-    setSelection(id ? [id] : [], type, id ?? null);
-    return;
-  }
   if (appState.selectedType && appState.selectedType !== type) {
     setSelection([id], type, id);
     return;
@@ -649,6 +612,7 @@ function clearSelectionState() {
   appState.selectedType = null;
   appState.selectedIds = new Set();
   appState.lastSelectedId = null;
+  appState.selectedGroupId = null;
   appState.selectedRegionKey = null;
   appState.selectionBoxWorld = null;
   shapeStore.clearSelection();
@@ -669,6 +633,16 @@ function getSelectedMeasurableShape() {
 }
 
 function deleteSelection() {
+  if (appState.selectedType === "group" && appState.selectedGroupId) {
+    const group = shapeStore.getLineGroup(appState.selectedGroupId);
+    if (!group) return;
+    const childIds = group.childIds.filter((id) => shapeStore.getNodeById(id));
+    pushHistoryState();
+    shapeStore.deleteNodesInEntirety(childIds);
+    shapeStore.deleteLineGroup(group.id);
+    clearSelectionState();
+    return;
+  }
   const selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
   if (!selectedIds.length) return;
   pushHistoryState();
@@ -685,26 +659,11 @@ function applyToSelected(updater) {
 }
 
 function createGroupFromSelection() {
-  if (appState.stabilityMode) {
-    appState.notifyStatus?.("Disabled in stability mode", 1500);
-    return;
-  }
-  const selectedShapes = getSelectedShapes();
   if (!canGroupSelection()) return;
   pushHistoryState();
-  const childIds = new Set(selectedShapes.map((shape) => shape.id));
-  for (const shape of selectedShapes) {
-    if (shape.type !== "face") continue;
-    const node = shapeStore.getNodeById(shape.id);
-    const sourceLineIds = node?.meta?.sourceLineIds ?? node?.style?.sourceLineIds ?? [];
-    for (const lineId of sourceLineIds) {
-      if (shapeStore.getNodeById(lineId)) childIds.add(lineId);
-    }
-  }
-  const objectId = shapeStore.createObjectFromIds([...childIds], { name: "Object" });
-  setSelection([objectId], "object", objectId);
-  appState.keepSelecting = false;
-  appState.selectionBoxWorld = null;
+  const groupId = shapeStore.createLineGroup([...appState.selectedIds]);
+  if (!groupId) return;
+  setSelection([groupId], "group", groupId);
 }
 
 function makeObjectFromSelection() {
@@ -770,15 +729,9 @@ function ungroupSelection() {
 }
 
 function clearAllGroups() {
-  if (appState.stabilityMode) {
-    appState.notifyStatus?.("Disabled in stability mode", 1500);
-    return;
-  }
-  const groups = shapeStore.rootIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
-  if (!groups.length) return;
+  if (!shapeStore.hasLineGroups()) return;
   pushHistoryState();
-  for (const id of groups) shapeStore.removeShape(id);
-  appState.keepSelecting = false;
+  shapeStore.clearAllLineGroups();
   clearSelectionState();
 }
 
@@ -1466,35 +1419,8 @@ selectionFillColor?.addEventListener("input", (event) => {
 selectionFillColor?.addEventListener("change", () => pushHistoryState());
 
 
-if (appState.stabilityMode) {
-  appState.keepSelecting = false;
-  if (saveGroupButton) {
-    saveGroupButton.disabled = true;
-    saveGroupButton.title = "Disabled in stability mode";
-  }
-  if (selectionGroupButton) {
-    selectionGroupButton.disabled = true;
-    selectionGroupButton.title = "Disabled in stability mode";
-  }
-  if (clearGroupsButton) {
-    clearGroupsButton.disabled = true;
-    clearGroupsButton.title = "Disabled in stability mode";
-  }
-  if (selectionMakeFaceButton) {
-    selectionMakeFaceButton.disabled = true;
-    selectionMakeFaceButton.title = "Disabled in stability mode";
-  }
-}
-
-saveGroupButton?.addEventListener("click", createGroupFromSelection);
 
 selectionKeepCheckbox?.addEventListener("change", (event) => {
-  if (appState.stabilityMode) {
-    event.target.checked = false;
-    appState.keepSelecting = false;
-    updateSelectionBar();
-    return;
-  }
   appState.keepSelecting = event.target.checked;
   updateSelectionBar();
 });
@@ -1503,12 +1429,18 @@ selectionGroupButton?.addEventListener("click", () => {
   createGroupFromSelection();
   updateSelectionBar();
 });
+selectionDoneButton?.addEventListener("click", () => {
+  clearSelectionState();
+});
+selectionDeleteButton?.addEventListener("click", () => {
+  deleteSelection();
+  updateSelectionBar();
+});
 
 zOrderFrontButton?.addEventListener("click", () => runContextMenuZOrder("front"));
 zOrderForwardButton?.addEventListener("click", () => runContextMenuZOrder("forward"));
 zOrderBackwardButton?.addEventListener("click", () => runContextMenuZOrder("backward"));
 zOrderBackButton?.addEventListener("click", () => runContextMenuZOrder("back"));
-selectionMakeFaceButton?.addEventListener("click", convertSelectedRegionToFace);
 
 paletteColorButton?.addEventListener("click", () => {
   customColorPicker?.click();

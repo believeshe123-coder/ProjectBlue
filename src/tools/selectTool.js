@@ -1,6 +1,4 @@
 import { BaseTool } from "./baseTool.js";
-import { worldToIsoUV } from "../core/isoGrid.js";
-import { findSmallestRegionContainingPoint } from "../core/regionBuilder.js";
 import { snapWorldToIso } from "../core/isoGrid.js";
 
 function isMovableShape(shape) {
@@ -9,48 +7,6 @@ function isMovableShape(shape) {
 
 function getSelectedIds(appState) {
   return appState.selectedIds instanceof Set ? [...appState.selectedIds] : [];
-}
-
-function getSelectionTypeForShape(shape) {
-  if (!shape) return null;
-  if (shape.type === "line" || shape.type === "face") return shape.type;
-  return null;
-}
-
-function filterShapesBySelectionPriority(shapes = []) {
-  const faces = shapes.filter((shape) => shape.type === "face");
-  if (faces.length) return { type: "face", shapes: faces };
-  const lines = shapes.filter((shape) => shape.type === "line");
-  if (lines.length) return { type: "line", shapes: lines };
-  return { type: null, shapes: [] };
-}
-
-function getFilledRegionHit(shapeStore, worldPoint) {
-  const clickUv = worldToIsoUV(worldPoint);
-  const filledRegionIds = new Set(
-    shapeStore.getShapes()
-      .filter((shape) => shape.type === "fillRegion" && shape.visible !== false)
-      .map((shape) => shape.regionId),
-  );
-  if (!filledRegionIds.size) return null;
-  const filledRegions = shapeStore.getComputedRegions().filter((region) => filledRegionIds.has(region.id));
-  return findSmallestRegionContainingPoint(filledRegions, clickUv);
-}
-
-function getDragAffectedIds(shapeStore, selectedType, dragIds = []) {
-  if (selectedType !== "face") return [...dragIds];
-  const affected = new Set(dragIds);
-  for (const id of dragIds) {
-    const node = shapeStore.getNodeById(id);
-    if (!node || node.kind !== "shape" || node.shapeType !== "face") continue;
-    const lineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
-    for (const lineId of lineIds) {
-      if (!shapeStore.getNodeById(lineId)) continue;
-      if (shapeStore.parentById[lineId]) continue;
-      affected.add(lineId);
-    }
-  }
-  return [...affected];
 }
 
 export class SelectTool extends BaseTool {
@@ -78,75 +34,54 @@ export class SelectTool extends BaseTool {
     return null;
   }
 
-  onMouseDown({ event, worldPoint, screenPoint }) {
+  onMouseDown({ worldPoint, screenPoint }) {
     const { shapeStore, camera, appState } = this.context;
     const toleranceWorld = 8 / camera.zoom;
-    const keepSelecting = appState.stabilityMode ? false : appState.keepSelecting === true;
-
-    if (appState.stabilityMode) appState.selectedRegionKey = null;
-
-    const filledRegionHit = appState.stabilityMode ? null : getFilledRegionHit(shapeStore, worldPoint);
-    if (filledRegionHit) {
-      appState.selectedRegionKey = filledRegionHit.id;
-      appState.setSelection?.([filledRegionHit.id], "region", filledRegionHit.id);
-      appState.updateSelectionBar?.();
-      return;
-    }
-
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: appState.stabilityMode });
-
-    if (appState.debugSelectionDrag) {
-      const hitNode = hit ? shapeStore.getNodeById(hit.id) : null;
-      console.log("[HIT]", {
-        id: hit?.id ?? null,
-        type: hit?.type ?? null,
-        kind: hitNode?.kind ?? null,
-        parent: hit ? (shapeStore.parentById[hit.id] ?? null) : null,
-        sourceLineIdsLength: hitNode?.meta?.sourceLineIds?.length ?? hitNode?.style?.sourceLineIds?.length ?? 0,
-      });
-    }
+    const keepSelecting = appState.keepSelecting === true;
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: true });
 
     if (!hit) {
-      appState.setSelection?.([], null);
       appState.closeContextMenu?.();
-      appState.updateSelectionBar?.();
-      this.marqueeState = { startWorld: { ...worldPoint }, startScreen: { ...screenPoint } };
+      if (keepSelecting) {
+        this.marqueeState = { startWorld: { ...worldPoint }, startScreen: { ...screenPoint } };
+      } else {
+        appState.setSelection?.([], null);
+        appState.updateSelectionBar?.();
+      }
       return;
     }
 
     appState.selectionBoxWorld = null;
-
-    const targetId = shapeStore.getSelectionTargetId(hit.id) ?? hit.id;
-    const targetShape = shapeStore.getShapeById(targetId) ?? hit;
-    const hitType = appState.stabilityMode ? "line" : getSelectionTypeForShape(targetShape);
+    const targetId = hit.id;
     const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
-    const currentType = appState.selectedType ?? null;
 
-    if (keepSelecting) {
-      if (currentType && currentType !== hitType) appState.setSelection?.([targetId], hitType, targetId);
-      else if (hitWasSelected) appState.removeFromSelection?.(targetId);
-      else appState.addToSelection?.(targetId, hitType);
+    if (keepSelecting && appState.selectedType === "line") {
+      if (hitWasSelected) appState.removeFromSelection?.(targetId);
+      else appState.addToSelection?.(targetId, "line");
     } else {
-      appState.setSelection?.([targetId], hitType, targetId);
+      appState.setSelection?.([targetId], "line", targetId);
     }
 
-    appState.selectedRegionKey = null;
     appState.updateSelectionBar?.();
-    if (!isMovableShape(targetShape) && appState.selectedType !== "object") {
+    if (!isMovableShape(hit)) {
       this.dragState = null;
       return;
     }
 
     const selectedIds = getSelectedIds(appState);
-    const dragIds = selectedIds.includes(targetId) ? selectedIds : [targetId];
-    const anchorId = dragIds[0];
+    let dragIds = selectedIds.includes(targetId) ? selectedIds : [targetId];
+    if (appState.selectedType === "group" && appState.selectedGroupId) {
+      const group = shapeStore.getLineGroup(appState.selectedGroupId);
+      if (group) dragIds = [...group.childIds];
+    }
+    const firstLine = shapeStore.getShapeById(dragIds[0]);
 
     this.dragState = {
       startMouseWorld: { ...worldPoint },
       startScreen: { ...screenPoint },
       clickedShapeId: targetId,
       dragIds,
-      anchorOriginal: this.getAnchorWorld(anchorId) ?? { ...worldPoint },
+      anchorOriginal: firstLine?.type === "line" ? { ...firstLine.start } : (this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint }),
       didDrag: false,
       totalAppliedDelta: { x: 0, y: 0 },
     };
@@ -192,20 +127,16 @@ export class SelectTool extends BaseTool {
       }
 
       for (const id of this.dragState.dragIds) {
-        shapeStore.applyWorldDeltaToNode(id, stepDelta, { lineOnly: appState.stabilityMode });
+        shapeStore.applyWorldDeltaToNode(id, stepDelta, { lineOnly: true });
       }
       if (appState.debugSelectionDrag) {
-        const affectedIds = getDragAffectedIds(shapeStore, appState.selectedType, this.dragState.dragIds);
         console.log("[DRAG]", {
           selectedType: appState.selectedType,
           selectedIds: [...(appState.selectedIds ?? [])],
           dx: stepDelta.x,
           dy: stepDelta.y,
-          affectedIds,
+          affectedIds: this.dragState.dragIds,
         });
-        if (appState.selectedType === "face") {
-          console.log("[DRAG][FACE_BOUNDARY] movedBoundaryLines", affectedIds.length > this.dragState.dragIds.length);
-        }
       }
       this.dragState.totalAppliedDelta = snappedDelta;
 
@@ -213,7 +144,7 @@ export class SelectTool extends BaseTool {
       return;
     }
 
-    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: appState.stabilityMode });
+    const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, lineOnly: true });
     this.hoverShapeId = hover?.id ?? null;
     if (canvas) canvas.style.cursor = this.hoverShapeId ? "grab" : "default";
   }
@@ -227,11 +158,16 @@ export class SelectTool extends BaseTool {
         maxX: Math.max(this.marqueeState.startWorld.x, worldPoint.x),
         maxY: Math.max(this.marqueeState.startWorld.y, worldPoint.y),
       };
-      const hitShapes = shapeStore.getShapesIntersectingRect(rect, { lineOnly: appState.stabilityMode });
-      const { type, shapes } = filterShapesBySelectionPriority(hitShapes);
-      const hitIds = shapes.map((shape) => shape.id);
-
-      appState.setSelection?.(hitIds, type, hitIds[hitIds.length - 1] ?? null);
+      const hitShapes = shapeStore.getShapesIntersectingRect(rect, { lineOnly: true });
+      const hitIds = hitShapes.map((shape) => shape.id);
+      if (appState.keepSelecting && appState.selectedType === "line") {
+        for (const id of hitIds) {
+          if (appState.selectedIds.has(id)) appState.removeFromSelection?.(id);
+          else appState.addToSelection?.(id, "line");
+        }
+      } else {
+        appState.setSelection?.(hitIds, hitIds.length ? "line" : null, hitIds[hitIds.length - 1] ?? null);
+      }
       appState.selectionBoxWorld = rect;
       appState.marqueeRect = null;
       this.marqueeState = null;
