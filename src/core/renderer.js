@@ -105,6 +105,10 @@ export class Renderer {
 
     const selectedIds = this.appState.selectedIds instanceof Set ? [...this.appState.selectedIds] : [];
     const selectionSet = new Set(selectedIds);
+    if (this.appState.selectedType === "group" && this.appState.selectedGroupId) {
+      const group = this.shapeStore.getLineGroup?.(this.appState.selectedGroupId);
+      if (group) for (const lineId of group.childIds) selectionSet.add(lineId);
+    }
 
     const stabilityMode = this.appState.stabilityMode === true;
     let computedRegions = [];
@@ -130,6 +134,18 @@ export class Renderer {
         const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
         drawSelectedRegionOutline(this.ctx, this.camera, selectedRegion);
       }
+    }
+
+    if (this.appState.marqueeRect) {
+      const rect = this.appState.marqueeRect;
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(255, 209, 102, 0.15)";
+      this.ctx.strokeStyle = "#ffd166";
+      this.ctx.lineWidth = 1;
+      this.ctx.setLineDash([6, 4]);
+      this.ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      this.ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      this.ctx.restore();
     }
 
     if (this.appState.previewShape) {
