@@ -7,12 +7,15 @@
     <link rel="stylesheet" href="./assets/style.css" />
   </head>
   <body>
-    <header class="topbar">
-      <h1>Blueprint Builder</h1>
-      <a href="./editor.html">Open Editor</a>
-    </header>
-    <main class="canvas-shell">
-      <p>Launch the static editor using the link above.</p>
+    <main class="entry-page" aria-labelledby="entry-title">
+      <section class="entry-card">
+        <h1 id="entry-title">Blueprint Builder</h1>
+        <p>Create a fresh canvas or open an existing project.</p>
+        <div class="entry-actions">
+          <a class="entry-action" href="./editor.html?start=new">New Drawing</a>
+          <a class="entry-action" href="./editor.html?start=open">Open Drawing</a>
+        </div>
+      </section>
     </main>
   </body>
 </html>
