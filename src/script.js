@@ -23,6 +23,7 @@ const snapMidToggle = document.getElementById("snap-mid-toggle");
 const debugSnapToggle = document.getElementById("debug-snap-toggle");
 const debugPolygonsToggle = document.getElementById("debug-polygons-toggle");
 const debugRegionsToggle = document.getElementById("debug-regions-toggle");
+const debugSelectionDragToggle = document.getElementById("debug-selection-drag-toggle");
 const unitPerCellInput = document.getElementById("unit-per-cell");
 const unitNameInput = document.getElementById("unit-name");
 const scaleDisplay = document.getElementById("scale-display");
@@ -118,6 +119,7 @@ const appState = {
   debugSnap: false,
   debugPolygons: false,
   debugRegions: false,
+  debugSelectionDrag: false,
   debugPolygonStrokeColor: "#ff3cf7",
   flashPolygonDebugOutlines: false,
   debugFillWorkflow: false,
@@ -135,6 +137,13 @@ const appState = {
   marqueeRect: null,
   selectionBoxWorld: null,
   selectionPanelOpen: false,
+  ui: {
+    fileOpen: false,
+    editOpen: false,
+    settingsOpen: false,
+    selectionOpen: false,
+    arrangeOpen: false,
+  },
   eraseMode: "object",
   eraserSizePx: 16,
   erasePreview: null,
@@ -397,19 +406,21 @@ appState.closeContextMenu = closeContextMenu;
 
 function openSelectionPanel(screenPoint) {
   if (!selectionPanel) return;
-  selectionPanel.hidden = false;
+  appState.ui.selectionOpen = true;
   appState.selectionPanelOpen = true;
   if (screenPoint) {
     selectionPanel.style.left = `${Math.max(12, screenPoint.x + 12)}px`;
     selectionPanel.style.top = `${Math.max(36, screenPoint.y + 12)}px`;
     selectionPanel.style.right = "auto";
   }
+  renderUiVisibility();
 }
 
 function closeSelectionPanel() {
   if (!selectionPanel) return;
-  selectionPanel.hidden = true;
+  appState.ui.selectionOpen = false;
   appState.selectionPanelOpen = false;
+  renderUiVisibility();
 }
 
 appState.openSelectionPanel = openSelectionPanel;
@@ -639,20 +650,12 @@ function getSelectedMeasurableShape() {
 }
 
 function deleteSelection() {
-  const selectedShapes = getSelectedShapes();
-  if (!selectedShapes.length) return;
+  const selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
+  if (!selectedIds.length) return;
   pushHistoryState();
-  for (const selectedShape of selectedShapes) {
-    if (selectedShape.type === "group" || selectedShape.kind === "object") {
-      shapeStore.removeShape(selectedShape.id);
-      continue;
-    }
-    if (selectedShape.type === "polygon" && appState.deleteSourceLinesOnPolygonDelete && Array.isArray(selectedShape.sourceLineIds)) {
-      for (const lineId of selectedShape.sourceLineIds) shapeStore.removeShape(lineId);
-    }
-    shapeStore.removeShape(selectedShape.id);
-  }
+  shapeStore.deleteNodesInEntirety(selectedIds);
   clearSelectionState();
+  closeSelectionPanel();
 }
 
 
@@ -666,8 +669,16 @@ function createGroupFromSelection() {
   const selectedShapes = getSelectedShapes();
   if (!canGroupSelection()) return;
   pushHistoryState();
-  const childIds = selectedShapes.map((shape) => shape.id);
-  const objectId = shapeStore.createObjectFromIds(childIds, { name: "Object" });
+  const childIds = new Set(selectedShapes.map((shape) => shape.id));
+  for (const shape of selectedShapes) {
+    if (shape.type !== "face") continue;
+    const node = shapeStore.getNodeById(shape.id);
+    const sourceLineIds = node?.meta?.sourceLineIds ?? node?.style?.sourceLineIds ?? [];
+    for (const lineId of sourceLineIds) {
+      if (shapeStore.getNodeById(lineId)) childIds.add(lineId);
+    }
+  }
+  const objectId = shapeStore.createObjectFromIds([...childIds], { name: "Object" });
   setSelection([objectId], "object", objectId);
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
@@ -737,6 +748,7 @@ function clearAllGroups() {
 }
 
 function closeContextMenu() {
+  appState.ui.arrangeOpen = false;
   appState.contextMenu = {
     open: false,
     x: 0,
@@ -744,7 +756,7 @@ function closeContextMenu() {
     targetType: null,
     targetIds: [],
   };
-  if (zOrderMenu) zOrderMenu.hidden = true;
+  renderUiVisibility();
 }
 
 function clampMenuPosition(x, y) {
@@ -770,7 +782,7 @@ function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
     return;
   }
 
-  zOrderMenu.hidden = false;
+  appState.ui.arrangeOpen = true;
   const { x, y } = clampMenuPosition(screenPoint?.x ?? 0, screenPoint?.y ?? 0);
   zOrderMenu.style.left = `${x}px`;
   zOrderMenu.style.top = `${y}px`;
@@ -782,6 +794,7 @@ function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
     targetType: appState.selectedType,
     targetIds: [...appState.selectedIds],
   };
+  renderUiVisibility();
 }
 
 function reorderSelectionZ(mode, idsOverride = null) {
@@ -836,19 +849,16 @@ function convertSelectedRegionToFace() {
     return;
   }
 
-  const maxZ = shapeStore.getShapes().reduce((max, shape) => Math.max(max, shape.zIndex ?? 0), 0);
-  const face = new FaceShape({
-    pointsWorld: region.uvCycle.map((point) => isoUVToWorld(point.u, point.v)),
-    fillColor: sourceFill.color ?? sourceFill.fillColor ?? "#4aa3ff",
-    fillAlpha: sourceFill.alpha ?? sourceFill.fillOpacity ?? 1,
-    zIndex: maxZ + 1,
-    sourceRegionKey: regionKey,
-  });
-
   pushHistoryState();
-  shapeStore.addShape(face);
-  shapeStore.markRegionBoundaryLinesOwnedByFace(region.uvCycle, face.id);
-  setSelection([face.id], "face", face.id);
+  const faceId = shapeStore.createFaceFromRegion(region, {
+    color: sourceFill.color,
+    alpha: sourceFill.alpha,
+    fillColor: sourceFill.fillColor,
+    fillOpacity: sourceFill.fillOpacity,
+  });
+  if (!faceId) return;
+  shapeStore.removeShape(sourceFill.id);
+  setSelection([faceId], "face", faceId);
   appState.selectedRegionKey = null;
   appState.notifyStatus?.("Converted to Face", 1600);
 }
@@ -1023,21 +1033,38 @@ function restoreAutosaveIfAvailable() {
 }
 
 function setSettingsMenuOpen(open) {
-  if (!menuSettingsDropdown || !menuSettingsButton) return;
-  menuSettingsDropdown.dataset.open = open ? "true" : "false";
-  menuSettingsButton.setAttribute("aria-expanded", open ? "true" : "false");
+  appState.ui.settingsOpen = open === true;
+  renderUiVisibility();
 }
 
 function setEditMenuOpen(open) {
-  if (!menuEditDropdown || !menuEditButton) return;
-  menuEditDropdown.dataset.open = open ? "true" : "false";
-  menuEditButton.setAttribute("aria-expanded", open ? "true" : "false");
+  appState.ui.editOpen = open === true;
+  renderUiVisibility();
 }
 
 function setFileMenuOpen(open) {
-  if (!menuFileDropdown || !menuFileButton) return;
-  menuFileDropdown.dataset.open = open ? "true" : "false";
-  menuFileButton.setAttribute("aria-expanded", open ? "true" : "false");
+  appState.ui.fileOpen = open === true;
+  renderUiVisibility();
+}
+
+function renderUiVisibility() {
+  if (menuSettingsDropdown && menuSettingsButton) {
+    menuSettingsDropdown.dataset.open = appState.ui.settingsOpen ? "true" : "false";
+    menuSettingsDropdown.hidden = !appState.ui.settingsOpen;
+    menuSettingsButton.setAttribute("aria-expanded", appState.ui.settingsOpen ? "true" : "false");
+  }
+  if (menuEditDropdown && menuEditButton) {
+    menuEditDropdown.dataset.open = appState.ui.editOpen ? "true" : "false";
+    menuEditDropdown.hidden = !appState.ui.editOpen;
+    menuEditButton.setAttribute("aria-expanded", appState.ui.editOpen ? "true" : "false");
+  }
+  if (menuFileDropdown && menuFileButton) {
+    menuFileDropdown.dataset.open = appState.ui.fileOpen ? "true" : "false";
+    menuFileDropdown.hidden = !appState.ui.fileOpen;
+    menuFileButton.setAttribute("aria-expanded", appState.ui.fileOpen ? "true" : "false");
+  }
+  if (selectionPanel) selectionPanel.hidden = !appState.ui.selectionOpen;
+  if (zOrderMenu) zOrderMenu.hidden = !appState.ui.arrangeOpen;
 }
 
 function closeAllMenus() {
@@ -1184,7 +1211,7 @@ menuFileButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   setSettingsMenuOpen(false);
   setEditMenuOpen(false);
-  setFileMenuOpen(menuFileDropdown?.dataset.open !== "true");
+  setFileMenuOpen(!appState.ui.fileOpen);
 });
 
 menuFileDropdown?.addEventListener("click", (event) => {
@@ -1216,14 +1243,14 @@ menuSettingsButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   setEditMenuOpen(false);
   setFileMenuOpen(false);
-  setSettingsMenuOpen(menuSettingsDropdown?.dataset.open !== "true");
+  setSettingsMenuOpen(!appState.ui.settingsOpen);
 });
 
 menuEditButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   setSettingsMenuOpen(false);
   setFileMenuOpen(false);
-  setEditMenuOpen(menuEditDropdown?.dataset.open !== "true");
+  setEditMenuOpen(!appState.ui.editOpen);
 });
 
 menuSettingsDropdown?.addEventListener("click", (event) => {
@@ -1250,7 +1277,8 @@ menuSettingsCloseButton?.addEventListener("click", (event) => {
   setSettingsMenuOpen(false);
 });
 
-selectionPanelCloseButton?.addEventListener("click", () => {
+selectionPanelCloseButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
   closeSelectionPanel();
 });
 
@@ -1265,6 +1293,7 @@ clearGroupsButton?.addEventListener("click", () => {
 });
 
 document.addEventListener("click", () => {
+  if (!appState.ui.fileOpen && !appState.ui.editOpen && !appState.ui.settingsOpen) return;
   closeAllMenus();
 });
 
@@ -1304,6 +1333,11 @@ debugPolygonsToggle?.addEventListener("change", (event) => {
 debugRegionsToggle?.addEventListener("change", (event) => {
   appState.debugRegions = event.target.checked;
   localStorage.setItem("debugRegions", appState.debugRegions ? "1" : "0");
+});
+
+debugSelectionDragToggle?.addEventListener("change", (event) => {
+  appState.debugSelectionDrag = event.target.checked;
+  localStorage.setItem("debugSelectionDrag", appState.debugSelectionDrag ? "1" : "0");
 });
 
 continuePolylineToggle.addEventListener("change", (event) => {
@@ -1582,11 +1616,14 @@ appState.debugPolygons = localStorage.getItem("debugPolygons") === "1";
 if (debugPolygonsToggle) debugPolygonsToggle.checked = appState.debugPolygons;
 appState.debugRegions = localStorage.getItem("debugRegions") === "1";
 if (debugRegionsToggle) debugRegionsToggle.checked = appState.debugRegions;
+appState.debugSelectionDrag = localStorage.getItem("debugSelectionDrag") === "1";
+if (debugSelectionDragToggle) debugSelectionDragToggle.checked = appState.debugSelectionDrag;
 showGridUnitsToggle.checked = appState.showGridUnits;
 updateMeasurementModeControl();
 updateEraseControls();
 setActiveTool("select");
 restoreAutosaveIfAvailable();
+renderUiVisibility();
 updateControlsFromState();
 
 function frame() {

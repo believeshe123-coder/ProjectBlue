@@ -88,6 +88,7 @@ export class Renderer {
     this.appState = appState;
     this.getCanvasMetrics = getCanvasMetrics;
     this.ensureCanvasSize = ensureCanvasSize;
+    this.renderFrameId = 0;
   }
 
   renderFrame() {
@@ -95,9 +96,11 @@ export class Renderer {
     this.appState.shapeStore = this.shapeStore;
 
     const { canvasCssW, canvasCssH, currentDpr } = this.getCanvasMetrics();
+    this.renderFrameId += 1;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
     this.ctx.globalAlpha = 1;
-    this.ctx.clearRect(0, 0, canvasCssW, canvasCssH);
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH, { gridColor: this.appState.theme?.gridColor });
 
     const shapes = this.shapeStore.getRenderableShapesSorted().filter((shape) => shape.visible !== false);
@@ -141,5 +144,12 @@ export class Renderer {
       }
       this.ctx.restore();
     }
+
+    this.ctx.save();
+    this.ctx.fillStyle = "rgba(255,255,255,0.7)";
+    this.ctx.font = "11px monospace";
+    this.ctx.textAlign = "right";
+    this.ctx.fillText(`frame:${this.renderFrameId}`, canvasCssW - 8, canvasCssH - 8);
+    this.ctx.restore();
   }
 }
