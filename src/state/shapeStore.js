@@ -240,37 +240,23 @@ export class ShapeStore {
     return group?.type === "group" ? group : shape;
   }
 
-  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false, allowOwnedLines = false } = {}) {
-    const faces = this.shapes
-      .map((shape, index) => ({ shape, index }))
-      .filter(({ shape }) => {
-        if (shape.type !== "face") return false;
-        if (!includeLocked && shape.locked === true) return false;
-        return shape.visible !== false;
-      })
-      .sort((a, b) => compareShapeZOrder(a.shape, b.shape, a.index, b.index))
-      .reverse();
-
-    for (const { shape } of faces) {
-      if (!this.shapeContainsPoint(shape, point, toleranceWorld)) continue;
-      if (shape.groupId) {
-        const group = this.getShapeById(shape.groupId);
-        if (group?.type === "group") return group;
-      }
-      return shape;
-    }
-
+  getTopmostHitShape(point, toleranceWorld = 6, { includeLocked = false } = {}) {
+    const typePriority = { face: 3, line: 2, group: 1 };
     const sorted = this.shapes
       .map((shape, index) => ({ shape, index }))
       .filter(({ shape }) => {
         if (!includeLocked && shape.locked === true) return false;
         return shape.visible !== false;
       })
-      .sort((a, b) => compareShapeZOrder(a.shape, b.shape, a.index, b.index))
-      .reverse();
+      .sort((a, b) => {
+        const zDiff = (b.shape?.zIndex ?? 0) - (a.shape?.zIndex ?? 0);
+        if (zDiff !== 0) return zDiff;
+        const typeDiff = (typePriority[b.shape?.type] ?? 0) - (typePriority[a.shape?.type] ?? 0);
+        if (typeDiff !== 0) return typeDiff;
+        return compareShapeZOrder(b.shape, a.shape, b.index, a.index);
+      });
 
     for (const { shape } of sorted) {
-      if (!allowOwnedLines && shape.type === "line" && shape.isOwnedByFace?.()) continue;
       if (!this.shapeContainsPoint(shape, point, toleranceWorld)) continue;
       if (shape.type === "group") return shape;
       if (shape.groupId) {
@@ -342,7 +328,6 @@ export class ShapeStore {
     const hitIds = new Set();
     for (const shape of this.shapes) {
       if (shape.visible === false || shape.locked === true) continue;
-      if (!allowOwnedLines && shape.type === "line" && shape.isOwnedByFace?.()) continue;
       const bounds = this.getShapeBounds(shape);
       if (!bounds) continue;
       const intersects = rectsIntersect(bounds, normalizedRect);

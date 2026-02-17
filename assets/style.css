@@ -471,6 +471,16 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.14);
   z-index: 2500;
   color: #e2e8f0;
+  transform: translateY(calc(100% + 8px));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.selection-bar.is-visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .selection-bar-count {
@@ -497,4 +507,32 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.z-order-context-menu {
+  position: fixed;
+  min-width: 160px;
+  background: rgba(20, 20, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  z-index: 2600;
+}
+
+.z-order-context-item {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 12px;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.z-order-context-item:hover {
+  background: rgba(255, 255, 255, 0.12);
 }

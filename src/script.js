@@ -56,19 +56,15 @@ const saveGroupButton = document.getElementById("save-group-btn");
 const selectionBar = document.getElementById("selection-bar");
 const selectionBarCountEl = document.getElementById("selection-bar-count");
 const selectionKeepCheckbox = document.getElementById("selection-keep-checkbox");
-const selectionDoneButton = document.getElementById("selection-done-btn");
-const selectionClearButton = document.getElementById("selection-clear-btn");
-const selectionDeleteButton = document.getElementById("selection-delete-btn");
 const selectionGroupButton = document.getElementById("selection-group-btn");
-const selectionUngroupButton = document.getElementById("selection-ungroup-btn");
-const selectionZFrontButton = document.getElementById("selection-z-front-btn");
-const selectionZForwardButton = document.getElementById("selection-z-forward-btn");
-const selectionZBackwardButton = document.getElementById("selection-z-backward-btn");
-const selectionZBackButton = document.getElementById("selection-z-back-btn");
+const zOrderMenu = document.getElementById("z-order-context-menu");
+const zOrderFrontButton = document.getElementById("z-order-front-btn");
+const zOrderForwardButton = document.getElementById("z-order-forward-btn");
+const zOrderBackwardButton = document.getElementById("z-order-backward-btn");
+const zOrderBackButton = document.getElementById("z-order-back-btn");
 const regionSelectToggleButton = document.getElementById("region-select-toggle-btn");
 const regionConvertFaceButton = document.getElementById("region-convert-face-btn");
 const regionClearSelectionButton = document.getElementById("region-clear-selection-btn");
-const makeObjectButton = document.getElementById("selection-make-object-btn");
 
 const menuFileButton = document.getElementById("menuFileBtn");
 const menuFileDropdown = document.getElementById("menuFileDropdown");
@@ -131,8 +127,8 @@ const appState = {
   measurementMode: "smart",
   continuePolyline: true,
   showGridUnits: false,
-  selectionSet: new Set(),
-  selectedIds: [],
+  selectedType: null,
+  selectedIds: new Set(),
   keepSelecting: false,
   regionSelectMode: false,
   selectedRegionKey: null,
@@ -146,6 +142,13 @@ const appState = {
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
   activeThemeId: "builtin:light",
+  contextMenu: {
+    open: false,
+    x: 0,
+    y: 0,
+    targetType: null,
+    targetIds: [],
+  },
   currentStyle: {
     strokeColor: "#ffffff",
     strokeOpacity: 1,
@@ -338,6 +341,7 @@ function setActiveTool(toolName) {
     button.classList.toggle("active", button.dataset.tool === normalizedToolName);
   });
   refreshStatus();
+  closeContextMenu();
   updateSelectionBar();
 }
 
@@ -389,6 +393,8 @@ appState.setSelection = setSelection;
 appState.addToSelection = addToSelection;
 appState.removeFromSelection = removeFromSelection;
 appState.clearSelection = clearSelectionState;
+appState.openContextMenuForSelection = openContextMenuForSelection;
+appState.closeContextMenu = closeContextMenu;
 
 function openSelectionPanel(screenPoint) {
   if (!selectionPanel) return;
@@ -446,6 +452,7 @@ function getSnapshot() {
   return {
     shapes: shapeStore.serialize().map(({ layerId, ...shape }) => shape),
     selectedIds: [...appState.selectedIds],
+    selectedType: appState.selectedType,
     keepSelecting: appState.keepSelecting === true,
   };
 }
@@ -460,6 +467,7 @@ function applySnapshot(snapshot) {
 
   shapeStore.replaceFromSerialized(normalizeShapePayload(snapshot.shapes ?? []));
   appState.keepSelecting = snapshot.keepSelecting === true;
+  appState.selectedType = snapshot.selectedType ?? null;
 }
 
 function pushHistoryState() {
@@ -524,37 +532,41 @@ function isShapeInteractive(shape) {
 }
 
 function canGroupSelection() {
-  if (appState.selectedIds.length < 2) return false;
+  if (appState.selectedType === null || appState.selectedIds.size < 2) return false;
   for (const id of appState.selectedIds) {
     const shape = shapeStore.getShapeById(id);
-    if (!shape || shape.type === "group" || shape.groupId) return false;
+    if (!shape) return false;
+    if (shape.groupId && appState.selectedType !== "group") return false;
   }
   return true;
 }
 
 function isSingleSelectedGroup() {
-  if (appState.selectedIds.length !== 1) return false;
-  const shape = shapeStore.getShapeById(appState.selectedIds[0]);
+  if (appState.selectedIds.size !== 1) return false;
+  const [id] = appState.selectedIds;
+  const shape = shapeStore.getShapeById(id);
   return shape?.type === "group";
+}
+
+function getSelectedTypeLabel() {
+  const labelByType = {
+    line: "Line",
+    face: "Face",
+    group: "Group",
+  };
+  return labelByType[appState.selectedType] ?? "Item";
 }
 
 function updateSelectionBar() {
   if (!selectionBar) return;
-  const shouldShow = getCurrentToolName() === "select"
-    && (appState.selectedIds.length > 0 || appState.selectionBoxWorld || appState.selectedRegionKey || appState.regionSelectMode === true);
-  selectionBar.hidden = !shouldShow;
-  if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.length})`;
+  const hasSelection = appState.selectedType !== null && appState.selectedIds.size > 0;
+  const shouldShow = getCurrentToolName() === "select" && hasSelection;
+  if (!hasSelection) closeContextMenu();
+  selectionBar.hidden = false;
+  selectionBar.classList.toggle("is-visible", shouldShow);
+  if (selectionBarCountEl) selectionBarCountEl.textContent = `Selected: ${getSelectedTypeLabel()} (${appState.selectedIds.size})`;
   if (selectionKeepCheckbox) selectionKeepCheckbox.checked = appState.keepSelecting === true;
   if (selectionGroupButton) selectionGroupButton.disabled = !canGroupSelection();
-  if (selectionUngroupButton) selectionUngroupButton.hidden = !isSingleSelectedGroup();
-  if (selectionUngroupButton) selectionUngroupButton.disabled = !isSingleSelectedGroup();
-  const hasSelection = appState.selectedIds.length > 0;
-  const hasSelectionBox = !!appState.selectionBoxWorld;
-  if (selectionZFrontButton) selectionZFrontButton.disabled = !hasSelection;
-  if (selectionZForwardButton) selectionZForwardButton.disabled = !hasSelection;
-  if (selectionZBackwardButton) selectionZBackwardButton.disabled = !hasSelection;
-  if (selectionZBackButton) selectionZBackButton.disabled = !hasSelection;
-  if (makeObjectButton) makeObjectButton.disabled = !(hasSelection || hasSelectionBox);
   if (regionSelectToggleButton) {
     regionSelectToggleButton.textContent = `Region Select: ${appState.regionSelectMode ? "ON" : "OFF"}`;
   }
@@ -572,7 +584,7 @@ function updateSelectionBar() {
 appState.updateSelectionBar = updateSelectionBar;
 
 function updateSelectedFlags() {
-  const ids = appState.selectionSet;
+  const ids = appState.selectedIds;
   for (const shape of shapeStore.getShapes()) {
     shape.selected = ids.has(shape.id);
   }
@@ -582,45 +594,50 @@ function updateSelectedFlags() {
   updateSelectionBar();
 }
 
-function setSelection(ids = [], lastId = null) {
+function setSelection(ids = [], type = null, lastId = null) {
   if (ids.length === 0) appState.selectionBoxWorld = null;
-  appState.selectedIds = [...ids];
-  appState.selectionSet = new Set(ids);
+  appState.selectedType = ids.length > 0 ? type : null;
+  appState.selectedIds = new Set(ids);
   appState.lastSelectedId = lastId;
   updateSelectedFlags();
 }
 
-function addToSelection(id) {
+function addToSelection(id, type) {
+  if (appState.selectedType && appState.selectedType !== type) {
+    setSelection([id], type, id);
+    return;
+  }
   appState.selectionBoxWorld = null;
-  if (!appState.selectionSet.has(id)) appState.selectedIds.push(id);
-  appState.selectionSet.add(id);
+  appState.selectedType = type;
+  appState.selectedIds.add(id);
   appState.lastSelectedId = id;
   updateSelectedFlags();
 }
 
 function removeFromSelection(id) {
-  appState.selectedIds = appState.selectedIds.filter((selectedId) => selectedId !== id);
-  appState.selectionSet.delete(id);
+  appState.selectedIds.delete(id);
   if (appState.lastSelectedId === id) appState.lastSelectedId = null;
+  if (appState.selectedIds.size === 0) appState.selectedType = null;
   updateSelectedFlags();
 }
 
 function clearSelectionState() {
-  appState.selectedIds = [];
-  appState.selectionSet = new Set();
+  appState.selectedType = null;
+  appState.selectedIds = new Set();
   appState.lastSelectedId = null;
   appState.selectedRegionKey = null;
   appState.selectionBoxWorld = null;
   shapeStore.clearSelection();
+  closeContextMenu();
   updateSelectedFlags();
 }
 
 function getSelectedShapes() {
-  return appState.selectedIds.map((id) => shapeStore.getShapeById(id)).filter(Boolean);
+  return [...appState.selectedIds].map((id) => shapeStore.getShapeById(id)).filter(Boolean);
 }
 
 function getSelectedMeasurableShape() {
-  if (appState.selectionSet.size !== 1) return null;
+  if (appState.selectedIds.size !== 1) return null;
   const shape = shapeStore.getShapeById(appState.lastSelectedId) || getSelectedShapes()[0] || null;
   return (shape && (shape.type === "line" || shape.type === "polygon")) ? shape : null;
 }
@@ -665,18 +682,18 @@ function createGroupFromSelection() {
     shape.groupId = group.id;
     shape.selected = false;
   }
-  setSelection([group.id], group.id);
+  setSelection([group.id], "group", group.id);
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
 }
 
 function makeObjectFromSelection() {
-  const hasSelection = appState.selectedIds.length > 0;
+  const hasSelection = appState.selectedIds.size > 0;
   const hasSelectionBox = !!appState.selectionBoxWorld;
   if (!hasSelection && !hasSelectionBox) return;
 
   const selectionBounds = appState.selectionBoxWorld
-    ?? shapeStore.getSelectionBoundsFromIds(appState.selectedIds);
+    ?? shapeStore.getSelectionBoundsFromIds([...appState.selectedIds]);
   if (!selectionBounds) {
     appState.notifyStatus?.("No selection bounds", 1200);
     return;
@@ -725,13 +742,14 @@ function makeObjectFromSelection() {
 
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
-  setSelection([group.id], group.id);
+  setSelection([group.id], "group", group.id);
   appState.notifyStatus?.("Object created", 1400);
 }
 
 function ungroupSelection() {
   if (!isSingleSelectedGroup()) return;
-  const group = shapeStore.getShapeById(appState.selectedIds[0]);
+  const [groupId] = appState.selectedIds;
+  const group = shapeStore.getShapeById(groupId);
   if (!group || group.type !== "group") return;
   pushHistoryState();
   shapeStore.removeShape(group.id);
@@ -747,11 +765,60 @@ function clearAllGroups() {
   clearSelectionState();
 }
 
-function reorderSelectionZ(mode) {
-  if (!appState.selectedIds.length) return;
+function closeContextMenu() {
+  appState.contextMenu = {
+    open: false,
+    x: 0,
+    y: 0,
+    targetType: null,
+    targetIds: [],
+  };
+  if (zOrderMenu) zOrderMenu.hidden = true;
+}
+
+function clampMenuPosition(x, y) {
+  if (!zOrderMenu) return { x, y };
+  const padding = 8;
+  const rect = zOrderMenu.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width - padding;
+  const maxY = window.innerHeight - rect.height - padding;
+  return {
+    x: Math.max(padding, Math.min(x, maxX)),
+    y: Math.max(padding, Math.min(y, maxY)),
+  };
+}
+
+function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
+  if (!zOrderMenu || appState.selectedType === null || appState.selectedIds.size === 0) {
+    closeContextMenu();
+    return;
+  }
+
+  if (clickedShapeId && !appState.selectedIds.has(clickedShapeId)) {
+    closeContextMenu();
+    return;
+  }
+
+  zOrderMenu.hidden = false;
+  const { x, y } = clampMenuPosition(screenPoint?.x ?? 0, screenPoint?.y ?? 0);
+  zOrderMenu.style.left = `${x}px`;
+  zOrderMenu.style.top = `${y}px`;
+
+  appState.contextMenu = {
+    open: true,
+    x,
+    y,
+    targetType: appState.selectedType,
+    targetIds: [...appState.selectedIds],
+  };
+}
+
+function reorderSelectionZ(mode, idsOverride = null) {
+  const targetIds = idsOverride ? [...idsOverride] : [...appState.selectedIds];
+  if (!targetIds.length) return false;
   const before = getSnapshot();
-  const didChange = shapeStore.reorderSelectionZ(appState.selectedIds, mode);
-  if (!didChange) return;
+  const didChange = shapeStore.reorderSelectionZ(targetIds, mode);
+  if (!didChange) return false;
   historyStore.pushState(before);
   const statusByMode = {
     front: "Brought to front",
@@ -760,6 +827,17 @@ function reorderSelectionZ(mode) {
     back: "Sent to back",
   };
   appState.notifyStatus?.(statusByMode[mode] ?? "Reordered");
+  return true;
+}
+
+function runContextMenuZOrder(mode) {
+  const ids = appState.contextMenu?.targetIds ?? [];
+  if (!ids.length) {
+    closeContextMenu();
+    return;
+  }
+  reorderSelectionZ(mode, ids);
+  closeContextMenu();
 }
 
 function toggleRegionSelectMode() {
@@ -781,7 +859,7 @@ function convertSelectedRegionToFace() {
 
   const existingFace = shapeStore.getShapes().find((shape) => shape.type === "face" && shape.regionKey === regionKey);
   if (existingFace) {
-    setSelection([existingFace.id], existingFace.id);
+    setSelection([existingFace.id], "face", existingFace.id);
     appState.selectedRegionKey = null;
     appState.notifyStatus?.("Face already exists", 1500);
     return;
@@ -811,7 +889,7 @@ function convertSelectedRegionToFace() {
   pushHistoryState();
   shapeStore.addShape(face);
   shapeStore.markRegionBoundaryLinesOwnedByFace(region.uvCycle, face.id);
-  setSelection([face.id], face.id);
+  setSelection([face.id], "face", face.id);
   appState.selectedRegionKey = null;
   appState.notifyStatus?.("Converted to Face", 1600);
 }
@@ -1207,6 +1285,15 @@ document.addEventListener("click", () => {
   closeAllMenus();
 });
 
+document.addEventListener("pointerdown", (event) => {
+  if (!appState.contextMenu.open) return;
+  if (zOrderMenu?.contains(event.target)) return;
+  closeContextMenu();
+});
+
+zOrderMenu?.addEventListener("pointerdown", (event) => {
+  event.stopPropagation();
+});
 
 undoButton.addEventListener("click", undo);
 redoButton.addEventListener("click", redo);
@@ -1329,40 +1416,15 @@ selectionKeepCheckbox?.addEventListener("change", (event) => {
   updateSelectionBar();
 });
 
-selectionDoneButton?.addEventListener("click", () => {
-  appState.keepSelecting = false;
-  updateSelectionBar();
-});
-
-selectionClearButton?.addEventListener("click", () => {
-  appState.keepSelecting = false;
-  clearSelectionState();
-});
-
-selectionDeleteButton?.addEventListener("click", () => {
-  deleteSelection();
-  appState.keepSelecting = false;
-  updateSelectionBar();
-});
-
 selectionGroupButton?.addEventListener("click", () => {
   createGroupFromSelection();
   updateSelectionBar();
 });
-makeObjectButton?.addEventListener("click", () => {
-  makeObjectFromSelection();
-  updateSelectionBar();
-});
 
-selectionUngroupButton?.addEventListener("click", () => {
-  ungroupSelection();
-  updateSelectionBar();
-});
-
-selectionZFrontButton?.addEventListener("click", () => reorderSelectionZ("front"));
-selectionZForwardButton?.addEventListener("click", () => reorderSelectionZ("forward"));
-selectionZBackwardButton?.addEventListener("click", () => reorderSelectionZ("backward"));
-selectionZBackButton?.addEventListener("click", () => reorderSelectionZ("back"));
+zOrderFrontButton?.addEventListener("click", () => runContextMenuZOrder("front"));
+zOrderForwardButton?.addEventListener("click", () => runContextMenuZOrder("forward"));
+zOrderBackwardButton?.addEventListener("click", () => runContextMenuZOrder("backward"));
+zOrderBackButton?.addEventListener("click", () => runContextMenuZOrder("back"));
 regionSelectToggleButton?.addEventListener("click", toggleRegionSelectMode);
 regionConvertFaceButton?.addEventListener("click", convertSelectedRegionToFace);
 regionClearSelectionButton?.addEventListener("click", clearRegionSelection);
@@ -1413,6 +1475,7 @@ function isTypingInInput(event) {
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeAllMenus();
+    closeContextMenu();
     closeSelectionPanel();
     appState.keepSelecting = false;
     appState.selectedRegionKey = null;
