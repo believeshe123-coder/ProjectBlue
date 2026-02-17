@@ -207,13 +207,15 @@ export class ShapeStore {
     for (const id of Object.keys(this.nodes)) this.setNodeSelected(id, false);
   }
 
-  getTopmostHitShape(point, toleranceWorld = 6) {
+  getTopmostHitShape(point, toleranceWorld = 6, options = {}) {
     const drawList = this.getDrawList();
+    const lineOnly = options?.lineOnly === true;
     for (let i = drawList.length - 1; i >= 0; i -= 1) {
       const id = drawList[i];
       const node = this.nodes[id];
       if (!node || node.kind !== "shape") continue;
       if (node.style?.visible === false || node.style?.locked === true) continue;
+      if (lineOnly && node.shapeType !== "line") continue;
       const worldTx = this.getWorldTransform(id);
       const localPt = pointToLocal(point, worldTx);
       if (node.shapeType === "face") {
@@ -241,10 +243,12 @@ export class ShapeStore {
     return null;
   }
 
-  getShapesIntersectingRect(rect) {
+  getShapesIntersectingRect(rect, options = {}) {
     const normalized = normalizeRect(rect);
     if (!normalized) return [];
+    const lineOnly = options?.lineOnly === true;
     return this.getShapes().filter((shape) => {
+      if (lineOnly && shape.type !== "line") return false;
       if (shape.visible === false || shape.locked === true) return false;
       const bounds = this.getShapeBounds(shape);
       return rectsIntersect(bounds, normalized);
@@ -255,15 +259,17 @@ export class ShapeStore {
     return ids.map((id) => this.toShapeView(id)).filter(Boolean);
   }
 
-  applyWorldDeltaToNode(id, delta) {
+  applyWorldDeltaToNode(id, delta, options = {}) {
     const node = this.nodes[id];
     if (!node) return;
     if (node.kind === "object") {
+      if (options?.lineOnly === true) return;
       node.transform.x += delta.x;
       node.transform.y += delta.y;
       return;
     }
     if (node.kind === "shape" && node.shapeType === "face") {
+      if (options?.lineOnly === true) return;
       const sourceLineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
       for (const lineId of sourceLineIds) {
         const lineNode = this.nodes[lineId];
