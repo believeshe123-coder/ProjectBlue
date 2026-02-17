@@ -10,7 +10,9 @@ import { PolylineTool } from "./tools/polylineTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
 
-const STABILITY_MODE = true;
+const DISABLE_SCENE_GRAPH = true;
+const ENABLE_GROUPING = true;
+const ENABLE_FILL = true;
 
 const canvas = document.getElementById("canvas");
 const canvasWrap = document.querySelector(".canvas-wrap");
@@ -55,7 +57,7 @@ const selectionFillColor = document.getElementById("selection-fill-color");
 const selectionBar = document.getElementById("selection-bar");
 const selectionBarCountEl = document.getElementById("selection-bar-count");
 const selectionKeepCheckbox = document.getElementById("selection-keep-checkbox");
-const selectionGroupButton = document.getElementById("selection-group-btn");
+const selectionGroupButton = document.getElementById("btnGroup");
 const selectionDoneButton = document.getElementById("selection-done-btn");
 const selectionDeleteButton = document.getElementById("selection-delete-btn");
 const zOrderMenu = document.getElementById("z-order-context-menu");
@@ -112,7 +114,9 @@ const shapeStore = new ShapeStore();
 const historyStore = new HistoryStore();
 
 const appState = {
-  stabilityMode: STABILITY_MODE,
+  disableSceneGraph: DISABLE_SCENE_GRAPH,
+  enableGrouping: ENABLE_GROUPING,
+  enableFill: ENABLE_FILL,
   activeTool: "select",
   currentMode: "ISO",
   previewShape: null,
@@ -340,8 +344,9 @@ function toggleEraseMode() {
 function setActiveTool(toolName) {
   const normalizedToolName = normalizeToolName(toolName);
   if (!tools[normalizedToolName]) return;
-  if (appState.stabilityMode && normalizedToolName === "fill") {
-    appState.notifyStatus?.("Disabled in stability mode", 1500);
+  if (!appState.enableFill && normalizedToolName === "fill") {
+    appState.notifyStatus?.("Fill is disabled", 1500);
+    return;
   }
   currentTool.onDeactivate();
   currentTool = tools[normalizedToolName];
@@ -552,7 +557,7 @@ function isShapeInteractive(shape) {
 }
 
 function canGroupSelection() {
-  return appState.selectedType === "line" && appState.selectedIds.size >= 2;
+  return appState.enableGrouping && appState.selectedType === "line" && appState.selectedIds.size >= 2;
 }
 
 function updateSelectionBar() {
@@ -659,16 +664,24 @@ function applyToSelected(updater) {
 }
 
 function createGroupFromSelection() {
-  if (!canGroupSelection()) return;
+  if (!appState.enableGrouping) return;
+  if (appState.selectedType !== "line" || appState.selectedIds.size < 2) return;
+  const selectedLineIds = [...appState.selectedIds];
   pushHistoryState();
-  const groupId = shapeStore.createLineGroup([...appState.selectedIds]);
+  const groupId = shapeStore.createLineGroup(selectedLineIds);
   if (!groupId) return;
-  setSelection([groupId], "group", groupId);
+  appState.selectedType = "group";
+  appState.selectedGroupId = groupId;
+  appState.lastSelectedId = groupId;
+  appState.selectedIds = new Set(selectedLineIds);
+  updateSelectedFlags();
+  appState.notifyStatus?.(`Grouped ${selectedLineIds.length} lines`, 1200);
+  console.log(`[GROUP] Grouped ${selectedLineIds.length} lines -> ${groupId}`);
 }
 
 function makeObjectFromSelection() {
-  if (appState.stabilityMode) {
-    appState.notifyStatus?.("Disabled in stability mode", 1500);
+  if (appState.disableSceneGraph) {
+    appState.notifyStatus?.("Disabled while scene graph is off", 1500);
     return;
   }
   const hasSelection = appState.selectedIds.size > 0;
@@ -715,8 +728,8 @@ function makeObjectFromSelection() {
 }
 
 function ungroupSelection() {
-  if (appState.stabilityMode) {
-    appState.notifyStatus?.("Disabled in stability mode", 1500);
+  if (appState.disableSceneGraph) {
+    appState.notifyStatus?.("Disabled while scene graph is off", 1500);
     return;
   }
   if (!isSingleSelectedGroup()) return;
@@ -813,8 +826,8 @@ function runContextMenuZOrder(mode) {
 }
 
 function convertSelectedRegionToFace() {
-  if (appState.stabilityMode) {
-    appState.notifyStatus?.("Disabled in stability mode", 1500);
+  if (appState.disableSceneGraph) {
+    appState.notifyStatus?.("Disabled while scene graph is off", 1500);
     return;
   }
   const regionKey = appState.selectedRegionKey;

@@ -110,15 +110,25 @@ export class Renderer {
       if (group) for (const lineId of group.childIds) selectionSet.add(lineId);
     }
 
-    const stabilityMode = this.appState.stabilityMode === true;
+    const disableSceneGraph = this.appState.disableSceneGraph === true;
     let computedRegions = [];
 
-    if (stabilityMode) {
+    if (disableSceneGraph) {
       const lines = Object.values(this.shapeStore.nodes)
         .filter((node) => node?.kind === "shape" && node.shapeType === "line" && node.style?.visible !== false)
         .map((node) => this.shapeStore.toShapeView(node.id))
         .filter(Boolean);
+      const fillRegions = this.shapeStore.getFillRegions();
+      computedRegions = this.shapeStore.getComputedRegions();
+      if (this.appState.enableFill) {
+        for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
+      }
       for (const line of lines) drawLine(this.ctx, this.camera, line, selectionSet.has(line.id));
+
+      if (this.appState.selectedRegionKey) {
+        const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
+        drawSelectedRegionOutline(this.ctx, this.camera, selectedRegion);
+      }
     } else {
       const shapes = this.shapeStore.getRenderableShapesSorted().filter((shape) => shape.visible !== false);
       const fillRegions = this.shapeStore.getFillRegions();
@@ -152,7 +162,7 @@ export class Renderer {
       this.appState.previewShape.draw(this.ctx, this.camera, { ...this.appState, forceMeasurements: true });
     }
 
-    if (!stabilityMode && this.appState.debugRegions === true) drawRegionDebugOverlay(this.ctx, this.camera, computedRegions);
+    if (!disableSceneGraph && this.appState.debugRegions === true) drawRegionDebugOverlay(this.ctx, this.camera, computedRegions);
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
       const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);
