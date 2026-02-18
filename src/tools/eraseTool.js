@@ -225,7 +225,6 @@ export class EraseTool extends BaseTool {
     super(context);
     this.isSegmentErasing = false;
     this.strokePoints = [];
-    this.historyPushed = false;
   }
 
   onActivate() {
@@ -235,7 +234,6 @@ export class EraseTool extends BaseTool {
   onDeactivate() {
     this.isSegmentErasing = false;
     this.strokePoints = [];
-    this.historyPushed = false;
     this.context.appState.erasePreview = null;
   }
 
@@ -271,8 +269,8 @@ export class EraseTool extends BaseTool {
   }
 
   applySegmentErase() {
-    const { appState, shapeStore } = this.context;
-    if (this.strokePoints.length < 2) return;
+    const { appState, shapeStore, historyStore } = this.context;
+    if (this.strokePoints.length < 2) return false;
 
     const worldRadius = appState.eraserSizePx / this.context.camera.zoom;
     const updates = [];
@@ -284,7 +282,9 @@ export class EraseTool extends BaseTool {
       updates.push({ lineId: shape.id, segments });
     }
 
-    if (updates.length === 0) return;
+    if (updates.length === 0) return false;
+
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
 
     const lineIdsToReplace = new Set(updates.map((item) => item.lineId));
     shapeStore.shapes = shapeStore.getShapes().filter((shape) => !lineIdsToReplace.has(shape.id));
@@ -293,19 +293,20 @@ export class EraseTool extends BaseTool {
         shapeStore.addShape(segment);
       }
     }
+
+    return true;
   }
 
   onKeyDown(event) {
     if (event.key === "Escape") {
       this.isSegmentErasing = false;
       this.strokePoints = [];
-      this.historyPushed = false;
       this.context.appState.erasePreview = null;
     }
   }
 
   onMouseDown({ worldPoint }) {
-    const { appState, historyStore, shapeStore } = this.context;
+    const { appState } = this.context;
 
     if (appState.eraseMode === "object") {
       this.eraseObject(worldPoint);
@@ -314,8 +315,6 @@ export class EraseTool extends BaseTool {
 
     this.isSegmentErasing = true;
     this.strokePoints = [worldPoint];
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
-    this.historyPushed = true;
     appState.erasePreview = {
       point: worldPoint,
       sizePx: appState.eraserSizePx,
@@ -354,7 +353,6 @@ export class EraseTool extends BaseTool {
 
     this.isSegmentErasing = false;
     this.strokePoints = [];
-    this.historyPushed = false;
     appState.erasePreview = null;
   }
 }

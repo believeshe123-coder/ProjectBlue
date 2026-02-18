@@ -633,6 +633,44 @@ function getSnapshot() {
   };
 }
 
+function isSnapshotEmpty(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return true;
+  const shapes = Array.isArray(snapshot.shapes)
+    ? snapshot.shapes
+    : (snapshot.shapes?.rootIds ?? []);
+  return shapes.length === 0;
+}
+
+let hasHistoryBaseline = false;
+const HISTORY_DEBUG_ENABLED = false;
+
+function debugHistoryTransition(action, beforeUndoLen, beforeRedoLen) {
+  if (!HISTORY_DEBUG_ENABLED) return;
+  console.debug(
+    `[HISTORY:${action}] undo ${beforeUndoLen} -> ${historyStore.undoStack.length}, redo ${beforeRedoLen} -> ${historyStore.redoStack.length}`,
+  );
+}
+
+function resetHistoryState() {
+  historyStore.undoStack = [];
+  historyStore.redoStack = [];
+  hasHistoryBaseline = false;
+}
+
+function ensureHistoryBaseline({ allowEmpty = false } = {}) {
+  if (hasHistoryBaseline) return false;
+  const baseline = getSnapshot();
+  if (!allowEmpty && isSnapshotEmpty(baseline)) return false;
+  historyStore.pushState(baseline);
+  hasHistoryBaseline = true;
+  return true;
+}
+
+function initializeHistoryAfterHydration({ allowEmpty = false } = {}) {
+  resetHistoryState();
+  ensureHistoryBaseline({ allowEmpty });
+}
+
 function applySnapshot(snapshot) {
   if (!snapshot) return;
 
@@ -648,11 +686,20 @@ function applySnapshot(snapshot) {
 }
 
 function pushHistoryState() {
-  historyStore.pushState(getSnapshot());
+  const snapshot = getSnapshot();
+  ensureHistoryBaseline({ allowEmpty: true });
+  const serialized = JSON.stringify(snapshot);
+  if (historyStore.undoStack[historyStore.undoStack.length - 1] === serialized) {
+    return;
+  }
+  historyStore.pushState(snapshot);
 }
 
 function undo() {
+  const beforeUndoLen = historyStore.undoStack.length;
+  const beforeRedoLen = historyStore.redoStack.length;
   const previous = historyStore.undo(getSnapshot());
+  debugHistoryTransition("undo", beforeUndoLen, beforeRedoLen);
   if (!previous) return;
   applySnapshot(previous);
   appState.previewShape = null;
@@ -661,7 +708,10 @@ function undo() {
 }
 
 function redo() {
+  const beforeUndoLen = historyStore.undoStack.length;
+  const beforeRedoLen = historyStore.redoStack.length;
   const next = historyStore.redo(getSnapshot());
+  debugHistoryTransition("redo", beforeUndoLen, beforeRedoLen);
   if (!next) return;
   applySnapshot(next);
   appState.previewShape = null;
@@ -693,8 +743,7 @@ function resetProject() {
   shapeStore.clear();
   camera.resetView();
   setActiveTool("select");
-  historyStore.undoStack = [];
-  historyStore.redoStack = [];
+  initializeHistoryAfterHydration({ allowEmpty: true });
   appState.previewShape = null;
   appState.snapIndicator = null;
   clearSelectionState();
@@ -1123,8 +1172,7 @@ function applyProjectData(project, { announce = true } = {}) {
 
   shapeStore.replaceFromSerialized(normalizeShapePayload(project.shapes));
 
-  historyStore.undoStack = [];
-  historyStore.redoStack = [];
+  initializeHistoryAfterHydration({ allowEmpty: false });
   appState.previewShape = null;
   appState.selectedRegionKey = null;
   clearSelectionState();
@@ -1866,6 +1914,7 @@ renderToolButtons();
 renderHelpModal();
 setActiveTool("select");
 restoreAutosaveIfAvailable();
+initializeHistoryAfterHydration({ allowEmpty: false });
 renderUiVisibility();
 updateControlsFromState();
 startOnboarding();
