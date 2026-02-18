@@ -250,6 +250,7 @@ export class EraseTool extends BaseTool {
     const hit = this.getObjectEraseCandidate(worldPoint);
 
     if (!hit) return;
+    if (!(["line", "face", "polygon", "fillRegion"].includes(hit.type))) return;
 
     this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
     shapeStore.removeShape(hit.id);
@@ -288,8 +289,10 @@ export class EraseTool extends BaseTool {
 
     this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
 
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+
     const lineIdsToReplace = new Set(updates.map((item) => item.lineId));
-    shapeStore.shapes = shapeStore.getShapes().filter((shape) => !lineIdsToReplace.has(shape.id));
+    for (const lineId of lineIdsToReplace) shapeStore.removeShape(lineId);
     for (const update of updates) {
       for (const segment of update.segments) {
         shapeStore.addShape(segment);
@@ -325,6 +328,8 @@ export class EraseTool extends BaseTool {
       sizePx: appState.eraserSizePx,
       mode: "hybrid",
       affectedLineIds: [],
+      targetObjectId: objectCandidate?.id ?? null,
+      targetObjectType: objectCandidate?.type ?? null,
     };
   }
 
