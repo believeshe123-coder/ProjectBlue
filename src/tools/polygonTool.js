@@ -23,7 +23,8 @@ export class PolygonTool extends BaseTool {
       return;
     }
 
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+    if (this.context.pushHistoryState) this.context.pushHistoryState();
+    else historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(
       new Polygon({
         points: this.points,

@@ -37,7 +37,8 @@ export class IsoLineTool extends BaseTool {
       end: snapped.pt,
     });
 
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+    if (this.context.pushHistoryState) this.context.pushHistoryState();
+    else historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(line);
     this.startPoint = null;
     appState.previewShape = null;

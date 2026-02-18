@@ -252,7 +252,8 @@ export class EraseTool extends BaseTool {
     if (!hit) return;
     if (!(["line", "face", "polygon", "fillRegion"].includes(hit.type))) return;
 
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+    if (this.context.pushHistoryState) this.context.pushHistoryState();
+    else historyStore.pushState(shapeStore.serialize());
     shapeStore.removeShape(hit.id);
   }
 
@@ -272,7 +273,7 @@ export class EraseTool extends BaseTool {
   }
 
   applySegmentErase() {
-    const { appState, shapeStore, historyStore } = this.context;
+    const { appState, shapeStore } = this.context;
     if (this.strokePoints.length < 2) return false;
 
     const worldRadius = appState.eraserSizePx / this.context.camera.zoom;
@@ -286,10 +287,6 @@ export class EraseTool extends BaseTool {
     }
 
     if (updates.length === 0) return false;
-
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
-
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
 
     const lineIdsToReplace = new Set(updates.map((item) => item.lineId));
     for (const lineId of lineIdsToReplace) shapeStore.removeShape(lineId);
@@ -313,6 +310,7 @@ export class EraseTool extends BaseTool {
 
   onMouseDown({ worldPoint }) {
     const { appState } = this.context;
+    const objectCandidate = this.getObjectEraseCandidate(worldPoint);
 
     if (appState.eraseMode === "object") {
       this.eraseObject(worldPoint);
@@ -367,7 +365,8 @@ export class EraseTool extends BaseTool {
     const { appState, historyStore, shapeStore } = this.context;
 
     if (this.didDragErase && this.isSegmentErasing && this.strokePoints.length >= 2) {
-      this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+      if (this.context.pushHistoryState) this.context.pushHistoryState();
+      else historyStore.pushState(shapeStore.serialize());
       this.applySegmentErase();
     } else if (this.isPointerDown) {
       this.eraseObject(worldPoint);

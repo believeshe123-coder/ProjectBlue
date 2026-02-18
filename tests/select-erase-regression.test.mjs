@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { ShapeStore } from '../src/state/shapeStore.js';
 import { SelectTool } from '../src/tools/selectTool.js';
 import { EraseTool } from '../src/tools/eraseTool.js';
+import { LineTool } from '../src/tools/lineTool.js';
 import { Line } from '../src/models/line.js';
 import { FaceShape } from '../src/models/faceShape.js';
 import { Polygon } from '../src/models/polygon.js';
@@ -121,4 +122,65 @@ test('click erase removes topmost non-line renderables', () => {
 
   assert.equal(shapeStore.getShapeById('polygon-top'), null);
   assert.notEqual(shapeStore.getShapeById('line-bottom'), null);
+});
+
+
+test('segment erase records one history state per drag action', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } });
+  shapeStore.addShape(line);
+
+  let historyPushes = 0;
+  const eraseTool = new EraseTool({
+    shapeStore,
+    appState: { eraseMode: 'hybrid', eraserSizePx: 12, erasePreview: null },
+    camera: { zoom: 1 },
+    pushHistoryState() { historyPushes += 1; },
+    historyStore: { pushState() {} },
+  });
+
+  eraseTool.onMouseDown({ worldPoint: { x: 8, y: 0 } });
+  eraseTool.onMouseMove({ worldPoint: { x: 12, y: 0 } });
+  eraseTool.onMouseUp({ worldPoint: { x: 12, y: 0 } });
+
+  assert.equal(historyPushes, 1);
+});
+
+
+test('line tool prefers shared history hook and avoids fallback double-push', () => {
+  const shapeStore = new ShapeStore();
+  let sharedPushes = 0;
+  let fallbackPushes = 0;
+
+  const lineTool = new LineTool({
+    shapeStore,
+    appState: {
+      snapToGrid: false,
+      snapToMidpoints: false,
+      currentStyle: {
+        strokeColor: '#000000',
+        fillColor: 'transparent',
+        strokeWidth: 2,
+        opacity: 1,
+        strokeOpacity: 1,
+        fillOpacity: 0,
+        fillEnabled: false,
+      },
+      previewShape: null,
+      snapIndicator: null,
+      snapDebugStatus: 'SNAP: OFF',
+    },
+    camera: {
+      zoom: 1,
+      screenToWorld: ({ x, y }) => ({ x, y }),
+    },
+    pushHistoryState() { sharedPushes += 1; },
+    historyStore: { pushState() { fallbackPushes += 1; } },
+  });
+
+  lineTool.onMouseDown({ screenPoint: { x: 0, y: 0 } });
+  lineTool.onMouseDown({ screenPoint: { x: 10, y: 0 } });
+
+  assert.equal(sharedPushes, 1);
+  assert.equal(fallbackPushes, 0);
 });
