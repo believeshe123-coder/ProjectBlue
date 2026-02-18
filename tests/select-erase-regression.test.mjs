@@ -122,3 +122,25 @@ test('click erase removes topmost non-line renderables', () => {
   assert.equal(shapeStore.getShapeById('polygon-top'), null);
   assert.notEqual(shapeStore.getShapeById('line-bottom'), null);
 });
+
+
+test('segment erase records one history state per drag action', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } });
+  shapeStore.addShape(line);
+
+  let historyPushes = 0;
+  const eraseTool = new EraseTool({
+    shapeStore,
+    appState: { eraseMode: 'hybrid', eraserSizePx: 12, erasePreview: null },
+    camera: { zoom: 1 },
+    pushHistoryState() { historyPushes += 1; },
+    historyStore: { pushState() {} },
+  });
+
+  eraseTool.onMouseDown({ worldPoint: { x: 8, y: 0 } });
+  eraseTool.onMouseMove({ worldPoint: { x: 12, y: 0 } });
+  eraseTool.onMouseUp({ worldPoint: { x: 12, y: 0 } });
+
+  assert.equal(historyPushes, 1);
+});

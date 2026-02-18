@@ -272,7 +272,7 @@ export class EraseTool extends BaseTool {
   }
 
   applySegmentErase() {
-    const { appState, shapeStore, historyStore } = this.context;
+    const { appState, shapeStore } = this.context;
     if (this.strokePoints.length < 2) return false;
 
     const worldRadius = appState.eraserSizePx / this.context.camera.zoom;
@@ -286,10 +286,6 @@ export class EraseTool extends BaseTool {
     }
 
     if (updates.length === 0) return false;
-
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
-
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
 
     const lineIdsToReplace = new Set(updates.map((item) => item.lineId));
     for (const lineId of lineIdsToReplace) shapeStore.removeShape(lineId);
@@ -313,6 +309,7 @@ export class EraseTool extends BaseTool {
 
   onMouseDown({ worldPoint }) {
     const { appState } = this.context;
+    const objectCandidate = this.getObjectEraseCandidate(worldPoint);
 
     if (appState.eraseMode === "object") {
       this.eraseObject(worldPoint);
