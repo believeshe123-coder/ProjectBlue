@@ -223,6 +223,7 @@ function buildLineSegmentsAfterErase(line, strokePoints, radius) {
 export class EraseTool extends BaseTool {
   constructor(context) {
     super(context);
+    this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
   }
@@ -232,6 +233,7 @@ export class EraseTool extends BaseTool {
   }
 
   onDeactivate() {
+    this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
     this.context.appState.erasePreview = null;
@@ -299,6 +301,7 @@ export class EraseTool extends BaseTool {
 
   onKeyDown(event) {
     if (event.key === "Escape") {
+      this.isPointerDown = false;
       this.isSegmentErasing = false;
       this.strokePoints = [];
       this.context.appState.erasePreview = null;
@@ -313,44 +316,59 @@ export class EraseTool extends BaseTool {
       return;
     }
 
-    this.isSegmentErasing = true;
+    this.isPointerDown = true;
+    this.isSegmentErasing = false;
+    this.didDragErase = false;
     this.strokePoints = [worldPoint];
     appState.erasePreview = {
       point: worldPoint,
       sizePx: appState.eraserSizePx,
-      mode: appState.eraseMode,
+      mode: "hybrid",
       affectedLineIds: [],
     };
   }
 
   onMouseMove({ worldPoint }) {
     const { appState, camera } = this.context;
-    const objectCandidate = appState.eraseMode === "object" ? this.getObjectEraseCandidate(worldPoint) : null;
+    const objectCandidate = this.getObjectEraseCandidate(worldPoint);
     appState.erasePreview = {
       point: worldPoint,
       sizePx: appState.eraserSizePx,
-      mode: appState.eraseMode,
-      affectedLineIds: appState.eraseMode === "segment" ? (appState.erasePreview?.affectedLineIds ?? []) : [],
+      mode: "hybrid",
+      affectedLineIds: this.isSegmentErasing ? (appState.erasePreview?.affectedLineIds ?? []) : [],
       targetObjectId: objectCandidate?.id ?? null,
       targetObjectType: objectCandidate?.type ?? null,
     };
 
-    if (!this.isSegmentErasing || appState.eraseMode !== "segment") return;
+    if (!this.isPointerDown) return;
 
     const last = this.strokePoints[this.strokePoints.length - 1];
     if (!last || distSq(last, worldPoint) < 1e-6) return;
 
     this.strokePoints.push(worldPoint);
+
+    if (!this.isSegmentErasing && this.strokePoints.length >= 2) {
+      this.isSegmentErasing = true;
+      this.didDragErase = true;
+    }
+
+    if (!this.isSegmentErasing) return;
+
     const worldRadius = appState.eraserSizePx / camera.zoom;
     appState.erasePreview.affectedLineIds = this.getSegmentEraseCandidates(this.strokePoints, worldRadius);
   }
 
-  onMouseUp() {
-    const { appState } = this.context;
-    if (this.isSegmentErasing && appState.eraseMode === "segment") {
+  onMouseUp({ worldPoint }) {
+    const { appState, historyStore, shapeStore } = this.context;
+
+    if (this.didDragErase && this.isSegmentErasing && this.strokePoints.length >= 2) {
+      this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
       this.applySegmentErase();
+    } else if (this.isPointerDown) {
+      this.eraseObject(worldPoint);
     }
 
+    this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
     appState.erasePreview = null;

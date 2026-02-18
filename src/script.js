@@ -113,7 +113,10 @@ const STORAGE_KEYS = {
   activeThemeId: "bp_activeThemeId",
   autosaveProject: "bp_autosave_project",
   walkthroughSeen: "bp_walkthrough_seen_v1",
+  eraseModeMigrationV2: "bp_eraseMode_migration_v2",
 };
+
+const ERASE_INTERACTION_SUMMARY = "Click=Object, Drag=Segment";
 
 const BUILTIN_THEMES = [
   { id: "builtin:light", name: "Light blueprint", bgColor: "#3e6478", gridColor: "#d0f1ff" },
@@ -130,7 +133,7 @@ const TOOL_METADATA = {
   polyline: { displayName: "Polyline", shortcut: "P", clickSummary: "Click to chain segments; Enter/Escape to finish" },
   measure: { displayName: "Measure", shortcut: "M", clickSummary: "Click two points to place measurement" },
   fill: { displayName: "Fill", shortcut: "F", clickSummary: "Click inside a closed region to fill" },
-  erase: { displayName: "Erase", shortcut: "E", clickSummary: "Click to erase object or drag for segment erase" },
+  erase: { displayName: "Erase", shortcut: "E", clickSummary: `Hybrid erase: ${ERASE_INTERACTION_SUMMARY}` },
 };
 
 const camera = new Camera();
@@ -180,7 +183,7 @@ const appState = {
     active: false,
     stepIndex: 0,
   },
-  eraseMode: "object",
+  eraseMode: "hybrid",
   eraserSizePx: 16,
   erasePreview: null,
   deleteSourceLinesOnPolygonDelete: false,
@@ -362,13 +365,10 @@ function updateContinuePolylineControl() {
     : "Polyline chaining disabled";
 }
 
-function getNextEraseMode(mode) {
-  return mode === "object" ? "segment" : "object";
-}
-
 function updateEraseControls() {
   if (eraseModeToggle) {
-    eraseModeToggle.textContent = `Erase: ${appState.eraseMode === "object" ? "Object" : "Segment"}`;
+    eraseModeToggle.textContent = `Erase: ${ERASE_INTERACTION_SUMMARY}`;
+    eraseModeToggle.title = "Erase behavior is now hybrid: click removes a whole object; drag trims line segments.";
   }
   if (eraserSizeInput) {
     eraserSizeInput.value = String(appState.eraserSizePx);
@@ -376,12 +376,6 @@ function updateEraseControls() {
   if (eraserSizeDisplay) {
     eraserSizeDisplay.textContent = `${appState.eraserSizePx}px`;
   }
-}
-
-function toggleEraseMode() {
-  appState.eraseMode = getNextEraseMode(appState.eraseMode);
-  localStorage.setItem("eraseMode", appState.eraseMode);
-  updateEraseControls();
 }
 
 function setActiveTool(toolName) {
@@ -413,8 +407,13 @@ function getCurrentToolName() {
   return appState.activeTool ?? "select";
 }
 
+function getEraseToolStatusLabel() {
+  return `${TOOL_METADATA.erase.displayName}: ${ERASE_INTERACTION_SUMMARY}`;
+}
+
 function getToolStatusLabel() {
   const toolName = getCurrentToolName();
+  if (toolName === "erase") return getEraseToolStatusLabel();
   return TOOL_METADATA[toolName]?.displayName ?? toolName;
 }
 
@@ -466,7 +465,7 @@ const TOOL_HELPER_TEXT = {
   polyline: "Polyline: click-click to add segments, double-click to finish.",
   measure: "Measure: click and drag to measure between points.",
   fill: "Fill: click inside an enclosed region to fill it.",
-  erase: "Erase: click-drag over shapes to remove them.",
+  erase: "Erase: click removes an object; drag trims line segments.",
 };
 
 const ONBOARDING_STEPS = [
@@ -1152,7 +1151,8 @@ function applyProjectData(project, { announce = true } = {}) {
   appState.snapToMidpoints = settings.snapMidpoint !== false;
   appState.measurementMode = normalizeMeasurementMode(settings.measurementMode ?? (settings.smartMeasurements === false ? "off" : "smart"));
   appState.showGridUnits = settings.showGridUnits === true;
-  appState.eraseMode = settings.eraseMode === "segment" ? "segment" : "object";
+  const hadLegacyEraseMode = settings.eraseMode === "object" || settings.eraseMode === "segment";
+  appState.eraseMode = "hybrid";
   appState.eraserSizePx = Number.isFinite(settings.eraserSizePx) ? Math.min(40, Math.max(6, settings.eraserSizePx)) : 16;
   appState.currentStyle.fillOpacity = Number.isFinite(settings.fillOpacity)
     ? Math.max(0, Math.min(1, settings.fillOpacity))
@@ -1185,6 +1185,10 @@ function applyProjectData(project, { announce = true } = {}) {
   localStorage.setItem("eraseMode", appState.eraseMode);
   localStorage.setItem("eraserSizePx", String(appState.eraserSizePx));
   updateControlsFromState();
+
+  if (hadLegacyEraseMode) {
+    appState.notifyStatus?.(`Erase behavior updated: ${ERASE_INTERACTION_SUMMARY}`, 3200);
+  }
 
   if (announce) {
     appState.notifyStatus?.("Project loaded");
@@ -1649,8 +1653,10 @@ measurementModeToggle?.addEventListener("click", () => {
 });
 
 eraseModeToggle?.addEventListener("click", () => {
-  toggleEraseMode();
+  appState.notifyStatus?.(`Erase behavior: ${ERASE_INTERACTION_SUMMARY}`, 2200);
+  updateEraseControls();
 });
+
 
 eraserSizeInput?.addEventListener("input", (event) => {
   const value = Number.parseInt(event.target.value, 10);
@@ -1858,12 +1864,6 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (key === "e" && getCurrentToolName() === "erase") {
-    event.preventDefault();
-    toggleEraseMode();
-    return;
-  }
-
   if (key === "m") {
     const selectedShape = getSelectedMeasurableShape();
     if (selectedShape) {
@@ -1878,13 +1878,29 @@ window.addEventListener("keydown", (event) => {
   currentTool.onKeyDown(event);
 });
 
+function initializeEraseModePreference() {
+  const storedEraseMode = localStorage.getItem("eraseMode");
+  const hasMigrated = localStorage.getItem(STORAGE_KEYS.eraseModeMigrationV2) === "1";
+
+  if (!hasMigrated) {
+    if (storedEraseMode === "object" || storedEraseMode === "segment") {
+      appState.notifyStatus?.(`Erase behavior updated: ${ERASE_INTERACTION_SUMMARY}`, 3200);
+    }
+    localStorage.setItem(STORAGE_KEYS.eraseModeMigrationV2, "1");
+  }
+
+  appState.eraseMode = "hybrid";
+  localStorage.setItem("eraseMode", "hybrid");
+  return appState.eraseMode;
+}
+
 renderStyleSwatches();
 renderRecentColors();
 resetStyleAlphaDefaults();
 refreshStyleUI();
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
 appState.measurementMode = normalizeMeasurementMode(localStorage.getItem("measurementMode") || (localStorage.getItem("smartMeasurements") === "0" ? "off" : "smart"));
-appState.eraseMode = localStorage.getItem("eraseMode") === "segment" ? "segment" : "object";
+appState.eraseMode = initializeEraseModePreference();
 const storedEraserSizePx = Number.parseInt(localStorage.getItem("eraserSizePx") || "16", 10);
 appState.eraserSizePx = Number.isFinite(storedEraserSizePx) ? Math.min(40, Math.max(6, storedEraserSizePx)) : 16;
 savedThemes = loadSavedThemes();

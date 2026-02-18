@@ -324,6 +324,12 @@ body {
   font-size: 11px;
 }
 
+
+.field-help {
+  margin: 0;
+  font-size: 11px;
+  color: #94a3b8;
+}
 .field-inline {
   display: flex;
   align-items: center;
