@@ -106,6 +106,7 @@ export class SelectTool extends BaseTool {
       dragIds,
       anchorOriginal: firstLine?.type === "line" ? { ...firstLine.start } : (this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint }),
       didDrag: false,
+      historyCaptured: false,
       totalAppliedDelta: { x: 0, y: 0 },
     };
   }
@@ -146,6 +147,10 @@ export class SelectTool extends BaseTool {
       };
 
       if (Math.abs(stepDelta.x) > Number.EPSILON || Math.abs(stepDelta.y) > Number.EPSILON) {
+        if (!this.dragState.historyCaptured) {
+          this.context.pushHistoryState?.();
+          this.dragState.historyCaptured = true;
+        }
         this.dragState.didDrag = true;
       }
 
@@ -193,8 +198,6 @@ export class SelectTool extends BaseTool {
       appState.marqueeRect = null;
       this.marqueeState = null;
     }
-
-    if (this.dragState?.didDrag) this.context.pushHistoryState?.();
 
     if (this.dragState && !this.dragState.didDrag && !this.marqueeState) {
       appState.openContextMenuForSelection?.(screenPoint, this.dragState.clickedShapeId);

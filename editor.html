@@ -88,7 +88,8 @@
               <button class="tool-button" id="redo-btn" type="button">Redo</button>
             </div>
             <div class="selection-count" id="selection-count"></div>
-            <label class="field-block" for="erase-mode-toggle"><span>Erase mode <small>(Click = whole object, Drag = partial line erase)</small></span><button id="erase-mode-toggle" class="style-select" type="button">Erase: Object</button></label>
+            <label class="field-block" for="erase-mode-toggle"><span>Erase behavior (click vs drag)</span><button id="erase-mode-toggle" class="style-select" type="button" title="Erase hybrid mode: click erases a full object; drag erases touched line segments.">Erase: Click=Object, Drag=Segment</button></label>
+            <p class="field-help">Click removes one object. Drag trims only the line portions you pass over.</p>
             <label class="field-block" for="eraser-size-input"><span>Eraser size <span id="eraser-size-display">16px</span></span><input id="eraser-size-input" class="range-input" type="range" min="6" max="40" step="1" value="16" /></label>
           </section>
 
