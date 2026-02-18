@@ -641,12 +641,32 @@ function isSnapshotEmpty(snapshot) {
 }
 
 let hasHistoryBaseline = false;
-const HISTORY_DEBUG_ENABLED = false;
+const HISTORY_DEBUG_ENABLED = true;
+
+function getSnapshotShapeCount(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return 0;
+  const shapes = Array.isArray(snapshot.shapes)
+    ? snapshot.shapes
+    : (snapshot.shapes?.rootIds ?? []);
+  return Array.isArray(shapes) ? shapes.length : 0;
+}
+
+function getTopSnapshotShapeCount(stack) {
+  const top = stack[stack.length - 1];
+  if (!top) return 0;
+  try {
+    return getSnapshotShapeCount(JSON.parse(top));
+  } catch {
+    return 0;
+  }
+}
 
 function debugHistoryTransition(action, beforeUndoLen, beforeRedoLen) {
   if (!HISTORY_DEBUG_ENABLED) return;
+  const undoTopShapes = getTopSnapshotShapeCount(historyStore.undoStack);
+  const redoTopShapes = getTopSnapshotShapeCount(historyStore.redoStack);
   console.debug(
-    `[HISTORY:${action}] undo ${beforeUndoLen} -> ${historyStore.undoStack.length}, redo ${beforeRedoLen} -> ${historyStore.redoStack.length}`,
+    `[HISTORY:${action}] undo ${beforeUndoLen} -> ${historyStore.undoStack.length} (topShapes=${undoTopShapes}), redo ${beforeRedoLen} -> ${historyStore.redoStack.length} (topShapes=${redoTopShapes})`,
   );
 }
 
@@ -654,6 +674,12 @@ function resetHistoryState() {
   historyStore.undoStack = [];
   historyStore.redoStack = [];
   hasHistoryBaseline = false;
+}
+
+function resetHistoryWithBaseline() {
+  resetHistoryState();
+  historyStore.pushState(getSnapshot());
+  hasHistoryBaseline = true;
 }
 
 function ensureHistoryBaseline({ allowEmpty = false } = {}) {
@@ -666,8 +692,10 @@ function ensureHistoryBaseline({ allowEmpty = false } = {}) {
 }
 
 function initializeHistoryAfterHydration({ allowEmpty = false } = {}) {
-  resetHistoryState();
-  ensureHistoryBaseline({ allowEmpty });
+  resetHistoryWithBaseline();
+  if (!allowEmpty && isSnapshotEmpty(getSnapshot())) {
+    resetHistoryState();
+  }
 }
 
 function applySnapshot(snapshot) {
@@ -697,6 +725,11 @@ function pushHistoryState() {
 function undo() {
   const beforeUndoLen = historyStore.undoStack.length;
   const beforeRedoLen = historyStore.redoStack.length;
+  if (HISTORY_DEBUG_ENABLED) {
+    console.debug(
+      `[HISTORY:undo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(getSnapshot())}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
+    );
+  }
   const previous = historyStore.undo(getSnapshot());
   debugHistoryTransition("undo", beforeUndoLen, beforeRedoLen);
   if (!previous) return;
@@ -709,6 +742,11 @@ function undo() {
 function redo() {
   const beforeUndoLen = historyStore.undoStack.length;
   const beforeRedoLen = historyStore.redoStack.length;
+  if (HISTORY_DEBUG_ENABLED) {
+    console.debug(
+      `[HISTORY:redo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(getSnapshot())}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
+    );
+  }
   const next = historyStore.redo(getSnapshot());
   debugHistoryTransition("redo", beforeUndoLen, beforeRedoLen);
   if (!next) return;
@@ -742,10 +780,10 @@ function resetProject() {
   shapeStore.clear();
   camera.resetView();
   setActiveTool("select");
-  initializeHistoryAfterHydration({ allowEmpty: true });
   appState.previewShape = null;
   appState.snapIndicator = null;
   clearSelectionState();
+  resetHistoryWithBaseline();
   clearAutosaveProject();
   appState.notifyStatus?.("Project reset", 1600);
 }
@@ -1171,8 +1209,7 @@ function applyProjectData(project, { announce = true } = {}) {
   applyTheme(fallbackTheme, fallbackTheme.id);
 
   shapeStore.replaceFromSerialized(normalizeShapePayload(project.shapes));
-
-  initializeHistoryAfterHydration({ allowEmpty: false });
+  resetHistoryWithBaseline();
   appState.previewShape = null;
   appState.selectedRegionKey = null;
   clearSelectionState();
@@ -1930,7 +1967,7 @@ renderToolButtons();
 renderHelpModal();
 setActiveTool("select");
 restoreAutosaveIfAvailable();
-initializeHistoryAfterHydration({ allowEmpty: false });
+resetHistoryWithBaseline();
 renderUiVisibility();
 updateControlsFromState();
 startOnboarding();
