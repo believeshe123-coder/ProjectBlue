@@ -130,7 +130,7 @@ const TOOL_METADATA = {
   polyline: { displayName: "Polyline", shortcut: "P", clickSummary: "Click to chain segments; Enter/Escape to finish" },
   measure: { displayName: "Measure", shortcut: "M", clickSummary: "Click two points to place measurement" },
   fill: { displayName: "Fill", shortcut: "F", clickSummary: "Click inside a closed region to fill" },
-  erase: { displayName: "Erase", shortcut: "E", clickSummary: "Click to erase object or drag for segment erase" },
+  erase: { displayName: "Erase", shortcut: "E", clickSummary: "Click = whole object, Drag = partial line erase" },
 };
 
 const camera = new Camera();
@@ -466,7 +466,7 @@ const TOOL_HELPER_TEXT = {
   polyline: "Polyline: click-click to add segments, double-click to finish.",
   measure: "Measure: click and drag to measure between points.",
   fill: "Fill: click inside an enclosed region to fill it.",
-  erase: "Erase: click-drag over shapes to remove them.",
+  erase: "Erase: Click = whole object, Drag = partial line erase.",
 };
 
 const ONBOARDING_STEPS = [
