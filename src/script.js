@@ -112,6 +112,7 @@ const STORAGE_KEYS = {
   savedThemes: "bp_savedThemes",
   activeThemeId: "bp_activeThemeId",
   autosaveProject: "bp_autosave_project",
+  historyState: "bp_history_state_v1",
   walkthroughSeen: "bp_walkthrough_seen_v1",
   eraseModeMigrationV2: "bp_eraseMode_migration_v2",
 };
@@ -138,7 +139,7 @@ const TOOL_METADATA = {
 
 const camera = new Camera();
 const shapeStore = new ShapeStore();
-const historyStore = new HistoryStore();
+const historyStore = new HistoryStore(20);
 
 const appState = {
   disableSceneGraph: DISABLE_SCENE_GRAPH,
@@ -641,7 +642,7 @@ function isSnapshotEmpty(snapshot) {
 }
 
 let hasHistoryBaseline = false;
-const HISTORY_DEBUG_ENABLED = true;
+const HISTORY_DEBUG_ENABLED = false;
 
 function getSnapshotShapeCount(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return 0;
@@ -649,41 +650,6 @@ function getSnapshotShapeCount(snapshot) {
     ? snapshot.shapes
     : (snapshot.shapes?.rootIds ?? []);
   return Array.isArray(shapes) ? shapes.length : 0;
-}
-
-function getSnapshotShapeSignature(snapshot) {
-  const normalized = normalizeShapePayload(snapshot?.shapes ?? []);
-  return JSON.stringify(normalized);
-}
-
-function popHistoryStateSkippingShapeDuplicates(direction, currentSnapshot) {
-  const sourceStack = direction === "redo" ? historyStore.redoStack : historyStore.undoStack;
-  const targetStack = direction === "redo" ? historyStore.undoStack : historyStore.redoStack;
-  if (!sourceStack.length) return { snapshot: null, skipped: 0 };
-
-  const currentShapeSignature = getSnapshotShapeSignature(currentSnapshot);
-  let skipped = 0;
-
-  while (sourceStack.length) {
-    const serialized = sourceStack.pop();
-    let candidate = null;
-    try {
-      candidate = JSON.parse(serialized);
-    } catch {
-      skipped += 1;
-      continue;
-    }
-
-    if (getSnapshotShapeSignature(candidate) === currentShapeSignature && sourceStack.length > 0) {
-      skipped += 1;
-      continue;
-    }
-
-    targetStack.push(JSON.stringify(currentSnapshot));
-    return { snapshot: candidate, skipped };
-  }
-
-  return { snapshot: null, skipped };
 }
 
 function getTopSnapshotShapeCount(stack) {
@@ -706,11 +672,38 @@ function debugHistoryTransition(action, beforeUndoLen, beforeRedoLen) {
   );
 }
 
+
+function persistHistoryState() {
+  const payload = {
+    version: 1,
+    hasHistoryBaseline,
+    history: historyStore.serialize(),
+  };
+  localStorage.setItem(STORAGE_KEYS.historyState, JSON.stringify(payload));
+}
+
+function restoreHistoryState() {
+  const serialized = localStorage.getItem(STORAGE_KEYS.historyState);
+  if (!serialized) return false;
+  try {
+    const parsed = JSON.parse(serialized);
+    const history = parsed?.history;
+    if (!history || typeof history !== "object") return false;
+    historyStore.restore(history);
+    hasHistoryBaseline = parsed?.hasHistoryBaseline === true;
+    return true;
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.historyState);
+    return false;
+  }
+}
+
 function resetHistoryWithBaseline() {
   historyStore.undoStack = [];
   historyStore.redoStack = [];
   historyStore.pushState(getSnapshot());
   hasHistoryBaseline = true;
+  persistHistoryState();
 }
 
 function ensureHistoryBaseline({ allowEmpty = false } = {}) {
@@ -719,6 +712,7 @@ function ensureHistoryBaseline({ allowEmpty = false } = {}) {
   if (!allowEmpty && isSnapshotEmpty(baseline)) return false;
   historyStore.pushState(baseline);
   hasHistoryBaseline = true;
+  persistHistoryState();
   return true;
 }
 
@@ -744,6 +738,7 @@ function pushHistoryState() {
     return;
   }
   historyStore.pushState(snapshot);
+  persistHistoryState();
 }
 
 function undo() {
@@ -755,13 +750,14 @@ function undo() {
       `[HISTORY:undo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(currentSnapshot)}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
     );
   }
-  const { snapshot: previous, skipped } = popHistoryStateSkippingShapeDuplicates("undo", currentSnapshot);
+  const previous = historyStore.undo(currentSnapshot);
+  persistHistoryState();
   debugHistoryTransition("undo", beforeUndoLen, beforeRedoLen);
   if (!previous) return;
   applySnapshot(previous);
   if (HISTORY_DEBUG_ENABLED) {
     console.log(
-      `[HISTORY:undo:applied] restoredShapes=${getSnapshotShapeCount(previous)}, skippedShapeOnlyStates=${skipped}, nowShapes=${getSnapshotShapeCount(getSnapshot())}`,
+      `[HISTORY:undo:applied] restoredShapes=${getSnapshotShapeCount(previous)}, nowShapes=${getSnapshotShapeCount(getSnapshot())}`,
     );
   }
   appState.previewShape = null;
@@ -778,13 +774,14 @@ function redo() {
       `[HISTORY:redo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(currentSnapshot)}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
     );
   }
-  const { snapshot: next, skipped } = popHistoryStateSkippingShapeDuplicates("redo", currentSnapshot);
+  const next = historyStore.redo(currentSnapshot);
+  persistHistoryState();
   debugHistoryTransition("redo", beforeUndoLen, beforeRedoLen);
   if (!next) return;
   applySnapshot(next);
   if (HISTORY_DEBUG_ENABLED) {
     console.log(
-      `[HISTORY:redo:applied] restoredShapes=${getSnapshotShapeCount(next)}, skippedShapeOnlyStates=${skipped}, nowShapes=${getSnapshotShapeCount(getSnapshot())}`,
+      `[HISTORY:redo:applied] restoredShapes=${getSnapshotShapeCount(next)}, nowShapes=${getSnapshotShapeCount(getSnapshot())}`,
     );
   }
   appState.previewShape = null;
@@ -805,6 +802,7 @@ function clearAutosaveProject() {
   autosaveSignature = "";
   pendingAutosaveSignature = "";
   localStorage.removeItem(STORAGE_KEYS.autosaveProject);
+  localStorage.removeItem(STORAGE_KEYS.historyState);
 }
 
 function resetProject() {
@@ -1113,6 +1111,7 @@ function reorderSelectionZ(mode, idsOverride = null) {
   const didChange = shapeStore.reorderSelectionZ(targetIds, mode);
   if (!didChange) return false;
   historyStore.pushState(before);
+  persistHistoryState();
   const statusByMode = {
     front: "Brought to front",
     forward: "Brought forward",
@@ -2003,8 +2002,11 @@ renderToolButtons();
 renderHelpModal();
 setActiveTool("select");
 const didRestoreAutosave = restoreAutosaveIfAvailable();
-resetHistoryWithBaseline();
-if (!didRestoreAutosave && HISTORY_DEBUG_ENABLED) {
+const didRestoreHistory = didRestoreAutosave ? restoreHistoryState() : false;
+if (!didRestoreHistory) {
+  resetHistoryWithBaseline();
+}
+if (!didRestoreAutosave && !didRestoreHistory && HISTORY_DEBUG_ENABLED) {
   console.log("[HISTORY:start] initialized empty baseline for new session");
 }
 renderUiVisibility();
