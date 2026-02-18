@@ -651,6 +651,41 @@ function getSnapshotShapeCount(snapshot) {
   return Array.isArray(shapes) ? shapes.length : 0;
 }
 
+function getSnapshotShapeSignature(snapshot) {
+  const normalized = normalizeShapePayload(snapshot?.shapes ?? []);
+  return JSON.stringify(normalized);
+}
+
+function popHistoryStateSkippingShapeDuplicates(direction, currentSnapshot) {
+  const sourceStack = direction === "redo" ? historyStore.redoStack : historyStore.undoStack;
+  const targetStack = direction === "redo" ? historyStore.undoStack : historyStore.redoStack;
+  if (!sourceStack.length) return { snapshot: null, skipped: 0 };
+
+  const currentShapeSignature = getSnapshotShapeSignature(currentSnapshot);
+  let skipped = 0;
+
+  while (sourceStack.length) {
+    const serialized = sourceStack.pop();
+    let candidate = null;
+    try {
+      candidate = JSON.parse(serialized);
+    } catch {
+      skipped += 1;
+      continue;
+    }
+
+    if (getSnapshotShapeSignature(candidate) === currentShapeSignature && sourceStack.length > 0) {
+      skipped += 1;
+      continue;
+    }
+
+    targetStack.push(JSON.stringify(currentSnapshot));
+    return { snapshot: candidate, skipped };
+  }
+
+  return { snapshot: null, skipped };
+}
+
 function getTopSnapshotShapeCount(stack) {
   const top = stack[stack.length - 1];
   if (!top) return 0;
@@ -665,19 +700,15 @@ function debugHistoryTransition(action, beforeUndoLen, beforeRedoLen) {
   if (!HISTORY_DEBUG_ENABLED) return;
   const undoTopShapes = getTopSnapshotShapeCount(historyStore.undoStack);
   const redoTopShapes = getTopSnapshotShapeCount(historyStore.redoStack);
-  console.debug(
-    `[HISTORY:${action}] undo ${beforeUndoLen} -> ${historyStore.undoStack.length} (topShapes=${undoTopShapes}), redo ${beforeRedoLen} -> ${historyStore.redoStack.length} (topShapes=${redoTopShapes})`,
+  const currentShapes = getSnapshotShapeCount(getSnapshot());
+  console.log(
+    `[HISTORY:${action}] undo ${beforeUndoLen} -> ${historyStore.undoStack.length} (topShapes=${undoTopShapes}), redo ${beforeRedoLen} -> ${historyStore.redoStack.length} (topShapes=${redoTopShapes}), currentShapes=${currentShapes}`,
   );
 }
 
-function resetHistoryState() {
+function resetHistoryWithBaseline() {
   historyStore.undoStack = [];
   historyStore.redoStack = [];
-  hasHistoryBaseline = false;
-}
-
-function resetHistoryWithBaseline() {
-  resetHistoryState();
   historyStore.pushState(getSnapshot());
   hasHistoryBaseline = true;
 }
@@ -689,13 +720,6 @@ function ensureHistoryBaseline({ allowEmpty = false } = {}) {
   historyStore.pushState(baseline);
   hasHistoryBaseline = true;
   return true;
-}
-
-function initializeHistoryAfterHydration({ allowEmpty = false } = {}) {
-  resetHistoryWithBaseline();
-  if (!allowEmpty && isSnapshotEmpty(getSnapshot())) {
-    resetHistoryState();
-  }
 }
 
 function applySnapshot(snapshot) {
@@ -725,15 +749,21 @@ function pushHistoryState() {
 function undo() {
   const beforeUndoLen = historyStore.undoStack.length;
   const beforeRedoLen = historyStore.redoStack.length;
+  const currentSnapshot = getSnapshot();
   if (HISTORY_DEBUG_ENABLED) {
-    console.debug(
-      `[HISTORY:undo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(getSnapshot())}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
+    console.log(
+      `[HISTORY:undo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(currentSnapshot)}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
     );
   }
-  const previous = historyStore.undo(getSnapshot());
+  const { snapshot: previous, skipped } = popHistoryStateSkippingShapeDuplicates("undo", currentSnapshot);
   debugHistoryTransition("undo", beforeUndoLen, beforeRedoLen);
   if (!previous) return;
   applySnapshot(previous);
+  if (HISTORY_DEBUG_ENABLED) {
+    console.log(
+      `[HISTORY:undo:applied] restoredShapes=${getSnapshotShapeCount(previous)}, skippedShapeOnlyStates=${skipped}, nowShapes=${getSnapshotShapeCount(getSnapshot())}`,
+    );
+  }
   appState.previewShape = null;
   appState.selectedRegionKey = null;
   clearSelectionState();
@@ -742,15 +772,21 @@ function undo() {
 function redo() {
   const beforeUndoLen = historyStore.undoStack.length;
   const beforeRedoLen = historyStore.redoStack.length;
+  const currentSnapshot = getSnapshot();
   if (HISTORY_DEBUG_ENABLED) {
-    console.debug(
-      `[HISTORY:redo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(getSnapshot())}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
+    console.log(
+      `[HISTORY:redo:before] undoLen=${beforeUndoLen}, redoLen=${beforeRedoLen}, currentShapes=${getSnapshotShapeCount(currentSnapshot)}, undoTopShapes=${getTopSnapshotShapeCount(historyStore.undoStack)}, redoTopShapes=${getTopSnapshotShapeCount(historyStore.redoStack)}`,
     );
   }
-  const next = historyStore.redo(getSnapshot());
+  const { snapshot: next, skipped } = popHistoryStateSkippingShapeDuplicates("redo", currentSnapshot);
   debugHistoryTransition("redo", beforeUndoLen, beforeRedoLen);
   if (!next) return;
   applySnapshot(next);
+  if (HISTORY_DEBUG_ENABLED) {
+    console.log(
+      `[HISTORY:redo:applied] restoredShapes=${getSnapshotShapeCount(next)}, skippedShapeOnlyStates=${skipped}, nowShapes=${getSnapshotShapeCount(getSnapshot())}`,
+    );
+  }
   appState.previewShape = null;
   appState.selectedRegionKey = null;
   clearSelectionState();
@@ -1966,8 +2002,11 @@ updateEraseControls();
 renderToolButtons();
 renderHelpModal();
 setActiveTool("select");
-restoreAutosaveIfAvailable();
+const didRestoreAutosave = restoreAutosaveIfAvailable();
 resetHistoryWithBaseline();
+if (!didRestoreAutosave && HISTORY_DEBUG_ENABLED) {
+  console.log("[HISTORY:start] initialized empty baseline for new session");
+}
 renderUiVisibility();
 updateControlsFromState();
 startOnboarding();
