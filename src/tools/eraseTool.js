@@ -226,7 +226,6 @@ export class EraseTool extends BaseTool {
     this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
-    this.didDragErase = false;
   }
 
   onActivate() {
@@ -237,7 +236,6 @@ export class EraseTool extends BaseTool {
     this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
-    this.didDragErase = false;
     this.context.appState.erasePreview = null;
   }
 
@@ -273,8 +271,8 @@ export class EraseTool extends BaseTool {
   }
 
   applySegmentErase() {
-    const { appState, shapeStore } = this.context;
-    if (this.strokePoints.length < 2) return;
+    const { appState, shapeStore, historyStore } = this.context;
+    if (this.strokePoints.length < 2) return false;
 
     const worldRadius = appState.eraserSizePx / this.context.camera.zoom;
     const updates = [];
@@ -286,7 +284,9 @@ export class EraseTool extends BaseTool {
       updates.push({ lineId: shape.id, segments });
     }
 
-    if (updates.length === 0) return;
+    if (updates.length === 0) return false;
+
+    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
 
     const lineIdsToReplace = new Set(updates.map((item) => item.lineId));
     shapeStore.shapes = shapeStore.getShapes().filter((shape) => !lineIdsToReplace.has(shape.id));
@@ -295,6 +295,8 @@ export class EraseTool extends BaseTool {
         shapeStore.addShape(segment);
       }
     }
+
+    return true;
   }
 
   onKeyDown(event) {
@@ -302,13 +304,17 @@ export class EraseTool extends BaseTool {
       this.isPointerDown = false;
       this.isSegmentErasing = false;
       this.strokePoints = [];
-      this.didDragErase = false;
       this.context.appState.erasePreview = null;
     }
   }
 
   onMouseDown({ worldPoint }) {
     const { appState } = this.context;
+
+    if (appState.eraseMode === "object") {
+      this.eraseObject(worldPoint);
+      return;
+    }
 
     this.isPointerDown = true;
     this.isSegmentErasing = false;
@@ -365,7 +371,6 @@ export class EraseTool extends BaseTool {
     this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
-    this.didDragErase = false;
     appState.erasePreview = null;
   }
 }
