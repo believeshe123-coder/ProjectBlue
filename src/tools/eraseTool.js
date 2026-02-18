@@ -252,7 +252,8 @@ export class EraseTool extends BaseTool {
     if (!hit) return;
     if (!(["line", "face", "polygon", "fillRegion"].includes(hit.type))) return;
 
-    this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+    if (this.context.pushHistoryState) this.context.pushHistoryState();
+    else historyStore.pushState(shapeStore.serialize());
     shapeStore.removeShape(hit.id);
   }
 
@@ -364,7 +365,8 @@ export class EraseTool extends BaseTool {
     const { appState, historyStore, shapeStore } = this.context;
 
     if (this.didDragErase && this.isSegmentErasing && this.strokePoints.length >= 2) {
-      this.context.pushHistoryState?.() ?? historyStore.pushState(shapeStore.serialize());
+      if (this.context.pushHistoryState) this.context.pushHistoryState();
+      else historyStore.pushState(shapeStore.serialize());
       this.applySegmentErase();
     } else if (this.isPointerDown) {
       this.eraseObject(worldPoint);

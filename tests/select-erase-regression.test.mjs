@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { ShapeStore } from '../src/state/shapeStore.js';
 import { SelectTool } from '../src/tools/selectTool.js';
 import { EraseTool } from '../src/tools/eraseTool.js';
+import { LineTool } from '../src/tools/lineTool.js';
 import { Line } from '../src/models/line.js';
 import { FaceShape } from '../src/models/faceShape.js';
 import { Polygon } from '../src/models/polygon.js';
