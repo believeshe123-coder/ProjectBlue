@@ -1,15 +1,18 @@
 export class HistoryStore {
-  constructor(limit = 200) {
+  constructor(limit = 20) {
     this.limit = limit;
     this.undoStack = [];
     this.redoStack = [];
   }
 
+  trimStack(stack) {
+    if (stack.length <= this.limit) return;
+    stack.splice(0, stack.length - this.limit);
+  }
+
   pushState(snapshot) {
     this.undoStack.push(JSON.stringify(snapshot));
-    if (this.undoStack.length > this.limit) {
-      this.undoStack.shift();
-    }
+    this.trimStack(this.undoStack);
     this.redoStack = [];
   }
 
@@ -20,6 +23,7 @@ export class HistoryStore {
 
     const previous = this.undoStack.pop();
     this.redoStack.push(JSON.stringify(currentSnapshot));
+    this.trimStack(this.redoStack);
     return JSON.parse(previous);
   }
 
@@ -30,6 +34,24 @@ export class HistoryStore {
 
     const next = this.redoStack.pop();
     this.undoStack.push(JSON.stringify(currentSnapshot));
+    this.trimStack(this.undoStack);
     return JSON.parse(next);
+  }
+
+  serialize() {
+    return {
+      limit: this.limit,
+      undoStack: [...this.undoStack],
+      redoStack: [...this.redoStack],
+    };
+  }
+
+  restore({ undoStack = [], redoStack = [] } = {}) {
+    const safeUndo = Array.isArray(undoStack) ? undoStack.filter((entry) => typeof entry === 'string') : [];
+    const safeRedo = Array.isArray(redoStack) ? redoStack.filter((entry) => typeof entry === 'string') : [];
+    this.undoStack = safeUndo;
+    this.redoStack = safeRedo;
+    this.trimStack(this.undoStack);
+    this.trimStack(this.redoStack);
   }
 }
