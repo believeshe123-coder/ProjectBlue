@@ -351,6 +351,12 @@ body {
   flex: 0 0 auto;
 }
 
+
+.save-color-button {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
 .recent-row {
   display: grid;
   grid-template-columns: repeat(5, var(--swatch-size));
