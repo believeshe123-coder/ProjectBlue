@@ -220,3 +220,117 @@ test('line mode drag path stays straight (start/end only)', () => {
   assert.deepEqual(eraseTool.context.appState.erasePreview.pathPoints[0], eraseTool.strokePoints[0]);
   assert.deepEqual(eraseTool.context.appState.erasePreview.pathPoints[1], eraseTool.strokePoints[1]);
 });
+
+
+test('line drag erase splits line and preserves line metadata', () => {
+  const shapeStore = new ShapeStore();
+  shapeStore.addShape(new Line({
+    id: 'line-meta',
+    start: isoUVToWorld(0, 0),
+    end: isoUVToWorld(6, 0),
+    strokeColor: '#00ffaa',
+    fillColor: '#123456',
+    strokeWidth: 4,
+    strokeOpacity: 0.4,
+    fillOpacity: 0.2,
+    opacity: 0.6,
+    fillEnabled: false,
+    pinnedMeasure: true,
+    visible: true,
+    locked: false,
+    zIndex: 7,
+    groupId: 'group-1',
+    sourceForPolygonId: 'poly-1',
+    ownedByFaceIds: ['face-a'],
+  }));
+
+  const eraseTool = new EraseTool({
+    shapeStore,
+    appState: {
+      eraseMode: 'line',
+      erasePreview: null,
+      currentStyle: { strokeWidth: 4 },
+      snapToGrid: false,
+      snapToMidpoints: false,
+      snapIndicator: null,
+      snapDebugStatus: 'SNAP: OFF',
+    },
+    camera: { zoom: 1, screenToWorld: (p) => p },
+    pushHistoryState() {},
+    historyStore: { pushState() {} },
+  });
+
+  const original = shapeStore.getShapeById('line-meta');
+  const direction = {
+    x: original.end.x - original.start.x,
+    y: original.end.y - original.start.y,
+  };
+  const eraseStart = { x: original.start.x + direction.x * 0.4, y: original.start.y + direction.y * 0.4 };
+  const eraseEnd = { x: original.start.x + direction.x * 0.6, y: original.start.y + direction.y * 0.6 };
+
+  eraseTool.onMouseDown({ worldPoint: eraseStart, screenPoint: eraseStart });
+  eraseTool.onMouseMove({ worldPoint: eraseEnd, screenPoint: eraseEnd });
+  eraseTool.onMouseUp({ worldPoint: eraseEnd, screenPoint: eraseEnd });
+
+  const lines = shapeStore.getShapes().filter((shape) => shape.type === 'line');
+  assert.equal(lines.length, 2);
+
+  for (const line of lines) {
+    assert.equal(line.strokeColor, '#00ffaa');
+    assert.equal(line.strokeWidth, 4);
+    assert.equal(line.strokeOpacity, 0.4);
+    assert.equal(line.fillOpacity, 0.2);
+    assert.equal(line.opacity, 0.6);
+    assert.equal(line.fillEnabled, false);
+    assert.equal(line.pinnedMeasure, true);
+    assert.equal(line.zIndex, 7);
+    assert.equal(line.groupId, 'group-1');
+    assert.equal(line.sourceForPolygonId, 'poly-1');
+    assert.deepEqual(line.ownedByFaceIds, ['face-a']);
+    assert.equal(line.startUV.u % 0.5, 0);
+    assert.equal(line.startUV.v % 0.5, 0);
+    assert.equal(line.endUV.u % 0.5, 0);
+    assert.equal(line.endUV.v % 0.5, 0);
+  }
+});
+
+
+test('line tool snaps to line intersections when midpoint snapping is enabled', () => {
+  const shapeStore = new ShapeStore();
+  const diagA = new Line({ id: 'diag-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(4, 0) });
+  const diagB = new Line({ id: 'diag-b', start: isoUVToWorld(2, -2), end: isoUVToWorld(2, 2) });
+  shapeStore.addShape(diagA);
+  shapeStore.addShape(diagB);
+
+  const appState = {
+    previewShape: null,
+    snapIndicator: null,
+    snapDebugStatus: 'SNAP: OFF',
+    snapToGrid: false,
+    snapToMidpoints: true,
+    currentStyle: {
+      strokeColor: '#ffffff',
+      strokeOpacity: 1,
+      strokeWidth: 2,
+      fillEnabled: false,
+      fillColor: 'transparent',
+      fillOpacity: 0,
+    },
+  };
+
+  const lineTool = new LineTool({
+    shapeStore,
+    appState,
+    camera: { zoom: 1, screenToWorld: (p) => p },
+    pushHistoryState() {},
+    historyStore: { pushState() {} },
+  });
+
+  const intersection = isoUVToWorld(2, 0);
+  lineTool.onMouseMove({ screenPoint: { x: intersection.x + 1, y: intersection.y + 1 } });
+
+  assert.equal(appState.snapIndicator.kind, 'intersection');
+  assert.equal(Math.round(appState.snapIndicator.point.x), Math.round(intersection.x));
+  assert.equal(Math.round(appState.snapIndicator.point.y), Math.round(intersection.y));
+});
+

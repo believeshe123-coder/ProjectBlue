@@ -1,6 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
+import { isoUVToWorld, snapIsoUV, worldToIsoUV } from "../core/isoGrid.js";
 import { normalizeEraseMode } from "../state/eraseMode.js";
 import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
@@ -29,8 +29,8 @@ function distSq(a, b) {
 }
 
 function snapToIsoGrid(point) {
-  const uv = worldToIsoUV(point);
-  return isoUVToWorld(Math.round(uv.u), Math.round(uv.v));
+  const uv = snapIsoUV(worldToIsoUV(point), 0.5);
+  return isoUVToWorld(uv.u, uv.v);
 }
 
 function mergeIntervals(intervals) {
@@ -215,6 +215,9 @@ function buildLineSegmentsAfterErase(line, strokePoints, radius) {
       visible: line.visible,
       locked: line.locked,
       zIndex: line.zIndex,
+      groupId: line.groupId,
+      sourceForPolygonId: line.sourceForPolygonId,
+      ownedByFaceIds: [...(line.ownedByFaceIds ?? [])],
       selected: false,
     }));
   }
