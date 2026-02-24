@@ -60,6 +60,40 @@ function drawFace(ctx, camera, face, selected) {
   ctx.restore();
 }
 
+
+function drawErasePreview(ctx, camera, erasePreview) {
+  if (!erasePreview?.point) return;
+  const points = Array.isArray(erasePreview.pathPoints) && erasePreview.pathPoints.length
+    ? erasePreview.pathPoints
+    : [erasePreview.point];
+
+  ctx.save();
+  ctx.strokeStyle = "#ef4444";
+  ctx.lineWidth = Math.max(1, erasePreview.strokeWidthPx ?? 2);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (points.length >= 2) {
+    const first = camera.worldToScreen(points[0]);
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < points.length; i += 1) {
+      const p = camera.worldToScreen(points[i]);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  } else {
+    const center = camera.worldToScreen(points[0]);
+    const halfLen = 10;
+    ctx.beginPath();
+    ctx.moveTo(center.x - halfLen, center.y);
+    ctx.lineTo(center.x + halfLen, center.y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawLine(ctx, camera, line, selected) {
   const s = camera.worldToScreen(line.start);
   const e = camera.worldToScreen(line.end);
@@ -165,6 +199,8 @@ export class Renderer {
     }
 
     if (!disableSceneGraph && this.appState.debugRegions === true) drawRegionDebugOverlay(this.ctx, this.camera, computedRegions);
+
+    if (this.appState.erasePreview) drawErasePreview(this.ctx, this.camera, this.appState.erasePreview);
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
       const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);

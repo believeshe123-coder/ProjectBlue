@@ -88,19 +88,17 @@
               <button class="tool-button" id="redo-btn" type="button">Redo</button>
             </div>
             <div class="selection-count" id="selection-count"></div>
-            <label class="field-block" for="erase-mode-toggle"><span>Erase behavior (click vs drag)</span><button id="erase-mode-toggle" class="style-select" type="button" title="Erase hybrid mode: click erases a full object; drag erases touched line segments.">Erase: Click=Object, Drag=Segment</button></label>
+            <label class="field-block" for="erase-mode-toggle"><span>Erase mode</span><button id="erase-mode-toggle" class="style-select" type="button" title="Hybrid erase mode: click deletes one object, drag trims only crossed line segments.">Click: Delete object | Drag: Trim segments</button></label>
             <p class="field-help">Click removes one object. Drag trims only the line portions you pass over.</p>
-            <label class="field-block" for="eraser-size-input"><span>Eraser size <span id="eraser-size-display">16px</span></span><input id="eraser-size-input" class="range-input" type="range" min="6" max="40" step="1" value="16" /></label>
           </section>
 
           <section class="side-section" aria-label="Color and style">
             <h2 class="section-title">Line Style</h2>
-            <button id="palette-color-btn" class="palette-add" type="button" aria-label="Pick custom color">Color</button>
-            <input id="customColorPicker" class="color-input visually-hidden" type="color" value="#ffffff" hidden />
-            <div class="swatch-grid" id="style-swatches" aria-label="Quick paint swatches"></div>
-            <div class="recent-colors"><label>Recent</label><div class="recent-row" id="recent-row"></div></div>
+            <div class="recent-colors-row">
+              <input id="fill-color-picker" type="color" value="#4aa3ff" aria-label="Choose color" />
+              <div class="recent-row" id="recent-row"></div>
+            </div>
             <label class="field-block" for="stroke-width-input"><span>Stroke width</span><select id="stroke-width-input" class="style-select"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select></label>
-            <label class="field-inline" for="fill-color-picker"><span>Fill color</span><input id="fill-color-picker" type="color" value="#4aa3ff" /></label>
             <label class="field-block" for="fill-opacity-input"><span>Fill opacity <span id="fill-opacity-display">1.00</span></span><input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" /></label>
           </section>
         </aside>

@@ -239,6 +239,16 @@ export class EraseTool extends BaseTool {
     this.context.appState.erasePreview = null;
   }
 
+  getEraseStrokeWidthPx() {
+    const strokeWidth = this.context.appState.currentStyle?.strokeWidth;
+    return Number.isFinite(strokeWidth) ? Math.max(1, strokeWidth) : 2;
+  }
+
+  getEraseRadiusWorld() {
+    const strokeWidthPx = this.getEraseStrokeWidthPx();
+    return (strokeWidthPx / 2) / this.context.camera.zoom;
+  }
+
   getObjectEraseCandidate(worldPoint) {
     const { shapeStore, camera } = this.context;
     const toleranceWorld = 8 / camera.zoom;
@@ -276,7 +286,7 @@ export class EraseTool extends BaseTool {
     const { appState, shapeStore } = this.context;
     if (this.strokePoints.length < 2) return false;
 
-    const worldRadius = appState.eraserSizePx / this.context.camera.zoom;
+    const worldRadius = this.getEraseRadiusWorld();
     const updates = [];
 
     for (const shape of shapeStore.getShapes()) {
@@ -323,8 +333,9 @@ export class EraseTool extends BaseTool {
     this.strokePoints = [worldPoint];
     appState.erasePreview = {
       point: worldPoint,
-      sizePx: appState.eraserSizePx,
+      strokeWidthPx: this.getEraseStrokeWidthPx(),
       mode: "hybrid",
+      pathPoints: [worldPoint],
       affectedLineIds: [],
       targetObjectId: objectCandidate?.id ?? null,
       targetObjectType: objectCandidate?.type ?? null,
@@ -332,12 +343,13 @@ export class EraseTool extends BaseTool {
   }
 
   onMouseMove({ worldPoint }) {
-    const { appState, camera } = this.context;
+    const { appState } = this.context;
     const objectCandidate = this.getObjectEraseCandidate(worldPoint);
     appState.erasePreview = {
       point: worldPoint,
-      sizePx: appState.eraserSizePx,
+      strokeWidthPx: this.getEraseStrokeWidthPx(),
       mode: "hybrid",
+      pathPoints: this.isPointerDown && this.strokePoints.length ? [...this.strokePoints] : [worldPoint],
       affectedLineIds: this.isSegmentErasing ? (appState.erasePreview?.affectedLineIds ?? []) : [],
       targetObjectId: objectCandidate?.id ?? null,
       targetObjectType: objectCandidate?.type ?? null,
@@ -349,6 +361,7 @@ export class EraseTool extends BaseTool {
     if (!last || distSq(last, worldPoint) < 1e-6) return;
 
     this.strokePoints.push(worldPoint);
+    appState.erasePreview.pathPoints = [...this.strokePoints];
 
     if (!this.isSegmentErasing && this.strokePoints.length >= 2) {
       this.isSegmentErasing = true;
@@ -357,7 +370,7 @@ export class EraseTool extends BaseTool {
 
     if (!this.isSegmentErasing) return;
 
-    const worldRadius = appState.eraserSizePx / camera.zoom;
+    const worldRadius = this.getEraseRadiusWorld();
     appState.erasePreview.affectedLineIds = this.getSegmentEraseCandidates(this.strokePoints, worldRadius);
   }
 

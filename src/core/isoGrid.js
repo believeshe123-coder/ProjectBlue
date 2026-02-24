@@ -79,18 +79,51 @@ export function snapWorldToIso(worldPt) {
   };
 }
 
+export function snapWorldToIsoAxis(worldPt) {
+  const uv = worldToIsoUV(worldPt);
+  const d = Math.round(uv.u - uv.v);
+  const axisDirection = {
+    x: e1.x + e2.x,
+    y: e1.y + e2.y,
+  };
+  const axisPoint = isoUVToWorld(d, 0);
+  const delta = {
+    x: worldPt.x - axisPoint.x,
+    y: worldPt.y - axisPoint.y,
+  };
+  const directionLengthSq = axisDirection.x * axisDirection.x + axisDirection.y * axisDirection.y;
+  const t = directionLengthSq > Number.EPSILON
+    ? (delta.x * axisDirection.x + delta.y * axisDirection.y) / directionLengthSq
+    : 0;
+  const point = {
+    x: axisPoint.x + axisDirection.x * t,
+    y: axisPoint.y + axisDirection.y * t,
+  };
+  const projectedUv = worldToIsoUV(point);
+
+  return {
+    point,
+    u: projectedUv.u,
+    v: projectedUv.v,
+    d,
+  };
+}
+
 export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH, options = {}) {
   const corners = getVisibleWorldCorners(camera, canvasCssW, canvasCssH);
   const uvCorners = corners.map(worldToIsoUV);
 
   const uValues = uvCorners.map((value) => value.u);
   const vValues = uvCorners.map((value) => value.v);
+  const dValues = uvCorners.map((value) => value.u - value.v);
 
   const pad = 3;
   const uMin = Math.floor(Math.min(...uValues)) - pad;
   const uMax = Math.ceil(Math.max(...uValues)) + pad;
   const vMin = Math.floor(Math.min(...vValues)) - pad;
   const vMax = Math.ceil(Math.max(...vValues)) + pad;
+  const dMin = Math.floor(Math.min(...dValues)) - pad;
+  const dMax = Math.ceil(Math.max(...dValues)) + pad;
 
   ctx.save();
   ctx.lineWidth = 1;
@@ -118,6 +151,20 @@ export function drawIsoGrid(ctx, camera, canvasCssW, canvasCssH, options = {}) {
     const s0 = camera.worldToScreen(p0);
     const s1 = camera.worldToScreen(p1);
     const isMajor = v % 5 === 0;
+
+    ctx.strokeStyle = isMajor ? gridColors.major : gridColors.minor;
+    ctx.beginPath();
+    ctx.moveTo(s0.x, s0.y);
+    ctx.lineTo(s1.x, s1.y);
+    ctx.stroke();
+  }
+
+  for (let d = dMin; d <= dMax; d += 1) {
+    const p0 = isoUVToWorld(d + vMin, vMin);
+    const p1 = isoUVToWorld(d + vMax, vMax);
+    const s0 = camera.worldToScreen(p0);
+    const s1 = camera.worldToScreen(p1);
+    const isMajor = d % 5 === 0;
 
     ctx.strokeStyle = isMajor ? gridColors.major : gridColors.minor;
     ctx.beginPath();
