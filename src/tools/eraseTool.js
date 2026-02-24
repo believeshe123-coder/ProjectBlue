@@ -232,6 +232,10 @@ export class EraseTool extends BaseTool {
     this.isSegmentErasing = false;
     this.strokePoints = [];
     this.lineEraseStartPoint = null;
+<<<<<<< codex/add-line-setting-toggle-functionality-g6gbuj
+    this.didDragErase = false;
+=======
+>>>>>>> main
   }
 
   onActivate() {
@@ -245,6 +249,10 @@ export class EraseTool extends BaseTool {
     this.isSegmentErasing = false;
     this.strokePoints = [];
     this.lineEraseStartPoint = null;
+<<<<<<< codex/add-line-setting-toggle-functionality-g6gbuj
+    this.didDragErase = false;
+=======
+>>>>>>> main
     this.context.appState.erasePreview = null;
   }
 
@@ -433,9 +441,13 @@ export class EraseTool extends BaseTool {
       : worldPoint;
 
     if (mode === "line" && this.lineEraseStartPoint) {
+<<<<<<< codex/add-line-setting-toggle-functionality-g6gbuj
+      const pathPoints = [this.lineEraseStartPoint, effectivePoint];
+=======
       const pathPoints = this.isPointerDown
         ? [this.lineEraseStartPoint, effectivePoint]
         : [this.lineEraseStartPoint, effectivePoint];
+>>>>>>> main
       this.strokePoints = pathPoints;
       appState.erasePreview = {
         point: effectivePoint,
