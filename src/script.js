@@ -1957,9 +1957,22 @@ renderUiVisibility();
 updateControlsFromState();
 startOnboarding();
 
+function triggerProjectLoadFromEntry() {
+  if (!projectLoadInput) return;
+  const hasUserActivation = navigator.userActivation?.isActive === true;
+  if (hasUserActivation) {
+    projectLoadInput.click();
+    return;
+  }
+
+  setFileMenuOpen(true);
+  projectLoadButton?.focus();
+  appState.notifyStatus?.("Browser blocked automatic file picker. Use File → Load.", 3200);
+}
+
 const entryAction = new URLSearchParams(window.location.search).get("start");
 if (entryAction === "open") {
-  window.setTimeout(() => projectLoadInput?.click(), 120);
+  window.setTimeout(triggerProjectLoadFromEntry, 120);
 }
 
 function frame() {
