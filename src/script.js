@@ -243,7 +243,7 @@ function applyColorToTarget(target, color) {
 }
 
 function addRecentColor(color) {
-  recentColors = [color, ...recentColors.filter((recentColor) => recentColor.toLowerCase() !== color.toLowerCase())].slice(0, RECENT_COLOR_LIMIT);
+  recentColors = [...recentColors, color].slice(-RECENT_COLOR_LIMIT).reverse();
   renderRecentColors();
   refreshStyleUI();
 }
