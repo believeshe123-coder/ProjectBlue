@@ -81,15 +81,15 @@
               <button class="tool-button tool-tile" data-tool="polyline" type="button">Polyline</button>
               <button class="tool-button tool-tile" data-tool="measure" type="button">Measure</button>
               <button class="tool-button tool-tile" data-tool="fill" type="button">Fill</button>
-              <button class="tool-button tool-tile" data-tool="erase" type="button" title="Click = whole object, Drag = partial line erase">Erase</button>
+              <button class="tool-button tool-tile" data-tool="erase" type="button" title="Erase line geometry or fill regions based on mode">Erase</button>
             </div>
             <div class="tool-actions">
               <button class="tool-button" id="undo-btn" type="button">Undo</button>
               <button class="tool-button" id="redo-btn" type="button">Redo</button>
             </div>
             <div class="selection-count" id="selection-count"></div>
-            <label class="field-block" for="erase-mode-toggle"><span>Erase mode</span><button id="erase-mode-toggle" class="style-select" type="button" title="Hybrid erase mode: click deletes one object, drag trims only crossed line segments.">Click: Delete object | Drag: Trim segments</button></label>
-            <p class="field-help">Click removes one object. Drag trims only the line portions you pass over.</p>
+            <label class="field-block" for="erase-mode-toggle"><span>Erase mode</span><select id="erase-mode-toggle" class="style-select" title="Choose line or fill erase mode"><option value="line">Erase line</option><option value="fill">Erase fill</option></select></label>
+            <p class="field-help">Line mode erases line geometry only. Fill mode erases fill regions only.</p>
           </section>
 
           <section class="side-section" aria-label="Color and style">

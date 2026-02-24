@@ -61,36 +61,47 @@ function drawFace(ctx, camera, face, selected) {
 }
 
 
-function drawErasePreview(ctx, camera, erasePreview) {
+export function drawErasePreview(ctx, camera, erasePreview) {
   if (!erasePreview?.point) return;
   const points = Array.isArray(erasePreview.pathPoints) && erasePreview.pathPoints.length
     ? erasePreview.pathPoints
     : [erasePreview.point];
 
-  ctx.save();
-  ctx.strokeStyle = "#ef4444";
-  ctx.lineWidth = Math.max(1, erasePreview.strokeWidthPx ?? 2);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  const baseStrokeWidth = Math.max(1, erasePreview.strokeWidthPx ?? 2);
+  const outerStrokeWidth = baseStrokeWidth + 4;
+  const innerStrokeWidth = Math.max(1, outerStrokeWidth - 3);
 
-  if (points.length >= 2) {
-    const first = camera.worldToScreen(points[0]);
-    ctx.beginPath();
-    ctx.moveTo(first.x, first.y);
-    for (let i = 1; i < points.length; i += 1) {
-      const p = camera.worldToScreen(points[i]);
-      ctx.lineTo(p.x, p.y);
+  const strokePath = () => {
+    if (points.length >= 2) {
+      const first = camera.worldToScreen(points[0]);
+      ctx.beginPath();
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < points.length; i += 1) {
+        const p = camera.worldToScreen(points[i]);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      return;
     }
-    ctx.stroke();
-  } else {
+
     const center = camera.worldToScreen(points[0]);
     const halfLen = 10;
     ctx.beginPath();
     ctx.moveTo(center.x - halfLen, center.y);
     ctx.lineTo(center.x + halfLen, center.y);
     ctx.stroke();
-  }
+  };
 
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#ef4444";
+  ctx.lineWidth = outerStrokeWidth;
+  strokePath();
+
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.lineWidth = innerStrokeWidth;
+  strokePath();
   ctx.restore();
 }
 
