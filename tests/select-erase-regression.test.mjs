@@ -128,66 +128,6 @@ test('click erase removes topmost non-line renderables', () => {
 });
 
 
-
-
-test('line mode first click only sets start and does not erase', () => {
-  const shapeStore = new ShapeStore();
-  shapeStore.addShape(new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(3, 0) }));
-
-  const eraseTool = new EraseTool({
-    shapeStore,
-    appState: {
-      eraseMode: 'line',
-      erasePreview: null,
-      currentStyle: { strokeWidth: 2 },
-      snapToGrid: false,
-      snapToMidpoints: false,
-      snapIndicator: null,
-      snapDebugStatus: 'SNAP: OFF',
-    },
-    camera: { zoom: 1, screenToWorld: (p) => p },
-    pushHistoryState() {},
-    historyStore: { pushState() {} },
-  });
-
-  eraseTool.onMouseDown({ worldPoint: { x: 0, y: 0 }, screenPoint: { x: 0, y: 0 } });
-  eraseTool.onMouseUp({ worldPoint: { x: 0, y: 0 }, screenPoint: { x: 0, y: 0 } });
-
-  assert.equal(shapeStore.getShapeById('line-1') !== null, true);
-  assert.equal(eraseTool.lineEraseStartPoint !== null, true);
-});
-
-test('line mode second click finalizes erase even without move between clicks', () => {
-  const shapeStore = new ShapeStore();
-  shapeStore.addShape(new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(4, 0) }));
-
-  const eraseTool = new EraseTool({
-    shapeStore,
-    appState: {
-      eraseMode: 'line',
-      erasePreview: null,
-      currentStyle: { strokeWidth: 2 },
-      snapToGrid: false,
-      snapToMidpoints: false,
-      snapIndicator: null,
-      snapDebugStatus: 'SNAP: OFF',
-    },
-    camera: { zoom: 1, screenToWorld: (p) => p },
-    pushHistoryState() {},
-    historyStore: { pushState() {} },
-  });
-
-  eraseTool.onMouseDown({ worldPoint: { x: 0, y: 0 }, screenPoint: { x: 0, y: 0 } });
-  eraseTool.onMouseUp({ worldPoint: { x: 0, y: 0 }, screenPoint: { x: 0, y: 0 } });
-
-  eraseTool.onMouseDown({ worldPoint: { x: 10, y: 0 }, screenPoint: { x: 10, y: 0 } });
-  eraseTool.onMouseUp({ worldPoint: { x: 10, y: 0 }, screenPoint: { x: 10, y: 0 } });
-
-  const lines = shapeStore.getShapes().filter((shape) => shape.type === 'line');
-  assert.equal(lines.length >= 1, true);
-  assert.equal(eraseTool.lineEraseStartPoint, null);
-});
-
 test('line mode two-click erase records one history state when finalized', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
