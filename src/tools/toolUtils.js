@@ -27,6 +27,7 @@ export function getSnappedPoint(context, screenPoint) {
       u: snappedAxis.u,
       v: snappedAxis.v,
       d: snappedAxis.d,
+      axis: snappedAxis.axis,
       distance: axisDistance,
     });
   }
@@ -59,6 +60,7 @@ export function getSnappedPoint(context, screenPoint) {
       u: winner.u,
       v: winner.v,
       d: winner.d,
+      axis: winner.axis,
     };
   }
 
@@ -82,6 +84,7 @@ export function updateSnapIndicator(appState, snapped) {
     u: snapped.snapped ? snapped.u : null,
     v: snapped.snapped ? snapped.v : null,
     d: snapped.snapped ? snapped.d ?? null : null,
+    axis: snapped.snapped ? snapped.axis ?? null : null,
   };
   if (!snapped.snapped) {
     appState.snapDebugStatus = "SNAP: OFF";
@@ -89,7 +92,8 @@ export function updateSnapIndicator(appState, snapped) {
   }
 
   if (snapped.kind === "axis") {
-    appState.snapDebugStatus = `SNAP: AXIS (d=${snapped.d})`;
+    const axisLabel = (snapped.axis || "d").toUpperCase();
+    appState.snapDebugStatus = `SNAP: AXIS-${axisLabel}`;
     return;
   }
 
