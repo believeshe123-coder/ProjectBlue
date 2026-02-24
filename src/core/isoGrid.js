@@ -81,31 +81,53 @@ export function snapWorldToIso(worldPt) {
 
 export function snapWorldToIsoAxis(worldPt) {
   const uv = worldToIsoUV(worldPt);
-  const d = Math.round(uv.u - uv.v);
-  const axisDirection = {
-    x: e1.x + e2.x,
-    y: e1.y + e2.y,
+  const projectToLine = (axisPoint, axisDirection) => {
+    const delta = {
+      x: worldPt.x - axisPoint.x,
+      y: worldPt.y - axisPoint.y,
+    };
+    const directionLengthSq = axisDirection.x * axisDirection.x + axisDirection.y * axisDirection.y;
+    const t = directionLengthSq > Number.EPSILON
+      ? (delta.x * axisDirection.x + delta.y * axisDirection.y) / directionLengthSq
+      : 0;
+    return {
+      x: axisPoint.x + axisDirection.x * t,
+      y: axisPoint.y + axisDirection.y * t,
+    };
   };
-  const axisPoint = isoUVToWorld(d, 0);
-  const delta = {
-    x: worldPt.x - axisPoint.x,
-    y: worldPt.y - axisPoint.y,
-  };
-  const directionLengthSq = axisDirection.x * axisDirection.x + axisDirection.y * axisDirection.y;
-  const t = directionLengthSq > Number.EPSILON
-    ? (delta.x * axisDirection.x + delta.y * axisDirection.y) / directionLengthSq
-    : 0;
-  const point = {
-    x: axisPoint.x + axisDirection.x * t,
-    y: axisPoint.y + axisDirection.y * t,
-  };
-  const projectedUv = worldToIsoUV(point);
+
+  const uAxis = Math.round(uv.u);
+  const vAxis = Math.round(uv.v);
+  const dAxis = Math.round(uv.u - uv.v);
+
+  const candidates = [
+    {
+      axis: "u",
+      point: projectToLine(isoUVToWorld(uAxis, 0), e2),
+    },
+    {
+      axis: "v",
+      point: projectToLine(isoUVToWorld(0, vAxis), e1),
+    },
+    {
+      axis: "d",
+      point: projectToLine(isoUVToWorld(dAxis, 0), { x: e1.x + e2.x, y: e1.y + e2.y }),
+    },
+  ].map((candidate) => ({
+    ...candidate,
+    distance: Math.hypot(worldPt.x - candidate.point.x, worldPt.y - candidate.point.y),
+  }));
+
+  candidates.sort((a, b) => a.distance - b.distance);
+  const winner = candidates[0];
+  const projectedUv = worldToIsoUV(winner.point);
 
   return {
-    point,
+    point: winner.point,
+    axis: winner.axis,
     u: projectedUv.u,
     v: projectedUv.v,
-    d,
+    d: projectedUv.u - projectedUv.v,
   };
 }
 
