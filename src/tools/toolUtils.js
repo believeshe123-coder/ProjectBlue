@@ -1,4 +1,4 @@
-import { isoUVToWorld, snapWorldToIso, worldToIsoUV } from "../core/isoGrid.js";
+import { isoUVToWorld, snapWorldToIso, snapWorldToIsoAxis, worldToIsoUV } from "../core/isoGrid.js";
 
 const SNAP_PIXELS = 14;
 
@@ -17,6 +17,17 @@ export function getSnappedPoint(context, screenPoint) {
       u: snappedGrid.u,
       v: snappedGrid.v,
       distance: gridDistance,
+    });
+
+    const snappedAxis = snapWorldToIsoAxis(raw);
+    const axisDistance = Math.hypot(raw.x - snappedAxis.point.x, raw.y - snappedAxis.point.y);
+    candidates.push({
+      point: snappedAxis.point,
+      kind: "axis",
+      u: snappedAxis.u,
+      v: snappedAxis.v,
+      d: snappedAxis.d,
+      distance: axisDistance,
     });
   }
 
@@ -47,6 +58,7 @@ export function getSnappedPoint(context, screenPoint) {
       kind: winner.kind,
       u: winner.u,
       v: winner.v,
+      d: winner.d,
     };
   }
 
@@ -58,6 +70,7 @@ export function getSnappedPoint(context, screenPoint) {
     kind: null,
     u: uv.u,
     v: uv.v,
+    d: uv.u - uv.v,
   };
 }
 
@@ -68,10 +81,19 @@ export function updateSnapIndicator(appState, snapped) {
     kind: snapped.kind,
     u: snapped.snapped ? snapped.u : null,
     v: snapped.snapped ? snapped.v : null,
+    d: snapped.snapped ? snapped.d ?? null : null,
   };
-  appState.snapDebugStatus = snapped.snapped
-    ? `SNAP: ${snapped.kind.toUpperCase()} (u=${snapped.u}, v=${snapped.v})`
-    : "SNAP: OFF";
+  if (!snapped.snapped) {
+    appState.snapDebugStatus = "SNAP: OFF";
+    return;
+  }
+
+  if (snapped.kind === "axis") {
+    appState.snapDebugStatus = `SNAP: AXIS (d=${snapped.d})`;
+    return;
+  }
+
+  appState.snapDebugStatus = `SNAP: ${snapped.kind.toUpperCase()} (u=${snapped.u}, v=${snapped.v})`;
 }
 
 export function getCurrentStyle(appState) {
@@ -96,4 +118,3 @@ export function getLineStyle(appState) {
     fillEnabled: false,
   };
 }
-

@@ -23,8 +23,6 @@ const statusHelperEl = document.getElementById("status-helper");
 const undoButton = document.getElementById("undo-btn");
 const redoButton = document.getElementById("redo-btn");
 const eraseModeToggle = document.getElementById("erase-mode-toggle");
-const eraserSizeInput = document.getElementById("eraser-size-input");
-const eraserSizeDisplay = document.getElementById("eraser-size-display");
 const snapGridToggle = document.getElementById("snap-grid-toggle");
 const snapMidToggle = document.getElementById("snap-mid-toggle");
 const debugSnapToggle = document.getElementById("debug-snap-toggle");
@@ -49,9 +47,6 @@ const helpModalCloseButton = document.getElementById("help-modal-close-btn");
 const helpModalContent = document.getElementById("help-modal-content");
 
 const strokeWidthInput = document.getElementById("stroke-width-input");
-const styleSwatches = document.getElementById("style-swatches");
-const paletteColorButton = document.getElementById("palette-color-btn");
-const customColorPicker = document.getElementById("customColorPicker");
 const fillColorPicker = document.getElementById("fill-color-picker");
 const fillOpacityInput = document.getElementById("fill-opacity-input");
 const fillOpacityDisplay = document.getElementById("fill-opacity-display");
@@ -98,15 +93,9 @@ const onboardingNextButton = document.getElementById("onboarding-next-btn");
 const onboardingDismissButton = document.getElementById("onboarding-dismiss-btn");
 
 
-const calmPalette = [
-  "#4aa3ff", "#7fb7be", "#9fc490", "#f2c57c", "#d39dbc", "#b5b4e3",
-  "#6aa9a0", "#f5f1e8", "#e2e8f0", "#9ca3af", "#ffffff", "#000000",
-  "#db6a8f", "#d9935e", "#d8bf69", "#7eb086", "#62a9b7", "#6e8cd7",
-  "#8f8ad5", "#b79bc8", "#e7d6be", "#c5ced9", "#888f99", "#3a3f48",
-];
 
-let activeColorTarget = "primary";
 let recentColors = [];
+const RECENT_COLOR_LIMIT = 5;
 
 const STORAGE_KEYS = {
   savedThemes: "bp_savedThemes",
@@ -117,7 +106,7 @@ const STORAGE_KEYS = {
   eraseModeMigrationV2: "bp_eraseMode_migration_v2",
 };
 
-const ERASE_INTERACTION_SUMMARY = "Click=Object, Drag=Segment";
+const ERASE_INTERACTION_SUMMARY = "Click: Delete object | Drag: Trim segments";
 
 const BUILTIN_THEMES = [
   { id: "builtin:light", name: "Light blueprint", bgColor: "#3e6478", gridColor: "#d0f1ff" },
@@ -185,7 +174,6 @@ const appState = {
     stepIndex: 0,
   },
   eraseMode: "hybrid",
-  eraserSizePx: 16,
   erasePreview: null,
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
@@ -198,7 +186,7 @@ const appState = {
     targetIds: [],
   },
   currentStyle: {
-    strokeColor: "#ffffff",
+    strokeColor: "#4aa3ff",
     strokeOpacity: 1,
     strokeWidth: 2,
     fillColor: "#4aa3ff",
@@ -247,29 +235,23 @@ const renderer = new Renderer({
 });
 
 
-function applyColorToTarget(target, color) {
-  if (target === "secondary") {
-    appState.currentStyle.fillColor = color;
-    return;
-  }
-
+function setUnifiedColor(color) {
   appState.currentStyle.strokeColor = color;
+  appState.currentStyle.fillColor = color;
 }
 
-function applyColorToActiveTarget(color) {
-  applyColorToTarget(activeColorTarget, color);
-  refreshStyleUI();
+function applyColorToTarget(target, color) {
+  setUnifiedColor(color);
 }
 
 function addRecentColor(color) {
-  recentColors = [color, ...recentColors.filter((recentColor) => recentColor.toLowerCase() !== color.toLowerCase())].slice(0, 8);
+  recentColors = [color, ...recentColors.filter((recentColor) => recentColor.toLowerCase() !== color.toLowerCase())].slice(0, RECENT_COLOR_LIMIT);
   renderRecentColors();
   refreshStyleUI();
 }
 
 function applySampledColor(target, color) {
   applyColorToTarget(target, color);
-  activeColorTarget = target;
   addRecentColor(color);
   refreshStyleUI();
 }
@@ -277,32 +259,29 @@ function applySampledColor(target, color) {
 function renderRecentColors() {
   if (!recentRow) return;
   recentRow.textContent = "";
-  for (const color of recentColors) {
+  for (let index = 0; index < RECENT_COLOR_LIMIT; index += 1) {
+    const color = recentColors[index] ?? null;
     const swatch = document.createElement("button");
     swatch.type = "button";
     swatch.className = "swatch";
-    swatch.style.setProperty("--swatch", color);
-    swatch.title = color;
-    swatch.addEventListener("click", () => {
-      appState.currentStyle.strokeColor = color;
-  refreshStyleUI();
-    });
-    recentRow.appendChild(swatch);
-  }
-}
 
-function renderStyleSwatches() {
-  for (const color of calmPalette) {
-    const swatch = document.createElement("button");
-    swatch.type = "button";
-    swatch.className = "swatch";
-    swatch.style.setProperty("--swatch", color);
-    swatch.title = color;
-    swatch.addEventListener("click", () => {
-      appState.currentStyle.strokeColor = color;
-  refreshStyleUI();
-    });
-    styleSwatches.appendChild(swatch);
+    if (color) {
+      swatch.style.setProperty("--swatch", color);
+      swatch.title = color;
+      swatch.setAttribute("aria-label", `Recent color ${index + 1}: ${color}`);
+      swatch.addEventListener("click", () => {
+        setUnifiedColor(color);
+        refreshStyleUI();
+      });
+    } else {
+      swatch.classList.add("swatch-empty");
+      swatch.title = "No recent color";
+      swatch.setAttribute("aria-label", `Recent color slot ${index + 1}: empty`);
+      swatch.disabled = true;
+      swatch.textContent = "×";
+    }
+
+    recentRow.appendChild(swatch);
   }
 }
 
@@ -319,12 +298,11 @@ function toRgba(hex, alpha) {
 function refreshStyleUI() {
   const style = appState.currentStyle;
   strokeWidthInput.value = String(style.strokeWidth);
-  customColorPicker.value = style.strokeColor;
-  if (fillColorPicker) fillColorPicker.value = style.fillColor;
+  if (fillColorPicker) fillColorPicker.value = style.strokeColor;
   if (fillOpacityInput) fillOpacityInput.value = String(style.fillOpacity ?? 1);
   if (fillOpacityDisplay) fillOpacityDisplay.textContent = Number(style.fillOpacity ?? 1).toFixed(2);
 
-  for (const swatch of document.querySelectorAll(".swatch-grid .swatch, .recent-row .swatch")) {
+  for (const swatch of document.querySelectorAll(".recent-row .swatch")) {
     swatch.classList.toggle("active", swatch.title.toLowerCase() === style.strokeColor.toLowerCase());
   }
 }
@@ -368,14 +346,8 @@ function updateContinuePolylineControl() {
 
 function updateEraseControls() {
   if (eraseModeToggle) {
-    eraseModeToggle.textContent = `Erase: ${ERASE_INTERACTION_SUMMARY}`;
-    eraseModeToggle.title = "Erase behavior is now hybrid: click removes a whole object; drag trims line segments.";
-  }
-  if (eraserSizeInput) {
-    eraserSizeInput.value = String(appState.eraserSizePx);
-  }
-  if (eraserSizeDisplay) {
-    eraserSizeDisplay.textContent = `${appState.eraserSizePx}px`;
+    eraseModeToggle.textContent = ERASE_INTERACTION_SUMMARY;
+    eraseModeToggle.title = "Hybrid erase mode: click deletes one object; drag trims only the line segments you cross.";
   }
 }
 
@@ -448,8 +420,14 @@ function setHelpModalOpen(open) {
 
 function getSnapStatusLabel() {
   const base = `Snap: Grid ${appState.snapToGrid ? "ON" : "OFF"} | Midpoint ${appState.snapToMidpoints ? "ON" : "OFF"}`;
-  if (appState.snapIndicator?.kind && appState.snapIndicator.u !== null && appState.snapIndicator.v !== null) {
-    const kindLabel = appState.snapIndicator.kind.toUpperCase();
+  if (!appState.snapIndicator?.kind) return base;
+
+  const kindLabel = appState.snapIndicator.kind.toUpperCase();
+  if (appState.snapIndicator.kind === "axis" && appState.snapIndicator.d !== null) {
+    return `${base} | SNAP: ${kindLabel} (d=${appState.snapIndicator.d})`;
+  }
+
+  if (appState.snapIndicator.u !== null && appState.snapIndicator.v !== null) {
     return `${base} | SNAP: ${kindLabel} (u=${appState.snapIndicator.u}, v=${appState.snapIndicator.v})`;
   }
 
@@ -466,7 +444,7 @@ const TOOL_HELPER_TEXT = {
   polyline: "Polyline: click-click to add segments, double-click to finish.",
   measure: "Measure: click and drag to measure between points.",
   fill: "Fill: click inside an enclosed region to fill it.",
-  erase: "Erase: click removes an object; drag trims line segments.",
+  erase: "Erase: click deletes one object; drag trims only crossed line segments.",
 };
 
 const ONBOARDING_STEPS = [
@@ -1188,7 +1166,6 @@ function buildProjectData() {
       showGridUnits: appState.showGridUnits,
       lastTool: getCurrentToolName(),
       eraseMode: appState.eraseMode,
-      eraserSizePx: appState.eraserSizePx,
       fillOpacity: appState.currentStyle.fillOpacity,
     },
     themes: {
@@ -1226,7 +1203,6 @@ function applyProjectData(project, { announce = true } = {}) {
   appState.showGridUnits = settings.showGridUnits === true;
   const hadLegacyEraseMode = settings.eraseMode === "object" || settings.eraseMode === "segment";
   appState.eraseMode = "hybrid";
-  appState.eraserSizePx = Number.isFinite(settings.eraserSizePx) ? Math.min(40, Math.max(6, settings.eraserSizePx)) : 16;
   appState.currentStyle.fillOpacity = Number.isFinite(settings.fillOpacity)
     ? Math.max(0, Math.min(1, settings.fillOpacity))
     : 1;
@@ -1255,11 +1231,10 @@ function applyProjectData(project, { announce = true } = {}) {
   localStorage.setItem("measurementMode", appState.measurementMode);
   localStorage.setItem("debugSnap", appState.debugSnap ? "1" : "0");
   localStorage.setItem("eraseMode", appState.eraseMode);
-  localStorage.setItem("eraserSizePx", String(appState.eraserSizePx));
   updateControlsFromState();
 
   if (hadLegacyEraseMode) {
-    appState.notifyStatus?.(`Erase behavior updated: ${ERASE_INTERACTION_SUMMARY}`, 3200);
+    appState.notifyStatus?.(`Erase mode: ${ERASE_INTERACTION_SUMMARY}`, 3200);
   }
 
   if (announce) {
@@ -1725,17 +1700,10 @@ measurementModeToggle?.addEventListener("click", () => {
 });
 
 eraseModeToggle?.addEventListener("click", () => {
-  appState.notifyStatus?.(`Erase behavior: ${ERASE_INTERACTION_SUMMARY}`, 2200);
+  appState.notifyStatus?.(`Erase mode: ${ERASE_INTERACTION_SUMMARY}`, 2200);
   updateEraseControls();
 });
 
-
-eraserSizeInput?.addEventListener("input", (event) => {
-  const value = Number.parseInt(event.target.value, 10);
-  appState.eraserSizePx = Number.isFinite(value) ? Math.min(40, Math.max(6, value)) : 16;
-  localStorage.setItem("eraserSizePx", String(appState.eraserSizePx));
-  updateEraseControls();
-});
 
 strokeWidthInput.addEventListener("input", (event) => {
   appState.currentStyle.strokeWidth = Number.parseInt(event.target.value, 10);
@@ -1796,19 +1764,8 @@ zOrderForwardButton?.addEventListener("click", () => runContextMenuZOrder("forwa
 zOrderBackwardButton?.addEventListener("click", () => runContextMenuZOrder("backward"));
 zOrderBackButton?.addEventListener("click", () => runContextMenuZOrder("back"));
 
-paletteColorButton?.addEventListener("click", () => {
-  customColorPicker?.click();
-});
-
-customColorPicker?.addEventListener("input", (event) => {
-  const color = event.target.value;
-  appState.currentStyle.strokeColor = color;
-  refreshStyleUI();
-  addRecentColor(color);
-});
-
 fillColorPicker?.addEventListener("input", (event) => {
-  appState.currentStyle.fillColor = event.target.value;
+  setUnifiedColor(event.target.value);
   refreshStyleUI();
   addRecentColor(event.target.value);
 });
@@ -1956,7 +1913,7 @@ function initializeEraseModePreference() {
 
   if (!hasMigrated) {
     if (storedEraseMode === "object" || storedEraseMode === "segment") {
-      appState.notifyStatus?.(`Erase behavior updated: ${ERASE_INTERACTION_SUMMARY}`, 3200);
+      appState.notifyStatus?.(`Erase mode: ${ERASE_INTERACTION_SUMMARY}`, 3200);
     }
     localStorage.setItem(STORAGE_KEYS.eraseModeMigrationV2, "1");
   }
@@ -1966,15 +1923,12 @@ function initializeEraseModePreference() {
   return appState.eraseMode;
 }
 
-renderStyleSwatches();
 renderRecentColors();
 resetStyleAlphaDefaults();
 refreshStyleUI();
 appState.showGridUnits = localStorage.getItem("showGridUnits") === "1";
 appState.measurementMode = normalizeMeasurementMode(localStorage.getItem("measurementMode") || (localStorage.getItem("smartMeasurements") === "0" ? "off" : "smart"));
 appState.eraseMode = initializeEraseModePreference();
-const storedEraserSizePx = Number.parseInt(localStorage.getItem("eraserSizePx") || "16", 10);
-appState.eraserSizePx = Number.isFinite(storedEraserSizePx) ? Math.min(40, Math.max(6, storedEraserSizePx)) : 16;
 savedThemes = loadSavedThemes();
 const storedActiveThemeId = localStorage.getItem(STORAGE_KEYS.activeThemeId) || BUILTIN_THEMES[0].id;
 const initialTheme = getThemeById(storedActiveThemeId) || BUILTIN_THEMES[0];
