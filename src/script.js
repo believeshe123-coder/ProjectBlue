@@ -49,6 +49,7 @@ const helpModalContent = document.getElementById("help-modal-content");
 
 const strokeWidthInput = document.getElementById("stroke-width-input");
 const fillColorPicker = document.getElementById("fill-color-picker");
+const saveColorButton = document.getElementById("save-color-button");
 const fillOpacityInput = document.getElementById("fill-opacity-input");
 const fillOpacityDisplay = document.getElementById("fill-opacity-display");
 const recentRow = document.getElementById("recent-row");
@@ -1766,7 +1767,11 @@ zOrderBackButton?.addEventListener("click", () => runContextMenuZOrder("back"));
 fillColorPicker?.addEventListener("input", (event) => {
   setUnifiedColor(event.target.value);
   refreshStyleUI();
-  addRecentColor(event.target.value);
+});
+
+saveColorButton?.addEventListener("click", () => {
+  if (!fillColorPicker) return;
+  addRecentColor(fillColorPicker.value);
 });
 
 fillOpacityInput?.addEventListener("input", (event) => {
