@@ -44,7 +44,7 @@ function makeSelectContext(shapeStore) {
   return {
     shapeStore,
     appState,
-    camera: { zoom: 1 },
+    camera: { zoom: 1, screenToWorld: (p) => p },
     pushHistoryState() {},
     canvas: null,
   };
@@ -54,7 +54,7 @@ function makeEraseContext(shapeStore) {
   return {
     shapeStore,
     appState: { eraseMode: 'line', eraserSizePx: 12, erasePreview: null, currentStyle: { strokeWidth: 2 } },
-    camera: { zoom: 1 },
+    camera: { zoom: 1, screenToWorld: (p) => p },
     pushHistoryState() {},
     historyStore: { pushState() {} },
   };
@@ -128,7 +128,7 @@ test('click erase removes topmost non-line renderables', () => {
 });
 
 
-test('line mode drag erase records one history state per drag action', () => {
+test('line mode two-click erase records one history state when finalized', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
   shapeStore.addShape(line);
@@ -137,14 +137,18 @@ test('line mode drag erase records one history state per drag action', () => {
   const eraseTool = new EraseTool({
     shapeStore,
     appState: { eraseMode: 'line', eraserSizePx: 12, erasePreview: null, currentStyle: { strokeWidth: 2 } },
-    camera: { zoom: 1 },
+    camera: { zoom: 1, screenToWorld: (p) => p },
     pushHistoryState() { historyPushes += 1; },
     historyStore: { pushState() {} },
   });
 
-  eraseTool.onMouseDown({ worldPoint: { x: 8, y: 0 } });
-  eraseTool.onMouseMove({ worldPoint: { x: 12, y: 0 } });
-  eraseTool.onMouseUp({ worldPoint: { x: 12, y: 0 } });
+  eraseTool.onMouseDown({ worldPoint: { x: 8, y: 0 }, screenPoint: { x: 8, y: 0 } });
+  eraseTool.onMouseMove({ worldPoint: { x: 12, y: 0 }, screenPoint: { x: 12, y: 0 } });
+
+  assert.equal(historyPushes, 0);
+
+  eraseTool.onMouseDown({ worldPoint: { x: 12, y: 0 }, screenPoint: { x: 12, y: 0 } });
+  eraseTool.onMouseUp({ worldPoint: { x: 12, y: 0 }, screenPoint: { x: 12, y: 0 } });
 
   assert.equal(historyPushes, 1);
 });
@@ -178,7 +182,7 @@ test('fill mode does not erase lines and drag only removes fill entities', () =>
   const eraseTool = new EraseTool({
     shapeStore,
     appState: { eraseMode: 'fill', erasePreview: null, currentStyle: { strokeWidth: 2 } },
-    camera: { zoom: 1 },
+    camera: { zoom: 1, screenToWorld: (p) => p },
     pushHistoryState() {},
     historyStore: { pushState() {} },
   });
@@ -270,6 +274,7 @@ test('line drag erase splits line and preserves line metadata', () => {
 
   eraseTool.onMouseDown({ worldPoint: eraseStart, screenPoint: eraseStart });
   eraseTool.onMouseMove({ worldPoint: eraseEnd, screenPoint: eraseEnd });
+  eraseTool.onMouseDown({ worldPoint: eraseEnd, screenPoint: eraseEnd });
   eraseTool.onMouseUp({ worldPoint: eraseEnd, screenPoint: eraseEnd });
 
   const lines = shapeStore.getShapes().filter((shape) => shape.type === 'line');
