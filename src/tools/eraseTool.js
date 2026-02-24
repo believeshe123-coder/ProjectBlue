@@ -231,6 +231,7 @@ export class EraseTool extends BaseTool {
     this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
+    this.lineEraseStartPoint = null;
   }
 
   onActivate() {
@@ -243,6 +244,7 @@ export class EraseTool extends BaseTool {
     this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
+    this.lineEraseStartPoint = null;
     this.context.appState.erasePreview = null;
   }
 
@@ -361,6 +363,7 @@ export class EraseTool extends BaseTool {
       this.isPointerDown = false;
       this.isSegmentErasing = false;
       this.strokePoints = [];
+      this.lineEraseStartPoint = null;
       this.context.appState.erasePreview = null;
       this.context.appState.snapIndicator = null;
       this.context.appState.snapDebugStatus = "SNAP: OFF";
@@ -373,6 +376,38 @@ export class EraseTool extends BaseTool {
     const effectivePoint = mode === "line"
       ? this.getLineModePoint(screenPoint, worldPoint)
       : worldPoint;
+
+    if (mode === "line") {
+      if (!this.lineEraseStartPoint) {
+        this.lineEraseStartPoint = effectivePoint;
+        this.strokePoints = [effectivePoint];
+        appState.erasePreview = {
+          point: effectivePoint,
+          strokeWidthPx: this.getEraseStrokeWidthPx(),
+          mode,
+          pathPoints: [effectivePoint],
+          affectedLineIds: [],
+          targetObjectId: null,
+          targetObjectType: null,
+        };
+        return;
+      }
+
+      this.isPointerDown = true;
+      this.isSegmentErasing = true;
+      this.strokePoints = [this.lineEraseStartPoint, effectivePoint];
+      appState.erasePreview = {
+        point: effectivePoint,
+        strokeWidthPx: this.getEraseStrokeWidthPx(),
+        mode,
+        pathPoints: [...this.strokePoints],
+        affectedLineIds: this.getSegmentEraseCandidates(this.strokePoints, this.getEraseRadiusWorld(), mode),
+        targetObjectId: null,
+        targetObjectType: null,
+      };
+      return;
+    }
+
     const objectCandidate = this.getObjectEraseCandidate(effectivePoint, mode);
 
     this.isPointerDown = true;
@@ -396,6 +431,24 @@ export class EraseTool extends BaseTool {
     const effectivePoint = mode === "line"
       ? this.getLineModePoint(screenPoint, worldPoint)
       : worldPoint;
+
+    if (mode === "line" && this.lineEraseStartPoint) {
+      const pathPoints = this.isPointerDown
+        ? [this.lineEraseStartPoint, effectivePoint]
+        : [this.lineEraseStartPoint, effectivePoint];
+      this.strokePoints = pathPoints;
+      appState.erasePreview = {
+        point: effectivePoint,
+        strokeWidthPx: this.getEraseStrokeWidthPx(),
+        mode,
+        pathPoints,
+        affectedLineIds: this.getSegmentEraseCandidates(pathPoints, this.getEraseRadiusWorld(), mode),
+        targetObjectId: null,
+        targetObjectType: null,
+      };
+      return;
+    }
+
     const objectCandidate = this.getObjectEraseCandidate(effectivePoint, mode);
     appState.erasePreview = {
       point: effectivePoint,
@@ -438,6 +491,25 @@ export class EraseTool extends BaseTool {
     const effectivePoint = mode === "line"
       ? this.getLineModePoint(screenPoint, worldPoint)
       : worldPoint;
+
+    if (mode === "line") {
+      if (!this.isPointerDown || !this.lineEraseStartPoint) return;
+      this.strokePoints = [this.lineEraseStartPoint, effectivePoint];
+      if (distSq(this.strokePoints[0], this.strokePoints[1]) >= 1e-6) {
+        if (this.context.pushHistoryState) this.context.pushHistoryState();
+        else historyStore.pushState(shapeStore.serialize());
+        this.applySegmentErase(mode);
+      }
+
+      this.isPointerDown = false;
+      this.isSegmentErasing = false;
+      this.strokePoints = [];
+      this.lineEraseStartPoint = null;
+      appState.erasePreview = null;
+      appState.snapIndicator = null;
+      appState.snapDebugStatus = "SNAP: OFF";
+      return;
+    }
 
     if (this.didDragErase && this.isSegmentErasing && this.strokePoints.length >= 2) {
       if (this.context.pushHistoryState) this.context.pushHistoryState();
