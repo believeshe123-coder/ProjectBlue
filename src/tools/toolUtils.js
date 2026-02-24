@@ -1,9 +1,61 @@
 import { isoUVToWorld, snapWorldToIso, snapWorldToIsoAxis, worldToIsoUV } from "../core/isoGrid.js";
 
 const SNAP_PIXELS = 14;
+const INTERSECTION_EPSILON = 1e-9;
+const SNAP_KIND_PRIORITY = { intersection: 0, endpoint: 1, axis: 2, grid: 3, midpoint: 4 };
+
+function cross2D(a, b) {
+  return a.x * b.y - a.y * b.x;
+}
+
+function getSegmentIntersection(aStart, aEnd, bStart, bEnd) {
+  const r = { x: aEnd.x - aStart.x, y: aEnd.y - aStart.y };
+  const s = { x: bEnd.x - bStart.x, y: bEnd.y - bStart.y };
+  const denom = cross2D(r, s);
+  if (Math.abs(denom) < INTERSECTION_EPSILON) return null;
+
+  const delta = { x: bStart.x - aStart.x, y: bStart.y - aStart.y };
+  const t = cross2D(delta, s) / denom;
+  const u = cross2D(delta, r) / denom;
+
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return {
+    x: aStart.x + r.x * t,
+    y: aStart.y + r.y * t,
+  };
+}
+
+function getLineSnapPoints(shapeStore) {
+  const snapPoints = [];
+  const lines = shapeStore
+    .getShapes()
+    .filter((shape) => shape?.type === "line" && shape.visible !== false);
+
+  for (const line of lines) {
+    snapPoints.push({ point: line.start, kind: "endpoint" });
+    snapPoints.push({ point: line.end, kind: "endpoint" });
+    snapPoints.push({
+      point: {
+        x: (line.start.x + line.end.x) / 2,
+        y: (line.start.y + line.end.y) / 2,
+      },
+      kind: "midpoint",
+    });
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const intersection = getSegmentIntersection(lines[i].start, lines[i].end, lines[j].start, lines[j].end);
+      if (!intersection) continue;
+      snapPoints.push({ point: intersection, kind: "intersection" });
+    }
+  }
+
+  return snapPoints;
+}
 
 export function getSnappedPoint(context, screenPoint) {
-  const { appState, camera } = context;
+  const { appState, camera, shapeStore } = context;
   const raw = camera.screenToWorld(screenPoint);
   const thresholdWorld = SNAP_PIXELS / camera.zoom;
   const candidates = [];
@@ -45,11 +97,25 @@ export function getSnappedPoint(context, screenPoint) {
       v: vMid,
       distance: midpointDistance,
     });
+
+    for (const snapPoint of getLineSnapPoints(shapeStore)) {
+      const distance = Math.hypot(raw.x - snapPoint.point.x, raw.y - snapPoint.point.y);
+      candidates.push({
+        point: snapPoint.point,
+        kind: snapPoint.kind,
+        distance,
+      });
+    }
   }
 
   const winner = candidates
     .filter((candidate) => candidate.distance <= thresholdWorld)
-    .sort((a, b) => a.distance - b.distance)[0];
+    .sort((a, b) => {
+      const aPriority = SNAP_KIND_PRIORITY[a.kind] ?? 10;
+      const bPriority = SNAP_KIND_PRIORITY[b.kind] ?? 10;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return a.distance - b.distance;
+    })[0];
 
   if (winner) {
     return {

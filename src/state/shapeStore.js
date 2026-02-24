@@ -196,10 +196,28 @@ export class ShapeStore {
       const startUV = worldToIsoUV(start);
       const endUV = worldToIsoUV(end);
       return {
-        id, type: "line", start, end, startUV, endUV, visible: node.style.visible !== false,
-        locked: node.style.locked === true, selected: node.style.selected === true,
-        strokeColor: node.style.strokeColor, strokeWidth: node.style.strokeWidth, zIndex: node.style.zIndex ?? 0,
-        ownedByFaceIds: node.localGeom.ownedByFaceIds ?? [], createdAt: node.createdAt ?? 0,
+        id,
+        type: "line",
+        start,
+        end,
+        startUV,
+        endUV,
+        visible: node.style.visible !== false,
+        locked: node.style.locked === true,
+        selected: node.style.selected === true,
+        strokeColor: node.style.strokeColor,
+        fillColor: node.style.fillColor,
+        strokeWidth: node.style.strokeWidth,
+        opacity: node.style.opacity,
+        strokeOpacity: node.style.strokeOpacity,
+        fillOpacity: node.style.fillOpacity,
+        fillEnabled: node.style.fillEnabled,
+        pinnedMeasure: node.style.pinnedMeasure,
+        zIndex: node.style.zIndex ?? 0,
+        groupId: node.style.groupId ?? null,
+        sourceForPolygonId: node.style.sourceForPolygonId ?? null,
+        ownedByFaceIds: node.localGeom.ownedByFaceIds ?? [],
+        createdAt: node.createdAt ?? 0,
       };
     }
 
