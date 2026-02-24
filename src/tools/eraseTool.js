@@ -1,6 +1,8 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
+import { normalizeEraseMode } from "../state/eraseMode.js";
+import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 const MIN_REMAINING_T = 0.0005;
 
@@ -230,6 +232,8 @@ export class EraseTool extends BaseTool {
 
   onActivate() {
     this.context.appState.erasePreview = null;
+    this.context.appState.snapIndicator = null;
+    this.context.appState.snapDebugStatus = "SNAP: OFF";
   }
 
   onDeactivate() {
@@ -249,25 +253,41 @@ export class EraseTool extends BaseTool {
     return (strokeWidthPx / 2) / this.context.camera.zoom;
   }
 
-  getObjectEraseCandidate(worldPoint) {
-    const { shapeStore, camera } = this.context;
-    const toleranceWorld = 8 / camera.zoom;
-    return shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
+  getActiveMode() {
+    return normalizeEraseMode(this.context.appState.eraseMode);
   }
 
-  eraseObject(worldPoint) {
-    const { shapeStore, historyStore } = this.context;
-    const hit = this.getObjectEraseCandidate(worldPoint);
+  getTargetTypeSet(mode = this.getActiveMode()) {
+    return mode === "fill"
+      ? new Set(["fillRegion", "face", "polygon"])
+      : new Set(["line"]);
+  }
 
-    if (!hit) return;
-    if (!(["line", "face", "polygon", "fillRegion"].includes(hit.type))) return;
+  isShapeErasableInMode(shape, mode = this.getActiveMode()) {
+    return this.getTargetTypeSet(mode).has(shape?.type);
+  }
+
+  getObjectEraseCandidate(worldPoint, mode = this.getActiveMode()) {
+    const { shapeStore, camera } = this.context;
+    const toleranceWorld = 8 / camera.zoom;
+    const allowedTypes = [...this.getTargetTypeSet(mode)];
+    return shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false, allowedTypes });
+  }
+
+  eraseObject(worldPoint, mode = this.getActiveMode()) {
+    const { shapeStore, historyStore } = this.context;
+    const hit = this.getObjectEraseCandidate(worldPoint, mode);
+
+    if (!hit || !this.isShapeErasableInMode(hit, mode)) return false;
 
     if (this.context.pushHistoryState) this.context.pushHistoryState();
     else historyStore.pushState(shapeStore.serialize());
     shapeStore.removeShape(hit.id);
+    return true;
   }
 
-  getSegmentEraseCandidates(strokePoints, worldRadius) {
+  getSegmentEraseCandidates(strokePoints, worldRadius, mode = this.getActiveMode()) {
+    if (mode !== "line") return [];
     const { shapeStore } = this.context;
     const affectedLineIds = [];
 
@@ -282,9 +302,26 @@ export class EraseTool extends BaseTool {
     return affectedLineIds;
   }
 
-  applySegmentErase() {
-    const { appState, shapeStore } = this.context;
+  collectSweepEraseCandidateIds(mode = this.getActiveMode()) {
+    if (mode !== "fill") return [];
+    const targetIds = new Set();
+    for (const point of this.strokePoints) {
+      const hit = this.getObjectEraseCandidate(point, mode);
+      if (hit?.id) targetIds.add(hit.id);
+    }
+    return [...targetIds];
+  }
+
+  applySegmentErase(mode = this.getActiveMode()) {
+    const { shapeStore } = this.context;
     if (this.strokePoints.length < 2) return false;
+
+    if (mode === "fill") {
+      const targetIds = this.collectSweepEraseCandidateIds(mode);
+      if (!targetIds.length) return false;
+      for (const id of targetIds) shapeStore.removeShape(id);
+      return true;
+    }
 
     const worldRadius = this.getEraseRadiusWorld();
     const updates = [];
@@ -309,47 +346,59 @@ export class EraseTool extends BaseTool {
     return true;
   }
 
+  getLineModePoint(screenPoint, fallbackWorldPoint) {
+    if (!screenPoint) return fallbackWorldPoint;
+    const snapped = getSnappedPoint(this.context, screenPoint);
+    updateSnapIndicator(this.context.appState, snapped);
+    return snapped.pt;
+  }
+
   onKeyDown(event) {
     if (event.key === "Escape") {
       this.isPointerDown = false;
       this.isSegmentErasing = false;
       this.strokePoints = [];
       this.context.appState.erasePreview = null;
+      this.context.appState.snapIndicator = null;
+      this.context.appState.snapDebugStatus = "SNAP: OFF";
     }
   }
 
-  onMouseDown({ worldPoint }) {
+  onMouseDown({ worldPoint, screenPoint }) {
     const { appState } = this.context;
-    const objectCandidate = this.getObjectEraseCandidate(worldPoint);
-
-    if (appState.eraseMode === "object") {
-      this.eraseObject(worldPoint);
-      return;
-    }
+    const mode = this.getActiveMode();
+    const effectivePoint = mode === "line"
+      ? this.getLineModePoint(screenPoint, worldPoint)
+      : worldPoint;
+    const objectCandidate = this.getObjectEraseCandidate(effectivePoint, mode);
 
     this.isPointerDown = true;
     this.isSegmentErasing = false;
     this.didDragErase = false;
-    this.strokePoints = [worldPoint];
+    this.strokePoints = [effectivePoint];
     appState.erasePreview = {
-      point: worldPoint,
+      point: effectivePoint,
       strokeWidthPx: this.getEraseStrokeWidthPx(),
-      mode: "hybrid",
-      pathPoints: [worldPoint],
+      mode,
+      pathPoints: [effectivePoint],
       affectedLineIds: [],
       targetObjectId: objectCandidate?.id ?? null,
       targetObjectType: objectCandidate?.type ?? null,
     };
   }
 
-  onMouseMove({ worldPoint }) {
+  onMouseMove({ worldPoint, screenPoint }) {
     const { appState } = this.context;
-    const objectCandidate = this.getObjectEraseCandidate(worldPoint);
+    const mode = this.getActiveMode();
+    const effectivePoint = mode === "line"
+      ? this.getLineModePoint(screenPoint, worldPoint)
+      : worldPoint;
+    const objectCandidate = this.getObjectEraseCandidate(effectivePoint, mode);
     appState.erasePreview = {
-      point: worldPoint,
+      point: effectivePoint,
       strokeWidthPx: this.getEraseStrokeWidthPx(),
-      mode: "hybrid",
-      pathPoints: this.isPointerDown && this.strokePoints.length ? [...this.strokePoints] : [worldPoint],
+      mode,
+      pathPoints: this.isPointerDown && this.strokePoints.length ? [...this.strokePoints] : [effectivePoint],
       affectedLineIds: this.isSegmentErasing ? (appState.erasePreview?.affectedLineIds ?? []) : [],
       targetObjectId: objectCandidate?.id ?? null,
       targetObjectType: objectCandidate?.type ?? null,
@@ -358,9 +407,15 @@ export class EraseTool extends BaseTool {
     if (!this.isPointerDown) return;
 
     const last = this.strokePoints[this.strokePoints.length - 1];
-    if (!last || distSq(last, worldPoint) < 1e-6) return;
+    if (!last || distSq(last, effectivePoint) < 1e-6) return;
 
-    this.strokePoints.push(worldPoint);
+    if (mode === "line") {
+      const startPoint = this.strokePoints[0];
+      if (!startPoint || distSq(startPoint, effectivePoint) < 1e-6) return;
+      this.strokePoints = [startPoint, effectivePoint];
+    } else {
+      this.strokePoints.push(effectivePoint);
+    }
     appState.erasePreview.pathPoints = [...this.strokePoints];
 
     if (!this.isSegmentErasing && this.strokePoints.length >= 2) {
@@ -371,23 +426,31 @@ export class EraseTool extends BaseTool {
     if (!this.isSegmentErasing) return;
 
     const worldRadius = this.getEraseRadiusWorld();
-    appState.erasePreview.affectedLineIds = this.getSegmentEraseCandidates(this.strokePoints, worldRadius);
+    appState.erasePreview.affectedLineIds = this.getSegmentEraseCandidates(this.strokePoints, worldRadius, mode);
   }
 
-  onMouseUp({ worldPoint }) {
+  onMouseUp({ worldPoint, screenPoint }) {
     const { appState, historyStore, shapeStore } = this.context;
+    const mode = this.getActiveMode();
+    const effectivePoint = mode === "line"
+      ? this.getLineModePoint(screenPoint, worldPoint)
+      : worldPoint;
 
     if (this.didDragErase && this.isSegmentErasing && this.strokePoints.length >= 2) {
       if (this.context.pushHistoryState) this.context.pushHistoryState();
       else historyStore.pushState(shapeStore.serialize());
-      this.applySegmentErase();
+      this.applySegmentErase(mode);
     } else if (this.isPointerDown) {
-      this.eraseObject(worldPoint);
+      this.eraseObject(effectivePoint, mode);
     }
 
     this.isPointerDown = false;
     this.isSegmentErasing = false;
     this.strokePoints = [];
     appState.erasePreview = null;
+    if (mode === "line") {
+      appState.snapIndicator = null;
+      appState.snapDebugStatus = "SNAP: OFF";
+    }
   }
 }

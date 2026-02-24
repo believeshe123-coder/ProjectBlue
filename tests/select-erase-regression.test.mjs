@@ -53,14 +53,14 @@ function makeSelectContext(shapeStore) {
 function makeEraseContext(shapeStore) {
   return {
     shapeStore,
-    appState: { eraseMode: 'object', eraserSizePx: 12, erasePreview: null },
+    appState: { eraseMode: 'line', eraserSizePx: 12, erasePreview: null, currentStyle: { strokeWidth: 2 } },
     camera: { zoom: 1 },
     pushHistoryState() {},
     historyStore: { pushState() {} },
   };
 }
 
-test('line selection and object erase still work', () => {
+test('line selection and line erase still work', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
   shapeStore.addShape(line);
@@ -117,23 +117,26 @@ test('click erase removes topmost non-line renderables', () => {
   shapeStore.addShape(polygon);
 
   const mid = { x: 10, y: 0 };
-  const eraseTool = new EraseTool(makeEraseContext(shapeStore));
-  eraseTool.eraseObject(mid);
+  const eraseTool = new EraseTool({
+    ...makeEraseContext(shapeStore),
+    appState: { eraseMode: 'fill', erasePreview: null, currentStyle: { strokeWidth: 2 } },
+  });
+  eraseTool.eraseObject(mid, 'fill');
 
   assert.equal(shapeStore.getShapeById('polygon-top'), null);
   assert.notEqual(shapeStore.getShapeById('line-bottom'), null);
 });
 
 
-test('segment erase records one history state per drag action', () => {
+test('line mode drag erase records one history state per drag action', () => {
   const shapeStore = new ShapeStore();
-  const line = new Line({ id: 'line-1', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } });
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
   shapeStore.addShape(line);
 
   let historyPushes = 0;
   const eraseTool = new EraseTool({
     shapeStore,
-    appState: { eraseMode: 'hybrid', eraserSizePx: 12, erasePreview: null },
+    appState: { eraseMode: 'line', eraserSizePx: 12, erasePreview: null, currentStyle: { strokeWidth: 2 } },
     camera: { zoom: 1 },
     pushHistoryState() { historyPushes += 1; },
     historyStore: { pushState() {} },
@@ -144,4 +147,76 @@ test('segment erase records one history state per drag action', () => {
   eraseTool.onMouseUp({ worldPoint: { x: 12, y: 0 } });
 
   assert.equal(historyPushes, 1);
+});
+
+
+test('line mode does not erase fill shapes', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const face = new FaceShape({ id: 'face-1', pointsWorld: [{ x: -5, y: -5 }, { x: 25, y: -5 }, { x: 25, y: 5 }, { x: -5, y: 5 }] });
+  shapeStore.addShape(line);
+  shapeStore.addShape(face);
+
+  const eraseTool = new EraseTool({
+    ...makeEraseContext(shapeStore),
+    appState: { eraseMode: 'line', erasePreview: null, currentStyle: { strokeWidth: 2 } },
+  });
+
+  eraseTool.eraseObject({ x: 10, y: 0 }, 'line');
+
+  assert.equal(shapeStore.getShapeById('line-1'), null);
+  assert.notEqual(shapeStore.getShapeById('face-1'), null);
+});
+
+test('fill mode does not erase lines and drag only removes fill entities', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const face = new FaceShape({ id: 'face-1', pointsWorld: [{ x: -5, y: -5 }, { x: 25, y: -5 }, { x: 25, y: 5 }, { x: -5, y: 5 }] });
+  shapeStore.addShape(line);
+  shapeStore.addShape(face);
+
+  const eraseTool = new EraseTool({
+    shapeStore,
+    appState: { eraseMode: 'fill', erasePreview: null, currentStyle: { strokeWidth: 2 } },
+    camera: { zoom: 1 },
+    pushHistoryState() {},
+    historyStore: { pushState() {} },
+  });
+
+  eraseTool.onMouseDown({ worldPoint: { x: 10, y: 0 } });
+  eraseTool.onMouseMove({ worldPoint: { x: 12, y: 0 } });
+  eraseTool.onMouseUp({ worldPoint: { x: 12, y: 0 } });
+
+  assert.notEqual(shapeStore.getShapeById('line-1'), null);
+  assert.equal(shapeStore.getShapeById('face-1'), null);
+});
+
+
+test('line mode drag path stays straight (start/end only)', () => {
+  const shapeStore = new ShapeStore();
+  shapeStore.addShape(new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(3, 0) }));
+
+  const eraseTool = new EraseTool({
+    shapeStore,
+    appState: {
+      eraseMode: 'line',
+      erasePreview: null,
+      currentStyle: { strokeWidth: 2 },
+      snapToGrid: false,
+      snapToMidpoints: false,
+      snapIndicator: null,
+      snapDebugStatus: 'SNAP: OFF',
+    },
+    camera: { zoom: 1, screenToWorld: (p) => p },
+    pushHistoryState() {},
+    historyStore: { pushState() {} },
+  });
+
+  eraseTool.onMouseDown({ worldPoint: { x: 0, y: 0 }, screenPoint: { x: 0, y: 0 } });
+  eraseTool.onMouseMove({ worldPoint: { x: 5, y: 0 }, screenPoint: { x: 5, y: 0 } });
+  eraseTool.onMouseMove({ worldPoint: { x: 10, y: 0 }, screenPoint: { x: 10, y: 0 } });
+
+  assert.equal(eraseTool.context.appState.erasePreview.pathPoints.length, 2);
+  assert.deepEqual(eraseTool.context.appState.erasePreview.pathPoints[0], eraseTool.strokePoints[0]);
+  assert.deepEqual(eraseTool.context.appState.erasePreview.pathPoints[1], eraseTool.strokePoints[1]);
 });

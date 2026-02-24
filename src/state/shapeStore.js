@@ -246,6 +246,7 @@ export class ShapeStore {
 
   getTopmostHitShape(point, toleranceWorld = 6, options = {}) {
     const lineOnly = options?.lineOnly === true;
+    const allowedTypes = Array.isArray(options?.allowedTypes) ? new Set(options.allowedTypes) : null;
     const orderedIds = lineOnly
       ? this.getLineOrderIds()
       : this.getDrawList();
@@ -255,6 +256,7 @@ export class ShapeStore {
       if (!node || node.kind !== "shape") continue;
       if (node.style?.visible === false || node.style?.locked === true) continue;
       if (lineOnly && node.shapeType !== "line") continue;
+      if (allowedTypes && !allowedTypes.has(node.shapeType)) continue;
       const worldTx = this.getWorldTransform(id);
       const localPt = pointToLocal(point, worldTx);
       if (node.shapeType === "face") {

@@ -9,6 +9,7 @@ import { MeasureTool } from "./tools/measureTool.js";
 import { PolylineTool } from "./tools/polylineTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
+import { normalizeEraseMode } from "./state/eraseMode.js";
 
 const DISABLE_SCENE_GRAPH = true;
 const ENABLE_GROUPING = true;
@@ -103,10 +104,7 @@ const STORAGE_KEYS = {
   autosaveProject: "bp_autosave_project",
   historyState: "bp_history_state_v1",
   walkthroughSeen: "bp_walkthrough_seen_v1",
-  eraseModeMigrationV2: "bp_eraseMode_migration_v2",
 };
-
-const ERASE_INTERACTION_SUMMARY = "Click: Delete object | Drag: Trim segments";
 
 const BUILTIN_THEMES = [
   { id: "builtin:light", name: "Light blueprint", bgColor: "#3e6478", gridColor: "#d0f1ff" },
@@ -123,7 +121,7 @@ const TOOL_METADATA = {
   polyline: { displayName: "Polyline", shortcut: "P", clickSummary: "Click to chain segments; Enter/Escape to finish" },
   measure: { displayName: "Measure", shortcut: "M", clickSummary: "Click two points to place measurement" },
   fill: { displayName: "Fill", shortcut: "F", clickSummary: "Click inside a closed region to fill" },
-  erase: { displayName: "Erase", shortcut: "E", clickSummary: `Hybrid erase: ${ERASE_INTERACTION_SUMMARY}` },
+  erase: { displayName: "Erase", shortcut: "E", clickSummary: "Line mode erases line geometry only. Fill mode erases fill regions only." },
 };
 
 const camera = new Camera();
@@ -173,7 +171,7 @@ const appState = {
     active: false,
     stepIndex: 0,
   },
-  eraseMode: "hybrid",
+  eraseMode: "line",
   erasePreview: null,
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
@@ -346,8 +344,8 @@ function updateContinuePolylineControl() {
 
 function updateEraseControls() {
   if (eraseModeToggle) {
-    eraseModeToggle.textContent = ERASE_INTERACTION_SUMMARY;
-    eraseModeToggle.title = "Hybrid erase mode: click deletes one object; drag trims only the line segments you cross.";
+    eraseModeToggle.value = appState.eraseMode;
+    eraseModeToggle.title = "Choose whether erasing affects line geometry or fill regions.";
   }
 }
 
@@ -381,7 +379,8 @@ function getCurrentToolName() {
 }
 
 function getEraseToolStatusLabel() {
-  return `${TOOL_METADATA.erase.displayName}: ${ERASE_INTERACTION_SUMMARY}`;
+  const modeLabel = appState.eraseMode === "fill" ? "Fill mode" : "Line mode";
+  return `${TOOL_METADATA.erase.displayName}: ${modeLabel}`;
 }
 
 function getToolStatusLabel() {
@@ -444,7 +443,7 @@ const TOOL_HELPER_TEXT = {
   polyline: "Polyline: click-click to add segments, double-click to finish.",
   measure: "Measure: click and drag to measure between points.",
   fill: "Fill: click inside an enclosed region to fill it.",
-  erase: "Erase: click deletes one object; drag trims only crossed line segments.",
+  erase: "Erase: line mode erases line geometry only; fill mode erases fill regions only.",
 };
 
 const ONBOARDING_STEPS = [
@@ -1201,8 +1200,7 @@ function applyProjectData(project, { announce = true } = {}) {
   appState.snapToMidpoints = settings.snapMidpoint !== false;
   appState.measurementMode = normalizeMeasurementMode(settings.measurementMode ?? (settings.smartMeasurements === false ? "off" : "smart"));
   appState.showGridUnits = settings.showGridUnits === true;
-  const hadLegacyEraseMode = settings.eraseMode === "object" || settings.eraseMode === "segment";
-  appState.eraseMode = "hybrid";
+  appState.eraseMode = normalizeEraseMode(settings.eraseMode);
   appState.currentStyle.fillOpacity = Number.isFinite(settings.fillOpacity)
     ? Math.max(0, Math.min(1, settings.fillOpacity))
     : 1;
@@ -1233,9 +1231,6 @@ function applyProjectData(project, { announce = true } = {}) {
   localStorage.setItem("eraseMode", appState.eraseMode);
   updateControlsFromState();
 
-  if (hadLegacyEraseMode) {
-    appState.notifyStatus?.(`Erase mode: ${ERASE_INTERACTION_SUMMARY}`, 3200);
-  }
 
   if (announce) {
     appState.notifyStatus?.("Project loaded");
@@ -1699,9 +1694,13 @@ measurementModeToggle?.addEventListener("click", () => {
   updateMeasurementModeControl();
 });
 
-eraseModeToggle?.addEventListener("click", () => {
-  appState.notifyStatus?.(`Erase mode: ${ERASE_INTERACTION_SUMMARY}`, 2200);
+eraseModeToggle?.addEventListener("change", (event) => {
+  appState.eraseMode = normalizeEraseMode(event.target.value);
+  localStorage.setItem("eraseMode", appState.eraseMode);
+  appState.notifyStatus?.(`Erase mode: ${appState.eraseMode === "line" ? "Erase line" : "Erase fill"}`, 2200);
   updateEraseControls();
+  refreshStatus();
+  refreshToolHelperText();
 });
 
 
@@ -1909,17 +1908,8 @@ window.addEventListener("keydown", (event) => {
 
 function initializeEraseModePreference() {
   const storedEraseMode = localStorage.getItem("eraseMode");
-  const hasMigrated = localStorage.getItem(STORAGE_KEYS.eraseModeMigrationV2) === "1";
-
-  if (!hasMigrated) {
-    if (storedEraseMode === "object" || storedEraseMode === "segment") {
-      appState.notifyStatus?.(`Erase mode: ${ERASE_INTERACTION_SUMMARY}`, 3200);
-    }
-    localStorage.setItem(STORAGE_KEYS.eraseModeMigrationV2, "1");
-  }
-
-  appState.eraseMode = "hybrid";
-  localStorage.setItem("eraseMode", "hybrid");
+  appState.eraseMode = normalizeEraseMode(storedEraseMode);
+  localStorage.setItem("eraseMode", appState.eraseMode);
   return appState.eraseMode;
 }
 
