@@ -475,6 +475,53 @@ export class ShapeStore {
     return out;
   }
 
+  getObjectRootIds(ids = []) {
+    const validIds = [...new Set(ids.filter((id) => this.nodes[id]))];
+    return validIds.filter((id) => {
+      let parentId = this.parentById[id] ?? null;
+      while (parentId) {
+        if (validIds.includes(parentId)) return false;
+        parentId = this.parentById[parentId] ?? null;
+      }
+      return true;
+    });
+  }
+
+  getAllObjectIds({ rootOnly = false } = {}) {
+    const objectIds = Object.values(this.nodes)
+      .filter((node) => node?.kind === "object")
+      .map((node) => node.id);
+    if (!rootOnly) return objectIds;
+    return objectIds.filter((id) => {
+      const parentId = this.parentById[id] ?? null;
+      return !parentId || this.nodes[parentId]?.kind !== "object";
+    });
+  }
+
+  getLineDescendantsForNode(id) {
+    const node = this.nodes[id];
+    if (!node) return [];
+    if (node.kind === "shape") return node.shapeType === "line" ? [id] : [];
+    if (node.kind !== "object") return [];
+
+    const out = [];
+    const stack = [...(node.children ?? [])];
+    const seen = new Set();
+    while (stack.length) {
+      const childId = stack.pop();
+      if (!childId || seen.has(childId)) continue;
+      seen.add(childId);
+      const child = this.nodes[childId];
+      if (!child) continue;
+      if (child.kind === "shape" && child.shapeType === "line") {
+        out.push(childId);
+      } else if (child.kind === "object") {
+        stack.push(...(child.children ?? []));
+      }
+    }
+    return out;
+  }
+
   duplicateNodes(ids = [], { offset = null } = {}) {
     const inputIds = [...new Set(ids.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer"))];
     if (!inputIds.length) return [];
@@ -740,15 +787,26 @@ export class ShapeStore {
     const node = this.nodes[id];
     if (!node) return false;
     const parentId = this.parentById[id];
+    const parent = parentId ? this.nodes[parentId] : null;
+    const insertionIndex = Array.isArray(parent?.children) ? parent.children.indexOf(id) : -1;
     if (parentId) {
-      const parent = this.nodes[parentId];
       if (parent?.children) parent.children = parent.children.filter((cid) => cid !== id);
       delete this.parentById[id];
     }
     if (node.kind === "object") {
-      for (const childId of node.children ?? []) delete this.parentById[childId];
+      const childIds = [...(node.children ?? [])].filter((childId) => this.nodes[childId]);
+      if (parent && insertionIndex >= 0) {
+        const nextChildren = [...(parent.children ?? [])];
+        nextChildren.splice(insertionIndex, 0, ...childIds);
+        parent.children = nextChildren;
+      }
+      for (const childId of childIds) {
+        if (parentId) this.parentById[childId] = parentId;
+        else delete this.parentById[childId];
+      }
     }
     delete this.nodes[id];
+    this.invalidateDerivedData();
     return true;
   }
 
@@ -965,21 +1023,49 @@ export class ShapeStore {
   }
 
 
-  createLineGroup() { return null; }
+  createLineGroup(ids = []) {
+    return this.createObjectFromIds(ids, { name: "Object" });
+  }
 
-  getLineGroup() { return null; }
+  getLineGroup(id) {
+    const node = this.nodes[id];
+    if (!node || node.kind !== "object") return null;
+    return { id: node.id, childIds: [...(node.children ?? [])] };
+  }
 
-  hasLineGroups() { return false; }
+  hasLineGroups() {
+    return this.getAllObjectIds().length > 0;
+  }
 
-  deleteLineGroup() { return false; }
+  deleteLineGroup(id) {
+    const node = this.nodes[id];
+    if (!node || node.kind !== "object") return false;
+    return this.removeShape(id);
+  }
 
-  clearAllLineGroups() {}
+  clearAllLineGroups() {
+    const objectIdsByDepth = this.getAllObjectIds()
+      .sort((a, b) => this.getNodeDepth(b) - this.getNodeDepth(a));
+    for (const objectId of objectIdsByDepth) this.removeShape(objectId);
+  }
+
+  getNodeDepth(id) {
+    let depth = 0;
+    let cursor = id;
+    while (this.parentById[cursor]) {
+      depth += 1;
+      cursor = this.parentById[cursor];
+    }
+    return depth;
+  }
 
   reorderSelectionZ(selectionIds = [], mode = "front") {
-    if (mode === "front") return this.bringToFront(selectionIds);
-    if (mode === "forward") return this.bringForward(selectionIds);
-    if (mode === "backward") return this.sendBackward(selectionIds);
-    if (mode === "back") return this.sendToBack(selectionIds);
+    const lineIds = [...new Set(selectionIds.flatMap((id) => this.getLineDescendantsForNode(id)))];
+    if (!lineIds.length) return false;
+    if (mode === "front") return this.bringToFront(lineIds);
+    if (mode === "forward") return this.bringForward(lineIds);
+    if (mode === "backward") return this.sendBackward(lineIds);
+    if (mode === "back") return this.sendToBack(lineIds);
     return false;
   }
 
@@ -994,6 +1080,67 @@ export class ShapeStore {
       this.nodes = serialized.nodes;
       this.parentById = serialized.parentById ?? {};
       this.rootIds = serialized.rootIds.filter((id) => this.nodes[id]);
+
+      const legacyLineGroups = serialized?.lineGroups;
+      const legacyGroups = [];
+      if (Array.isArray(legacyLineGroups)) {
+        for (const entry of legacyLineGroups) {
+          if (!entry || typeof entry !== "object") continue;
+          legacyGroups.push({
+            id: entry.id,
+            childIds: [...new Set(entry.childIds ?? entry.memberIds ?? [])].filter((childId) => this.nodes[childId]),
+            createdAt: entry.createdAt,
+            name: entry.name,
+          });
+        }
+      } else if (legacyLineGroups && typeof legacyLineGroups === "object") {
+        for (const [id, entry] of Object.entries(legacyLineGroups)) {
+          const childIds = [...new Set(entry?.childIds ?? entry?.memberIds ?? [])].filter((childId) => this.nodes[childId]);
+          legacyGroups.push({ id, childIds, createdAt: entry?.createdAt, name: entry?.name });
+        }
+      }
+
+      const legacyGroupChildren = new Map();
+      for (const node of Object.values(this.nodes)) {
+        if (node?.kind !== "shape") continue;
+        const groupId = node?.style?.groupId;
+        if (!groupId) continue;
+        if (!legacyGroupChildren.has(groupId)) legacyGroupChildren.set(groupId, []);
+        legacyGroupChildren.get(groupId).push(node.id);
+      }
+      for (const [groupId, childIds] of legacyGroupChildren.entries()) {
+        const existing = legacyGroups.find((entry) => entry.id === groupId);
+        if (existing) {
+          existing.childIds = [...new Set([...(existing.childIds ?? []), ...childIds])];
+        } else {
+          legacyGroups.push({ id: groupId, childIds: [...new Set(childIds)], createdAt: Date.now(), name: "Object" });
+        }
+      }
+
+      for (const group of legacyGroups) {
+        const childIds = [...new Set(group.childIds ?? [])].filter((childId) => this.nodes[childId]);
+        if (!childIds.length) continue;
+        const objectId = group.id && !this.nodes[group.id] ? group.id : makeId("object");
+        this.nodes[objectId] = {
+          id: objectId,
+          kind: "object",
+          name: group.name ?? "Object",
+          transform: { ...IDENTITY_TRANSFORM },
+          children: childIds,
+          createdAt: group.createdAt ?? Date.now(),
+        };
+        const layerId = this.getNodeLayerId(childIds[0]) ?? this.ensureDefaultLayer();
+        const parent = this.nodes[layerId];
+        if (parent?.children && !parent.children.includes(objectId)) parent.children.push(objectId);
+        this.parentById[objectId] = layerId;
+        for (const childId of childIds) {
+          const oldParentId = this.parentById[childId];
+          const oldParent = oldParentId ? this.nodes[oldParentId] : null;
+          if (oldParent?.children) oldParent.children = oldParent.children.filter((id) => id !== childId);
+          this.parentById[childId] = objectId;
+          if (this.nodes[childId]?.style?.groupId) delete this.nodes[childId].style.groupId;
+        }
+      }
 
       const hasLayers = this.rootIds.some((id) => this.nodes[id]?.kind === "layer");
       if (!hasLayers) {

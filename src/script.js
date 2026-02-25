@@ -120,7 +120,7 @@ let savedThemes = [];
 
 
 const TOOL_METADATA = {
-  select: { displayName: "Select", shortcut: "V", clickSummary: "Select and move lines/groups" },
+  select: { displayName: "Select", shortcut: "V", clickSummary: "Select and move lines/objects" },
   "iso-line": { displayName: "Line", shortcut: "L", clickSummary: "Click start and end points" },
   curve: { displayName: "Curve", shortcut: "C", clickSummary: "Click start, click control, click end" },
   measure: { displayName: "Measure", shortcut: "M", clickSummary: "Click two points to place measurement" },
@@ -156,7 +156,6 @@ const appState = {
   showGridUnits: false,
   selectedType: null,
   selectedIds: new Set(),
-  selectedGroupId: null,
   keepSelecting: false,
   includeEnclosedFacesInObjectAssembly: false,
   selectedRegionKey: null,
@@ -621,7 +620,6 @@ function getSnapshot() {
     selectedIds: [...appState.selectedIds],
     selectedType: appState.selectedType,
     keepSelecting: appState.keepSelecting === true,
-    selectedGroupId: appState.selectedGroupId ?? null,
   };
 }
 
@@ -723,8 +721,14 @@ function applySnapshot(snapshot) {
 
   shapeStore.replaceFromSerialized(normalizeShapePayload(snapshot.shapes ?? []));
   appState.keepSelecting = snapshot.keepSelecting === true;
+  const legacySelectedGroupId = snapshot.selectedGroupId ?? null;
+  if (snapshot.selectedType === "group") {
+    appState.selectedType = legacySelectedGroupId ? "object" : null;
+    appState.selectedIds = legacySelectedGroupId ? new Set([legacySelectedGroupId]) : new Set();
+    appState.lastSelectedId = legacySelectedGroupId;
+    return;
+  }
   appState.selectedType = snapshot.selectedType ?? null;
-  appState.selectedGroupId = snapshot.selectedGroupId ?? null;
 }
 
 function pushHistoryState() {
@@ -857,7 +861,6 @@ function setSelection(ids = [], type = null, lastId = null) {
   if (ids.length === 0) appState.selectionBoxWorld = null;
   appState.selectedType = ids.length > 0 ? type : null;
   appState.selectedIds = new Set(ids);
-  appState.selectedGroupId = appState.selectedType === "group" ? (lastId ?? ids[0] ?? null) : null;
   appState.lastSelectedId = lastId;
   updateSelectedFlags();
 }
@@ -885,7 +888,6 @@ function clearSelectionState() {
   appState.selectedType = null;
   appState.selectedIds = new Set();
   appState.lastSelectedId = null;
-  appState.selectedGroupId = null;
   appState.selectedRegionKey = null;
   appState.selectionBoxWorld = null;
   shapeStore.clearSelection();
@@ -906,16 +908,6 @@ function getSelectedMeasurableShape() {
 }
 
 function deleteSelection() {
-  if (appState.selectedType === "group" && appState.selectedGroupId) {
-    const group = shapeStore.getLineGroup(appState.selectedGroupId);
-    if (!group) return;
-    const childIds = group.childIds.filter((id) => shapeStore.getNodeById(id));
-    pushHistoryState();
-    shapeStore.deleteNodesInEntirety(childIds);
-    shapeStore.deleteLineGroup(group.id);
-    clearSelectionState();
-    return;
-  }
   const selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
   if (!selectedIds.length) return;
   pushHistoryState();
@@ -958,15 +950,11 @@ function createGroupFromSelection() {
   if (appState.selectedType !== "line" || appState.selectedIds.size < 2) return;
   const selectedLineIds = [...appState.selectedIds];
   pushHistoryState();
-  const groupId = shapeStore.createLineGroup(selectedLineIds);
-  if (!groupId) return;
-  appState.selectedType = "group";
-  appState.selectedGroupId = groupId;
-  appState.lastSelectedId = groupId;
-  appState.selectedIds = new Set(selectedLineIds);
-  updateSelectedFlags();
-  appState.notifyStatus?.(`Grouped ${selectedLineIds.length} lines`, 1200);
-  console.log(`[GROUP] Grouped ${selectedLineIds.length} lines -> ${groupId}`);
+  const objectId = shapeStore.createObjectFromIds(selectedLineIds, { name: "Object" });
+  if (!objectId) return;
+  setSelection([objectId], "object", objectId);
+  appState.notifyStatus?.(`Object created from ${selectedLineIds.length} lines`, 1200);
+  console.log(`[OBJECT] Created from ${selectedLineIds.length} lines -> ${objectId}`);
 }
 
 function makeObjectFromSelection() {
@@ -1095,9 +1083,10 @@ function ungroupSelection() {
 }
 
 function clearAllGroups() {
-  if (!shapeStore.hasLineGroups()) return;
+  const objectRootIds = shapeStore.getAllObjectIds({ rootOnly: true });
+  if (!objectRootIds.length) return;
   pushHistoryState();
-  shapeStore.clearAllLineGroups();
+  shapeStore.deleteNodesInEntirety(objectRootIds);
   clearSelectionState();
 }
 
@@ -1127,8 +1116,8 @@ function clampMenuPosition(x, y) {
 
 function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
   const isLineSelection = appState.selectedType === "line" && appState.selectedIds.size > 0;
-  const isGroupSelection = appState.selectedType === "group" && !!appState.selectedGroupId;
-  if (!zOrderMenu || (!isLineSelection && !isGroupSelection)) {
+  const isObjectSelection = appState.selectedType === "object" && appState.selectedIds.size > 0;
+  if (!zOrderMenu || (!isLineSelection && !isObjectSelection)) {
     closeContextMenu();
     return;
   }
@@ -1140,14 +1129,9 @@ function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
 
   let targetIds = [...appState.selectedIds];
   let targetType = appState.selectedType;
-  if (isGroupSelection) {
-    const group = shapeStore.getLineGroup(appState.selectedGroupId);
-    if (!group) {
-      closeContextMenu();
-      return;
-    }
-    targetIds = [...group.childIds];
-    targetType = "group";
+  if (isObjectSelection) {
+    targetIds = shapeStore.getObjectRootIds(targetIds);
+    targetType = "object";
   }
 
   appState.ui.arrangeOpen = true;
