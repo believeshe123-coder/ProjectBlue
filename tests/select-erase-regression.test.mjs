@@ -104,6 +104,49 @@ test('face and polygon are selectable via topmost hit-testing', () => {
   assert.equal(selectTool.context.appState.selectedIds.has(polygon.id), true);
 });
 
+
+
+test('selecting an object child resolves to object root', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'child-line', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  shapeStore.addShape(line);
+  const objectId = shapeStore.createObjectFromIds([line.id], { name: 'Object 1' });
+
+  const lineView = shapeStore.getShapeById(line.id);
+  const mid = { x: (lineView.start.x + lineView.end.x) / 2, y: (lineView.start.y + lineView.end.y) / 2 };
+
+  const selectTool = new SelectTool(makeSelectContext(shapeStore));
+  selectTool.context.appState.setSelection([objectId], 'object', objectId);
+  selectTool.onMouseDown({ worldPoint: mid, screenPoint: { x: 0, y: 0 } });
+
+  assert.equal(selectTool.context.appState.selectedType, 'object');
+  assert.deepEqual([...selectTool.context.appState.selectedIds], [objectId]);
+});
+
+test('dragging object selection moves object transform and descendants', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'child-line', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  shapeStore.addShape(line);
+  const objectId = shapeStore.createObjectFromIds([line.id], { name: 'Object 1' });
+
+  const selectTool = new SelectTool(makeSelectContext(shapeStore));
+  selectTool.context.appState.setSelection([objectId], 'object', objectId);
+
+  const initial = shapeStore.getShapeById(line.id);
+  const anchor = { ...initial.start };
+
+  selectTool.onMouseDown({ worldPoint: anchor, screenPoint: { x: 0, y: 0 } });
+  selectTool.onMouseMove({ worldPoint: { x: anchor.x + 10, y: anchor.y + 5 }, screenPoint: { x: 10, y: 5 } });
+  selectTool.onMouseUp({ worldPoint: { x: anchor.x + 10, y: anchor.y + 5 }, screenPoint: { x: 10, y: 5 } });
+
+  const objectNode = shapeStore.getNodeById(objectId);
+  assert.ok(Math.abs(objectNode.transform.x - 10) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.y - 5) < 1e-6);
+
+  const moved = shapeStore.getShapeById(line.id);
+  assert.ok(Math.abs(moved.start.x - (initial.start.x + 10)) < 1e-6);
+  assert.ok(Math.abs(moved.start.y - (initial.start.y + 5)) < 1e-6);
+});
 test('click erase removes topmost non-line renderables', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ id: 'line-bottom', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0), zIndex: 0 });

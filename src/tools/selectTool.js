@@ -1,10 +1,25 @@
 import { BaseTool } from "./baseTool.js";
 import { snapWorldToIso } from "../core/isoGrid.js";
 
-const MOVABLE_TYPES = new Set(["line"]);
+const MOVABLE_SHAPE_TYPES = new Set(["line", "face", "polygon"]);
 
 function isMovableShape(shape) {
-  return !!shape && MOVABLE_TYPES.has(shape.type) && shape.locked !== true;
+  return !!shape && MOVABLE_SHAPE_TYPES.has(shape.type) && shape.locked !== true;
+}
+
+function getNodeSelectionType(node) {
+  if (!node) return null;
+  if (node.kind === "object") return "object";
+  if (node.kind === "shape") return node.shapeType;
+  return null;
+}
+
+function isMovableNode(node) {
+  if (!node) return false;
+  if (node.kind === "object") return true;
+  if (node.kind !== "shape") return false;
+  if (node.style?.locked === true) return false;
+  return MOVABLE_SHAPE_TYPES.has(node.shapeType);
 }
 
 function getSelectedIds(appState) {
@@ -42,7 +57,65 @@ export class SelectTool extends BaseTool {
     if (this.context.canvas) this.context.canvas.style.cursor = "default";
   }
 
+  getAncestorChain(id) {
+    const { shapeStore } = this.context;
+    const chain = [];
+    let currentId = id;
+    const visited = new Set();
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
+      const node = shapeStore.getNodeById(currentId);
+      if (!node) break;
+      chain.push(node);
+      currentId = shapeStore.parentById?.[currentId] ?? null;
+    }
+    return chain;
+  }
+
+  resolveSelectionRoot(hitShapeId) {
+    const { appState } = this.context;
+    const chain = this.getAncestorChain(hitShapeId);
+    if (!chain.length) return null;
+    const movableChain = chain.filter((node) => isMovableNode(node));
+    if (!movableChain.length) return chain[0];
+
+    const selectedIds = appState.selectedIds instanceof Set ? appState.selectedIds : new Set();
+    const selectedMovable = movableChain.filter((node) => selectedIds.has(node.id));
+    const selectedObject = selectedMovable.filter((node) => node.kind === "object").at(-1);
+    if (selectedObject) return selectedObject;
+    const selectedRoot = selectedMovable.at(-1);
+    if (selectedRoot) return selectedRoot;
+
+    const topObject = movableChain.filter((node) => node.kind === "object").at(-1);
+    if (topObject) return topObject;
+    return movableChain[0];
+  }
+
+  getObjectAnchorWorld(objectId) {
+    const { shapeStore } = this.context;
+    const objectNode = shapeStore.getNodeById(objectId);
+    if (!objectNode || objectNode.kind !== "object") return null;
+
+    const descendantIds = shapeStore.getDescendantIds(objectId);
+    const shapeDescendants = descendantIds.filter((id) => shapeStore.getNodeById(id)?.kind === "shape");
+    const bounds = shapeStore.getSelectionBoundsFromIds(shapeDescendants);
+    if (bounds) {
+      return {
+        x: (bounds.minX + bounds.maxX) / 2,
+        y: (bounds.minY + bounds.maxY) / 2,
+      };
+    }
+
+    const firstChildId = objectNode.children?.[0];
+    if (!firstChildId) return null;
+    return this.getAnchorWorld(firstChildId);
+  }
+
   getAnchorWorld(id) {
+    const node = this.context.shapeStore.getNodeById(id);
+    if (!node) return null;
+    if (node.kind === "object") return this.getObjectAnchorWorld(id);
+
     const shape = this.context.shapeStore.getShapeById(id);
     if (!shape) return null;
     if (shape.type === "line") return { ...shape.start };
@@ -67,17 +140,11 @@ export class SelectTool extends BaseTool {
     }
 
     appState.selectionBoxWorld = null;
-    const targetId = hit.id;
-    const targetType = hit.type;
+    const selectionRoot = this.resolveSelectionRoot(hit.id);
+    const targetId = selectionRoot?.id ?? hit.id;
+    const targetType = getNodeSelectionType(selectionRoot) ?? hit.type;
     const hitWasSelected = appState.selectedIds instanceof Set && appState.selectedIds.has(targetId);
-    const activeGroup = appState.selectedType === "group" && appState.selectedGroupId
-      ? shapeStore.getLineGroup(appState.selectedGroupId)
-      : null;
-    const hitInsideActiveGroup = !!activeGroup && activeGroup.childIds.includes(targetId);
-
-    if (hitInsideActiveGroup) {
-      // Preserve group selection when interacting with a selected group member.
-    } else if (keepSelecting && appState.selectedType === targetType) {
+    if (keepSelecting && appState.selectedType === targetType) {
       if (hitWasSelected) appState.removeFromSelection?.(targetId);
       else appState.addToSelection?.(targetId, targetType);
     } else {
@@ -85,7 +152,8 @@ export class SelectTool extends BaseTool {
     }
 
     appState.updateSelectionBar?.();
-    if (!isMovableShape(hit)) {
+    const targetNode = shapeStore.getNodeById(targetId);
+    if (!isMovableNode(targetNode)) {
       this.dragState = null;
       notifyNonMovable(appState, hit);
       return;
@@ -93,18 +161,15 @@ export class SelectTool extends BaseTool {
 
     const selectedIds = getSelectedIds(appState);
     let dragIds = selectedIds.includes(targetId) ? selectedIds : [targetId];
-    if (appState.selectedType === "group" && appState.selectedGroupId) {
-      const group = shapeStore.getLineGroup(appState.selectedGroupId);
-      if (group) dragIds = [...group.childIds];
-    }
-    const firstLine = shapeStore.getShapeById(dragIds[0]);
+    const isDraggingObjects = dragIds.some((id) => shapeStore.getNodeById(id)?.kind === "object");
 
     this.dragState = {
       startMouseWorld: { ...worldPoint },
       startScreen: { ...screenPoint },
       clickedShapeId: targetId,
       dragIds,
-      anchorOriginal: firstLine?.type === "line" ? { ...firstLine.start } : (this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint }),
+      moveOptions: isDraggingObjects ? {} : { lineOnly: appState.selectedType === "line" },
+      anchorOriginal: this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint },
       didDrag: false,
       historyCaptured: false,
       totalAppliedDelta: { x: 0, y: 0 },
@@ -155,7 +220,7 @@ export class SelectTool extends BaseTool {
       }
 
       for (const id of this.dragState.dragIds) {
-        shapeStore.applyWorldDeltaToNode(id, stepDelta, { lineOnly: true });
+        shapeStore.applyWorldDeltaToNode(id, stepDelta, this.dragState.moveOptions);
       }
       this.dragState.totalAppliedDelta = snappedDelta;
 
@@ -164,10 +229,11 @@ export class SelectTool extends BaseTool {
     }
 
     const hover = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
-    this.hoverShapeId = hover?.id ?? null;
+    const hoverRoot = hover ? this.resolveSelectionRoot(hover.id) : null;
+    this.hoverShapeId = hoverRoot?.id ?? hover?.id ?? null;
     if (canvas) {
-      if (!hover) canvas.style.cursor = "default";
-      else canvas.style.cursor = isMovableShape(hover) ? "grab" : "not-allowed";
+      if (!hoverRoot && !hover) canvas.style.cursor = "default";
+      else canvas.style.cursor = isMovableNode(hoverRoot ?? (hover ? shapeStore.getNodeById(hover.id) : null)) ? "grab" : "not-allowed";
     }
   }
 
@@ -181,11 +247,15 @@ export class SelectTool extends BaseTool {
         maxY: Math.max(this.marqueeState.startWorld.y, worldPoint.y),
       };
       const hitShapes = shapeStore.getShapesIntersectingRect(rect);
+      const hitRoots = [...new Map(hitShapes
+        .map((shape) => this.resolveSelectionRoot(shape.id))
+        .filter(Boolean)
+        .map((node) => [node.id, node])).values()];
       const baseType = appState.keepSelecting ? appState.selectedType : null;
-      const selectionType = baseType ?? hitShapes[0]?.type ?? null;
-      const hitIds = hitShapes
-        .filter((shape) => !selectionType || shape.type === selectionType)
-        .map((shape) => shape.id);
+      const selectionType = baseType ?? getNodeSelectionType(hitRoots[0]) ?? null;
+      const hitIds = hitRoots
+        .filter((node) => !selectionType || getNodeSelectionType(node) === selectionType)
+        .map((node) => node.id);
       if (appState.keepSelecting && selectionType && appState.selectedType === selectionType) {
         for (const id of hitIds) {
           if (appState.selectedIds.has(id)) appState.removeFromSelection?.(id);
@@ -205,9 +275,9 @@ export class SelectTool extends BaseTool {
 
     this.dragState = null;
     if (this.context.canvas) {
-      const hoverShape = this.hoverShapeId ? this.context.shapeStore.getShapeById(this.hoverShapeId) : null;
-      if (!hoverShape) this.context.canvas.style.cursor = "default";
-      else this.context.canvas.style.cursor = isMovableShape(hoverShape) ? "grab" : "not-allowed";
+      const hoverNode = this.hoverShapeId ? this.context.shapeStore.getNodeById(this.hoverShapeId) : null;
+      if (!hoverNode) this.context.canvas.style.cursor = "default";
+      else this.context.canvas.style.cursor = isMovableNode(hoverNode) ? "grab" : "not-allowed";
     }
   }
 
