@@ -158,3 +158,25 @@ test('duplicateNodes keeps each duplicated root adjacent to its source in siblin
   assert.equal(store.nodes[dupC].nodeTransform.x, 5);
   assert.equal(store.nodes[dupC].nodeTransform.y, 5);
 });
+
+
+test('new shapes route to active layer and layer controls are exposed', () => {
+  const store = new ShapeStore();
+  const layerA = store.getLayerOrderIds()[0];
+  const layerB = store.createLayer({ name: 'Layer B' });
+
+  assert.equal(store.getActiveLayerId(), layerB);
+  store.setLayerVisibility(layerB, false);
+  store.setLayerLocked(layerB, true);
+  assert.equal(store.getLayerNode(layerB).visible, false);
+  assert.equal(store.getLayerNode(layerB).locked, true);
+
+  store.setLayerVisibility(layerB, true);
+  store.setLayerLocked(layerB, false);
+  store.addShape(makeLine('line-b', 0, 0, 1, 1));
+  assert.equal(store.getNodeLayerId('line-b'), layerB);
+
+  store.setActiveLayer(layerA);
+  store.addShape(makeLine('line-a', 2, 2, 3, 3));
+  assert.equal(store.getNodeLayerId('line-a'), layerA);
+});

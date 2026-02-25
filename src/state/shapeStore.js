@@ -114,6 +114,79 @@ export class ShapeStore {
     return this.rootIds.filter((id) => this.nodes[id]?.kind === "layer");
   }
 
+  getActiveLayerId() {
+    const fallbackId = this.ensureDefaultLayer();
+    if (!this.getLayerNode(this.activeLayerId)) this.activeLayerId = fallbackId;
+    return this.activeLayerId;
+  }
+
+  setActiveLayer(id) {
+    if (!this.getLayerNode(id)) return false;
+    this.activeLayerId = id;
+    return true;
+  }
+
+  createLayer({ name } = {}) {
+    const id = makeLayerId();
+    const index = this.getLayerOrderIds().length + 1;
+    this.nodes[id] = {
+      id,
+      kind: "layer",
+      name: name || `Layer ${index}`,
+      visible: true,
+      locked: false,
+      children: [],
+      createdAt: Date.now(),
+    };
+    this.rootIds = [...this.getLayerOrderIds(), id];
+    this.activeLayerId = id;
+    return id;
+  }
+
+  setLayerVisibility(id, visible) {
+    const layer = this.getLayerNode(id);
+    if (!layer) return false;
+    layer.visible = visible !== false;
+    return true;
+  }
+
+  setLayerLocked(id, locked) {
+    const layer = this.getLayerNode(id);
+    if (!layer) return false;
+    layer.locked = locked === true;
+    return true;
+  }
+
+  reorderLayers(nextOrderedIds = []) {
+    const known = new Set(this.getLayerOrderIds());
+    const filtered = nextOrderedIds.filter((id) => known.has(id));
+    const missing = this.getLayerOrderIds().filter((id) => !filtered.includes(id));
+    this.rootIds = [...filtered, ...missing];
+    if (!this.getLayerNode(this.activeLayerId)) this.activeLayerId = this.rootIds[0] ?? null;
+    return [...this.rootIds];
+  }
+
+  ensureLayerHierarchyIntegrity() {
+    const layerIds = this.getLayerOrderIds();
+    const layerSet = new Set(layerIds);
+    for (const id of Object.keys(this.nodes)) {
+      const node = this.nodes[id];
+      if (!node || node.kind === "layer") continue;
+      const parentId = this.parentById[id] ?? null;
+      if (!parentId || !this.nodes[parentId]) {
+        this.attachNodeToLayer(id);
+        continue;
+      }
+      const parent = this.nodes[parentId];
+      if (parent.kind === "layer") {
+        if (!layerSet.has(parentId)) this.attachNodeToLayer(id);
+        continue;
+      }
+      const layerId = this.getNodeLayerId(parentId);
+      if (!layerId || !layerSet.has(layerId)) this.attachNodeToLayer(id);
+    }
+  }
+
   getNodeLayerId(id) {
     let currentId = id;
     while (currentId) {
@@ -1156,6 +1229,7 @@ export class ShapeStore {
         this.ensureDefaultLayer();
       }
 
+      this.ensureLayerHierarchyIntegrity();
       this.invalidateDerivedData();
       return;
     }
@@ -1202,6 +1276,7 @@ export class ShapeStore {
         for (const childId of (shape.childIds ?? [])) this.parentById[childId] = shape.id;
       }
     }
+    this.ensureLayerHierarchyIntegrity();
     this.invalidateDerivedData();
   }
 }
