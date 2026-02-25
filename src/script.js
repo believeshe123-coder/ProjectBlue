@@ -909,8 +909,53 @@ function getSelectedMeasurableShape() {
   return (shape && (shape.type === "line" || shape.type === "polygon")) ? shape : null;
 }
 
+function normalizeSelectionForOperation(ids = [...appState.selectedIds], { operation = "action" } = {}) {
+  const inputIds = [...new Set(ids)];
+  const existingIds = inputIds.filter((id) => shapeStore.getNodeById(id));
+  const staleCount = inputIds.length - existingIds.length;
+  const normalizedIds = shapeStore.getObjectRootIds(existingIds);
+  const objectIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
+  const shapeIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "shape");
+
+  if (staleCount > 0) {
+    appState.notifyStatus?.(`Recovered from ${staleCount} stale selection item${staleCount === 1 ? "" : "s"}`, 1200);
+  }
+
+  const preferredKind = appState.selectedType === "object" ? "object" : "shape";
+  let idsByKind = preferredKind === "object" ? objectIds : shapeIds;
+  let resolvedKind = preferredKind;
+
+  if (!idsByKind.length && objectIds.length) {
+    idsByKind = objectIds;
+    resolvedKind = "object";
+  } else if (!idsByKind.length && shapeIds.length) {
+    idsByKind = shapeIds;
+    resolvedKind = "shape";
+  }
+
+  if (objectIds.length && shapeIds.length) {
+    const fallbackLabel = resolvedKind === "object" ? "objects" : "shapes";
+    appState.notifyStatus?.(`Mixed selection detected; ${operation} applied to ${fallbackLabel} only`, 1600);
+  }
+
+  if (!idsByKind.length) {
+    if (appState.selectedIds.size > 0) clearSelectionState();
+    return { ids: [], selectionType: null, kind: null };
+  }
+
+  let selectionType = "line";
+  if (resolvedKind === "object") {
+    selectionType = "object";
+  } else {
+    const firstShapeNode = shapeStore.getNodeById(idsByKind[0]);
+    selectionType = firstShapeNode?.shapeType === "face" ? "face" : (firstShapeNode?.shapeType ?? "line");
+  }
+
+  return { ids: idsByKind, selectionType, kind: resolvedKind };
+}
+
 function deleteSelection() {
-  const selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
+  const { ids: selectedIds } = normalizeSelectionForOperation([...appState.selectedIds], { operation: "delete" });
   if (!selectedIds.length) return;
   pushHistoryState();
   shapeStore.deleteNodesInEntirety(selectedIds);
@@ -923,7 +968,7 @@ function duplicateSelection() {
     appState.notifyStatus?.("Disabled while scene graph is off", 1500);
     return false;
   }
-  const selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
+  const { ids: selectedIds } = normalizeSelectionForOperation([...appState.selectedIds], { operation: "duplicate" });
   if (!selectedIds.length) return false;
 
   const offset = isoUVToWorld(1, 1);
@@ -1130,11 +1175,12 @@ function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
     return;
   }
 
-  let targetIds = [...appState.selectedIds];
-  let targetType = appState.selectedType;
-  if (isObjectSelection) {
-    targetIds = shapeStore.getObjectRootIds(targetIds);
-    targetType = "object";
+  const normalizedSelection = normalizeSelectionForOperation([...appState.selectedIds], { operation: "arrange" });
+  const targetIds = normalizedSelection.ids;
+  const targetType = normalizedSelection.selectionType;
+  if (!targetIds.length) {
+    closeContextMenu();
+    return;
   }
 
   appState.ui.arrangeOpen = true;
@@ -1175,7 +1221,10 @@ function hidePanel(panelId) {
 }
 
 function reorderSelectionZ(mode, idsOverride = null) {
-  const targetIds = idsOverride ? [...idsOverride] : [...appState.selectedIds];
+  const targetSelection = normalizeSelectionForOperation(idsOverride ? [...idsOverride] : [...appState.selectedIds], {
+    operation: "reorder",
+  });
+  const targetIds = targetSelection.ids;
   if (!targetIds.length) return false;
   const before = getSnapshot();
   const didChange = shapeStore.reorderSelectionZ(targetIds, mode);
