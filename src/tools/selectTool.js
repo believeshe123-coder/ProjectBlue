@@ -125,7 +125,7 @@ export class SelectTool extends BaseTool {
     return null;
   }
 
-  onMouseDown({ worldPoint, screenPoint }) {
+  onMouseDown({ event, worldPoint, screenPoint }) {
     const { shapeStore, camera, appState } = this.context;
     const toleranceWorld = 8 / camera.zoom;
     const keepSelecting = appState.keepSelecting === true;
@@ -166,7 +166,7 @@ export class SelectTool extends BaseTool {
     this.dragState = {
       startMouseWorld: { ...worldPoint },
       startScreen: { ...screenPoint },
-      clickedShapeId: targetId,
+      clickedShapeId: event?.button === 2 ? targetId : null,
       dragIds,
       moveOptions: isDraggingObjects ? {} : { lineOnly: appState.selectedType === "line" },
       anchorOriginal: this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint },
@@ -237,7 +237,7 @@ export class SelectTool extends BaseTool {
     }
   }
 
-  onMouseUp({ worldPoint, screenPoint }) {
+  onMouseUp({ event, worldPoint, screenPoint }) {
     const { appState, shapeStore } = this.context;
     if (this.marqueeState) {
       const rect = {
@@ -269,7 +269,13 @@ export class SelectTool extends BaseTool {
       this.marqueeState = null;
     }
 
-    if (this.dragState && !this.dragState.didDrag && !this.marqueeState) {
+    if (
+      event?.button === 2
+      && this.dragState
+      && this.dragState.clickedShapeId
+      && !this.dragState.didDrag
+      && !this.marqueeState
+    ) {
       appState.openContextMenuForSelection?.(screenPoint, this.dragState.clickedShapeId);
     }
 

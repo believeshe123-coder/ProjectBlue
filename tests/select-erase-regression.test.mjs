@@ -147,6 +147,58 @@ test('dragging object selection moves object transform and descendants', () => {
   assert.ok(Math.abs(moved.start.x - (initial.start.x + 10)) < 1e-6);
   assert.ok(Math.abs(moved.start.y - (initial.start.y + 5)) < 1e-6);
 });
+
+test('left-click mouseup does not open context menu, right-click mouseup does', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  shapeStore.addShape(line);
+
+  const contextMenuCalls = [];
+  const selectContext = makeSelectContext(shapeStore);
+  selectContext.appState.openContextMenuForSelection = (screenPoint, clickedShapeId) => {
+    contextMenuCalls.push({ screenPoint, clickedShapeId });
+  };
+
+  const selectTool = new SelectTool(selectContext);
+  const mid = { x: 10, y: 0 };
+
+  selectTool.onMouseDown({ event: { button: 0 }, worldPoint: mid, screenPoint: { x: 10, y: 10 } });
+  selectTool.onMouseUp({ event: { button: 0 }, worldPoint: mid, screenPoint: { x: 10, y: 10 } });
+  assert.equal(contextMenuCalls.length, 0);
+
+  selectTool.onMouseDown({ event: { button: 2 }, worldPoint: mid, screenPoint: { x: 20, y: 20 } });
+  selectTool.onMouseUp({ event: { button: 2 }, worldPoint: mid, screenPoint: { x: 20, y: 20 } });
+
+  assert.equal(contextMenuCalls.length, 1);
+  assert.equal(contextMenuCalls[0].clickedShapeId, line.id);
+});
+
+test('click-select then drag works within one gesture', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  shapeStore.addShape(line);
+
+  let historyPushes = 0;
+  const selectContext = makeSelectContext(shapeStore);
+  selectContext.pushHistoryState = () => {
+    historyPushes += 1;
+  };
+  const selectTool = new SelectTool(selectContext);
+
+  const initial = shapeStore.getShapeById(line.id);
+  const anchor = { ...initial.start };
+
+  selectTool.onMouseDown({ event: { button: 0 }, worldPoint: anchor, screenPoint: { x: 0, y: 0 } });
+  selectTool.onMouseMove({ worldPoint: { x: anchor.x + 10, y: anchor.y + 5 }, screenPoint: { x: 10, y: 5 } });
+  selectTool.onMouseUp({ event: { button: 0 }, worldPoint: { x: anchor.x + 10, y: anchor.y + 5 }, screenPoint: { x: 10, y: 5 } });
+
+  assert.equal(historyPushes, 1);
+  assert.equal(selectTool.context.appState.selectedIds.has(line.id), true);
+  const moved = shapeStore.getShapeById(line.id);
+  assert.ok(Math.abs(moved.start.x - (initial.start.x + 10)) < 1e-6);
+  assert.ok(Math.abs(moved.start.y - (initial.start.y + 5)) < 1e-6);
+});
+
 test('click erase removes topmost non-line renderables', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ id: 'line-bottom', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0), zIndex: 0 });
