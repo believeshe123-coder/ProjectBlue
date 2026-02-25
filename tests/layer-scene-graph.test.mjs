@@ -200,3 +200,51 @@ test('getSelectionTargetId can resolve object roots from child shape hits', () =
     objectId,
   );
 });
+
+test('reorderLayers requires complete known ids and can update ordering', () => {
+  const store = new ShapeStore();
+  const layerA = store.getLayerOrderIds()[0];
+  const layerB = store.createLayer({ name: 'Layer B' });
+  const layerC = store.createLayer({ name: 'Layer C' });
+
+  const invalidMissing = store.reorderLayers([layerC, layerB]);
+  assert.equal(invalidMissing.ok, false);
+  assert.equal(invalidMissing.reason, 'expected_exact_layer_count');
+  assert.deepEqual(store.getLayerOrderIds(), [layerA, layerB, layerC]);
+
+  const invalidUnknown = store.reorderLayers([layerC, layerB, 'layer-unknown']);
+  assert.equal(invalidUnknown.ok, false);
+  assert.equal(invalidUnknown.reason, 'contains_unknown_layer_id');
+  assert.deepEqual(store.getLayerOrderIds(), [layerA, layerB, layerC]);
+
+  const valid = store.reorderLayers([layerC, layerA, layerB]);
+  assert.equal(valid.ok, true);
+  assert.equal(valid.changed, true);
+  assert.deepEqual(valid.order, [layerC, layerA, layerB]);
+  assert.deepEqual(store.getLayerOrderIds(), [layerC, layerA, layerB]);
+});
+
+test('deleteLayer blocks deleting last layer and rehomes children before removal', () => {
+  const store = new ShapeStore();
+  const onlyLayerId = store.getLayerOrderIds()[0];
+  const blocked = store.deleteLayer(onlyLayerId, {});
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.reason, 'cannot_delete_last_layer');
+
+  const layerB = store.createLayer({ name: 'Layer B' });
+  store.setActiveLayer(onlyLayerId);
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 2, 0, 3, 0));
+
+  assert.equal(store.getNodeLayerId('line-a'), onlyLayerId);
+  assert.equal(store.getNodeLayerId('line-b'), onlyLayerId);
+
+  const deletion = store.deleteLayer(onlyLayerId, { targetLayerId: layerB });
+  assert.equal(deletion.ok, true);
+  assert.equal(deletion.targetLayerId, layerB);
+  assert.equal(deletion.movedChildCount, 2);
+  assert.equal(store.getLayerNode(onlyLayerId), null);
+  assert.equal(store.getNodeLayerId('line-a'), layerB);
+  assert.equal(store.getNodeLayerId('line-b'), layerB);
+  assert.equal(store.activeLayerId, layerB);
+});
