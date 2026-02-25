@@ -9,6 +9,7 @@ import { MeasureTool } from "./tools/measureTool.js";
 import { CurveTool } from "./tools/curveTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
+import { isoUVToWorld } from "./core/isoGrid.js";
 import { normalizeEraseMode } from "./state/eraseMode.js";
 
 const DISABLE_SCENE_GRAPH = true;
@@ -82,6 +83,7 @@ const menuSettingsDropdown = document.getElementById("menuSettingsDropdown");
 const menuEditButton = document.getElementById("menuEditBtn");
 const menuEditDropdown = document.getElementById("menuEditDropdown");
 const clearGroupsButton = document.getElementById("clear-groups-btn");
+const duplicateSelectionButton = document.getElementById("duplicate-selection-btn");
 const menuFileCloseButton = document.getElementById("menu-file-close-btn");
 const menuEditCloseButton = document.getElementById("menu-edit-close-btn");
 const menuSettingsCloseButton = document.getElementById("menu-settings-close-btn");
@@ -922,6 +924,28 @@ function deleteSelection() {
   closeSelectionPanel();
 }
 
+function duplicateSelection() {
+  if (appState.disableSceneGraph) {
+    appState.notifyStatus?.("Disabled while scene graph is off", 1500);
+    return false;
+  }
+  const selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
+  if (!selectedIds.length) return false;
+
+  const offset = isoUVToWorld(1, 1);
+  pushHistoryState();
+  const duplicatedRootIds = shapeStore.duplicateNodes(selectedIds, { offset });
+  if (!duplicatedRootIds.length) return false;
+
+  const firstNode = shapeStore.getNodeById(duplicatedRootIds[0]);
+  const selectionType = firstNode?.kind === "object"
+    ? "object"
+    : (firstNode?.shapeType === "face" ? "face" : "line");
+  setSelection(duplicatedRootIds, selectionType, duplicatedRootIds[duplicatedRootIds.length - 1] ?? null);
+  appState.notifyStatus?.(`Duplicated ${duplicatedRootIds.length} item${duplicatedRootIds.length === 1 ? "" : "s"}`, 1400);
+  return true;
+}
+
 
 function applyToSelected(updater) {
   const selectedShapes = getSelectedShapes();
@@ -1706,6 +1730,11 @@ clearGroupsButton?.addEventListener("click", () => {
   closeAllMenus();
 });
 
+duplicateSelectionButton?.addEventListener("click", () => {
+  duplicateSelection();
+  updateSelectionBar();
+});
+
 document.addEventListener("click", () => {
   if (!appState.ui.fileOpen && !appState.ui.editOpen && !appState.ui.settingsOpen) return;
   closeAllMenus();
@@ -1925,6 +1954,12 @@ window.addEventListener("keydown", (event) => {
   if (isCtrlOrMeta && key === "y") {
     event.preventDefault();
     redo();
+    return;
+  }
+
+  if (isCtrlOrMeta && key === "d") {
+    event.preventDefault();
+    duplicateSelection();
     return;
   }
 
