@@ -72,3 +72,65 @@ test('move selection to active layer is blocked when target layer is hidden or l
   assert.deepEqual(store.moveNodesToLayer(['line-a'], store.getActiveLayerId()), []);
   assert.equal(store.getNodeLayerId('line-a'), layerA);
 });
+
+test('object on locked layer cannot be duplicated, deleted, or moved by child selection', () => {
+  const store = new ShapeStore();
+  const layerA = store.getLayerOrderIds()[0];
+  const layerB = store.createLayer({ name: 'Layer B' });
+
+  store.setActiveLayer(layerA);
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 1, 0, 2, 0));
+  const objectId = store.createObjectFromIds(['line-a', 'line-b'], { name: 'Pair' });
+  assert.ok(objectId);
+
+  store.setLayerLocked(layerA, true);
+  assert.deepEqual(store.duplicateNodes(['line-a'], { offset: { x: 5, y: 5 } }), []);
+  assert.deepEqual(store.deleteNodesInEntirety(['line-a']), []);
+  assert.ok(store.getNodeById('line-a'));
+
+  store.setLayerLocked(layerA, false);
+  store.setLayerLocked(layerB, true);
+  assert.deepEqual(store.moveNodesToLayer(['line-a'], layerB), []);
+  assert.equal(store.getNodeLayerId(objectId), layerA);
+});
+
+test('duplicate within layer keeps duplicated object subtree in same source layer', () => {
+  const store = new ShapeStore();
+  const layerId = store.getLayerOrderIds()[0];
+
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 1, 0, 2, 0));
+  const objectId = store.createObjectFromIds(['line-a', 'line-b'], { name: 'Pair' });
+  assert.ok(objectId);
+
+  const [duplicatedObjectId] = store.duplicateNodes([objectId], { offset: { x: 10, y: 10 } });
+  assert.ok(duplicatedObjectId);
+  assert.equal(store.getNodeLayerId(duplicatedObjectId), layerId);
+
+  const duplicatedObject = store.getNodeById(duplicatedObjectId);
+  assert.equal(duplicatedObject?.kind, 'object');
+  assert.equal(duplicatedObject.children.length, 2);
+  for (const childId of duplicatedObject.children) {
+    assert.equal(store.getNodeLayerId(childId), layerId);
+    assert.equal(store.parentById[childId], duplicatedObjectId);
+  }
+});
+
+test('move object between layers resolves child selections to object roots', () => {
+  const store = new ShapeStore();
+  const layerA = store.getLayerOrderIds()[0];
+  const layerB = store.createLayer({ name: 'Layer B' });
+
+  store.setActiveLayer(layerA);
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 1, 0, 2, 0));
+  const objectId = store.createObjectFromIds(['line-a', 'line-b'], { name: 'Pair' });
+  assert.ok(objectId);
+
+  const moved = store.moveNodesToLayer(['line-a', objectId, 'line-b'], layerB);
+  assert.deepEqual(moved, [objectId]);
+  assert.equal(store.getNodeLayerId(objectId), layerB);
+  assert.equal(store.getNodeLayerId('line-a'), layerB);
+  assert.equal(store.getNodeLayerId('line-b'), layerB);
+});
