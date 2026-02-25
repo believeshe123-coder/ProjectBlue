@@ -937,7 +937,21 @@ export class ShapeStore {
 
   sendToBack(lineIds = []) { return this.reorderLineBlock(lineIds, "back"); }
 
-  getSelectionTargetId(shapeId) { return shapeId; }
+  getSelectionTargetId(shapeId, options = {}) {
+    if (!shapeId || !this.nodes[shapeId]) return null;
+    if (options?.preferObjectRoot !== true) return shapeId;
+
+    let targetId = shapeId;
+    let parentId = this.parentById[shapeId] ?? null;
+    const visited = new Set([shapeId]);
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      const parentNode = this.nodes[parentId];
+      if (parentNode?.kind === "object") targetId = parentId;
+      parentId = this.parentById[parentId] ?? null;
+    }
+    return targetId;
+  }
 
   getComputedRegions() {
     const lines = this.getShapes().filter((shape) => shape.type === "line" && shape.visible !== false);

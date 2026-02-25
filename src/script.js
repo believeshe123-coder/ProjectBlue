@@ -221,8 +221,9 @@ const canvasEngine = new CanvasEngine({
     const point = canvasEngine.getScreenPointFromEvent(event);
     const worldPoint = camera.screenToWorld(point);
     const toleranceWorld = 8 / camera.zoom;
-    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { lineOnly: true });
-    openContextMenuForSelection(point, hit?.id ?? null);
+    const hit = shapeStore.getTopmostHitShape(worldPoint, toleranceWorld, { includeLocked: false });
+    const targetId = shapeStore.getSelectionTargetId(hit?.id ?? null, { preferObjectRoot: true });
+    openContextMenuForSelection(point, targetId);
   },
   onViewChange: refreshStatus,
 });
@@ -1123,7 +1124,8 @@ function openContextMenuForSelection(screenPoint, clickedShapeId = null) {
     return;
   }
 
-  if (clickedShapeId && !appState.selectedIds.has(clickedShapeId)) {
+  const resolvedClickedId = shapeStore.getSelectionTargetId(clickedShapeId, { preferObjectRoot: true });
+  if (resolvedClickedId && !appState.selectedIds.has(resolvedClickedId)) {
     closeContextMenu();
     return;
   }

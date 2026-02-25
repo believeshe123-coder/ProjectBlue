@@ -180,3 +180,23 @@ test('new shapes route to active layer and layer controls are exposed', () => {
   store.addShape(makeLine('line-a', 2, 2, 3, 3));
   assert.equal(store.getNodeLayerId('line-a'), layerA);
 });
+
+
+test('getSelectionTargetId can resolve object roots from child shape hits', () => {
+  const store = new ShapeStore();
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 1, 0, 2, 0));
+
+  const objectId = store.createObjectFromIds(['line-a', 'line-b'], { name: 'Obj' });
+  assert.ok(objectId);
+
+  assert.equal(store.getSelectionTargetId('line-a'), 'line-a');
+  assert.equal(
+    store.getSelectionTargetId('line-a', { preferObjectRoot: true }),
+    objectId,
+  );
+  assert.equal(
+    store.getSelectionTargetId('line-b', { preferObjectRoot: true }),
+    objectId,
+  );
+});
