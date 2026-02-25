@@ -22,6 +22,16 @@ function isMovableNode(node) {
   return MOVABLE_SHAPE_TYPES.has(node.shapeType);
 }
 
+
+function getLayerBlockReason(shapeStore, id) {
+  const layerId = shapeStore.getNodeLayerId?.(id);
+  const layer = shapeStore.getLayerNode?.(layerId);
+  if (!layer) return "hidden";
+  if (layer.visible === false) return "hidden";
+  if (layer.locked === true) return "locked";
+  return null;
+}
+
 function getSelectedIds(appState) {
   return appState.selectedIds instanceof Set ? [...appState.selectedIds] : [];
 }
@@ -56,7 +66,21 @@ function normalizeDragSelection(shapeStore, appState, ids = [], { operation = "m
   }
 
   if (kind === "object") finalIds = shapeStore.getObjectRootIds(finalIds);
-  return { ids: finalIds, kind };
+
+  const blocked = { locked: 0, hidden: 0 };
+  const interactableIds = finalIds.filter((id) => {
+    const reason = getLayerBlockReason(shapeStore, id);
+    if (!reason) return true;
+    blocked[reason] += 1;
+    return false;
+  });
+
+  if (!interactableIds.length && finalIds.length) {
+    const reason = blocked.locked >= blocked.hidden ? "locked" : "hidden";
+    appState.notifyStatus?.(reason === "locked" ? "Layer is locked" : "Layer is hidden", 1500);
+  }
+
+  return { ids: interactableIds, kind };
 }
 
 function notifyNonMovable(appState, shape) {

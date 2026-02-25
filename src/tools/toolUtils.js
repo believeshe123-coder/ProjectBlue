@@ -188,3 +188,24 @@ export function getLineStyle(appState) {
     fillEnabled: false,
   };
 }
+
+export function getActiveLayerBlockReason(context) {
+  const { shapeStore } = context;
+  if (!shapeStore?.getActiveLayerId || !shapeStore?.getLayerNode) return null;
+  const activeLayerId = shapeStore.getActiveLayerId();
+  const activeLayer = shapeStore.getLayerNode(activeLayerId);
+  if (!activeLayer) return "hidden";
+  if (activeLayer.visible === false) return "hidden";
+  if (activeLayer.locked === true) return "locked";
+  return null;
+}
+
+export function ensureActiveLayerWritable(context, { notify = true } = {}) {
+  const reason = getActiveLayerBlockReason(context);
+  if (!reason) return true;
+  if (notify) {
+    const message = reason === "locked" ? "Layer is locked" : "Layer is hidden";
+    context.appState.notifyStatus?.(message, 1500);
+  }
+  return false;
+}

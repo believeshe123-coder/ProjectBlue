@@ -1,7 +1,7 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { Measurement } from "../models/measurement.js";
-import { getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { ensureActiveLayerWritable, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 export class MeasureTool extends BaseTool {
   constructor(context) {
@@ -21,12 +21,19 @@ export class MeasureTool extends BaseTool {
 
   onMouseDown({ screenPoint }) {
     const { appState, historyStore, shapeStore } = this.context;
+    if (!this.a && !ensureActiveLayerWritable(this.context)) return;
 
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
 
     if (!this.a) {
       this.a = snapped.pt;
+      return;
+    }
+
+    if (!ensureActiveLayerWritable(this.context)) {
+      this.a = null;
+      appState.previewShape = null;
       return;
     }
 

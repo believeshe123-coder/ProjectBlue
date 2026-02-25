@@ -1,6 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { ensureActiveLayerWritable, getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 const MIN_CURVE_SEGMENTS = 32;
 const MAX_CURVE_SEGMENTS = 192;
@@ -101,6 +101,7 @@ export class CurveTool extends BaseTool {
 
   onMouseDown({ screenPoint }) {
     const { appState, shapeStore } = this.context;
+    if (!this.startPoint && !ensureActiveLayerWritable(this.context)) return;
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
 
@@ -112,6 +113,11 @@ export class CurveTool extends BaseTool {
 
     if (!this.controlPoint) {
       this.controlPoint = snapped.pt;
+      return;
+    }
+
+    if (!ensureActiveLayerWritable(this.context)) {
+      this.resetCurve();
       return;
     }
 

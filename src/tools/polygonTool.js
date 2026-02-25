@@ -2,7 +2,7 @@ import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
 import { Polygon } from "../models/polygon.js";
 import { distance } from "../utils/math.js";
-import { getCurrentStyle, getLineStyle, updateSnapIndicator, getSnappedPoint } from "./toolUtils.js";
+import { ensureActiveLayerWritable, getCurrentStyle, getLineStyle, updateSnapIndicator, getSnappedPoint } from "./toolUtils.js";
 
 export class PolygonTool extends BaseTool {
   constructor(context) {
@@ -23,6 +23,13 @@ export class PolygonTool extends BaseTool {
       return;
     }
 
+    if (!ensureActiveLayerWritable(this.context)) {
+      this.points = [];
+      this.cursorPoint = null;
+      appState.previewShape = null;
+      return;
+    }
+
     if (this.context.pushHistoryState) this.context.pushHistoryState();
     else historyStore.pushState(shapeStore.serialize());
     shapeStore.addShape(
@@ -40,6 +47,7 @@ export class PolygonTool extends BaseTool {
 
   onMouseDown({ screenPoint }) {
     const { appState } = this.context;
+    if (!this.points.length && !ensureActiveLayerWritable(this.context)) return;
     const snapped = getSnappedPoint(this.context, screenPoint);
     updateSnapIndicator(appState, snapped);
 
