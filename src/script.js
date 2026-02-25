@@ -1970,7 +1970,6 @@ appState.debugSelectionDrag = localStorage.getItem("debugSelectionDrag") === "1"
 if (debugSelectionDragToggle) debugSelectionDragToggle.checked = appState.debugSelectionDrag;
 showGridUnitsToggle.checked = appState.showGridUnits;
 updateMeasurementModeControl();
-updateContinuePolylineControl();
 updateEraseControls();
 renderToolButtons();
 renderHelpModal();
