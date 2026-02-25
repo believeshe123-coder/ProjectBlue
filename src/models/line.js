@@ -14,10 +14,11 @@ function normalizeOwnedByFaceIds(value) {
 }
 
 export class Line extends Shape {
-  constructor({ start, end, startUV, endUV, sourceForPolygonId = null, ownedByFaceId = null, ownedByFaceIds = null, ...rest }) {
+  constructor({ start, end, startUV, endUV, snapToGrid = true, sourceForPolygonId = null, ownedByFaceId = null, ownedByFaceIds = null, ...rest }) {
     super({ ...rest, type: "line" });
-    this.startUV = snapIsoUV(startUV ?? worldToIsoUV(start), 0.5);
-    this.endUV = snapIsoUV(endUV ?? worldToIsoUV(end), 0.5);
+    this.snapToGrid = snapToGrid !== false;
+    this.startUV = this.normalizeUV(startUV ?? worldToIsoUV(start));
+    this.endUV = this.normalizeUV(endUV ?? worldToIsoUV(end));
     this.syncWorldFromUV();
     this.sourceForPolygonId = sourceForPolygonId;
     this.ownedByFaceIds = normalizeOwnedByFaceIds(ownedByFaceIds ?? ownedByFaceId);
@@ -38,14 +39,21 @@ export class Line extends Shape {
     this.end = isoUVToWorld(this.endUV.u, this.endUV.v);
   }
 
+  normalizeUV(uvPoint) {
+    if (this.snapToGrid) {
+      return snapIsoUV(uvPoint, 0.5);
+    }
+    return { u: uvPoint.u, v: uvPoint.v };
+  }
+
   syncUVFromWorld() {
-    this.startUV = snapIsoUV(worldToIsoUV(this.start), 0.5);
-    this.endUV = snapIsoUV(worldToIsoUV(this.end), 0.5);
+    this.startUV = this.normalizeUV(worldToIsoUV(this.start));
+    this.endUV = this.normalizeUV(worldToIsoUV(this.end));
   }
 
   setUVPoints(startUV, endUV) {
-    this.startUV = snapIsoUV(startUV, 0.5);
-    this.endUV = snapIsoUV(endUV, 0.5);
+    this.startUV = this.normalizeUV(startUV);
+    this.endUV = this.normalizeUV(endUV);
     this.syncWorldFromUV();
     this.sourceForPolygonId = null;
   }
@@ -149,6 +157,7 @@ export class Line extends Shape {
       startUV: { ...this.startUV },
       endUV: { ...this.endUV },
       sourceForPolygonId: this.sourceForPolygonId,
+      snapToGrid: this.snapToGrid,
       ownedByFaceIds: [...this.ownedByFaceIds],
       ownedByFaceId: this.ownedByFaceIds[0] ?? null,
     };
