@@ -182,12 +182,92 @@ export class ShapeStore {
   }
 
   reorderLayers(nextOrderedIds = []) {
-    const known = new Set(this.getLayerOrderIds());
-    const filtered = nextOrderedIds.filter((id) => known.has(id));
-    const missing = this.getLayerOrderIds().filter((id) => !filtered.includes(id));
-    this.rootIds = [...filtered, ...missing];
+    const currentOrder = this.getLayerOrderIds();
+    const currentSet = new Set(currentOrder);
+    const requestedIds = Array.isArray(nextOrderedIds) ? nextOrderedIds : [];
+    const uniqueRequestedIds = [...new Set(requestedIds)];
+
+    if (uniqueRequestedIds.length !== currentOrder.length) {
+      return {
+        ok: false,
+        changed: false,
+        reason: "expected_exact_layer_count",
+        order: [...currentOrder],
+      };
+    }
+
+    if (uniqueRequestedIds.some((id) => !currentSet.has(id))) {
+      return {
+        ok: false,
+        changed: false,
+        reason: "contains_unknown_layer_id",
+        order: [...currentOrder],
+      };
+    }
+
+    const isSameOrder = uniqueRequestedIds.every((id, index) => id === currentOrder[index]);
+    if (isSameOrder) {
+      return {
+        ok: true,
+        changed: false,
+        reason: "unchanged",
+        order: [...currentOrder],
+      };
+    }
+
+    this.rootIds = [...uniqueRequestedIds];
     if (!this.getLayerNode(this.activeLayerId)) this.activeLayerId = this.rootIds[0] ?? null;
-    return [...this.rootIds];
+    return {
+      ok: true,
+      changed: true,
+      reason: null,
+      order: [...this.rootIds],
+    };
+  }
+
+  deleteLayer(layerId, { targetLayerId = null } = {}) {
+    const layer = this.getLayerNode(layerId);
+    if (!layer) {
+      return { ok: false, reason: "layer_not_found", deletedLayerId: null, targetLayerId: null };
+    }
+
+    const layerOrder = this.getLayerOrderIds();
+    if (layerOrder.length <= 1) {
+      return { ok: false, reason: "cannot_delete_last_layer", deletedLayerId: null, targetLayerId: null };
+    }
+
+    const fallbackLayerId = layerOrder.find((id) => id !== layerId) ?? null;
+    let resolvedTargetLayerId = targetLayerId;
+    if (!resolvedTargetLayerId || resolvedTargetLayerId === layerId || !this.getLayerNode(resolvedTargetLayerId)) {
+      resolvedTargetLayerId = fallbackLayerId;
+    }
+
+    if (!resolvedTargetLayerId || resolvedTargetLayerId === layerId || !this.getLayerNode(resolvedTargetLayerId)) {
+      return { ok: false, reason: "target_layer_not_found", deletedLayerId: null, targetLayerId: null };
+    }
+
+    const children = Array.isArray(layer.children) ? [...layer.children] : [];
+    for (const childId of children) {
+      if (!this.nodes[childId]) continue;
+      this.attachNodeToLayer(childId, resolvedTargetLayerId);
+    }
+
+    delete this.parentById[layerId];
+    delete this.nodes[layerId];
+    this.rootIds = layerOrder.filter((id) => id !== layerId);
+
+    if (this.activeLayerId === layerId || !this.getLayerNode(this.activeLayerId)) {
+      this.activeLayerId = resolvedTargetLayerId;
+    }
+
+    return {
+      ok: true,
+      reason: null,
+      deletedLayerId: layerId,
+      targetLayerId: resolvedTargetLayerId,
+      movedChildCount: children.length,
+      order: [...this.rootIds],
+    };
   }
 
   moveNodesToLayer(ids = [], layerId) {

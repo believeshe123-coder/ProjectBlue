@@ -25,15 +25,7 @@
           <button class="menu-item" id="menuEditBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuEditDropdown">Edit</button>
           <div class="menu-dropdown" id="menuEditDropdown" role="menu" aria-label="Edit menu" data-open="false">
             <div class="menu-section">
-              <div class="panel-header"><div class="menu-title">Layers</div><button type="button" class="panel-close-btn" id="menu-edit-close-btn" aria-label="Close Edit menu">×</button></div>
-              <div id="layer-list" class="layer-list" role="list" aria-label="Layer list"></div>
-              <div class="layer-actions-row">
-                <button id="layer-add-btn" class="menu-link-btn" type="button">Add Layer</button>
-                <button id="layer-move-selection-btn" class="menu-link-btn" type="button">Move Selection to Active</button>
-              </div>
-            </div>
-            <div class="menu-section">
-              <div class="menu-title">Groups (legacy)</div>
+              <div class="panel-header"><div class="menu-title">Groups (legacy)</div><button type="button" class="panel-close-btn" id="menu-edit-close-btn" aria-label="Close Edit menu">×</button></div>
               <button id="clear-groups-btn" class="menu-link-btn" type="button">Clear All Groups</button>
             </div>
             <div class="menu-section">
@@ -109,6 +101,16 @@
             <label class="field-block" for="stroke-width-input"><span>Stroke width</span><select id="stroke-width-input" class="style-select"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select></label>
             <label class="field-block" for="fill-opacity-input"><span>Fill opacity <span id="fill-opacity-display">1.00</span></span><input id="fill-opacity-input" class="range-input" type="range" min="0" max="1" step="0.01" value="1" /></label>
           </section>
+
+          <section class="side-section" aria-label="Layer controls">
+            <h2 class="section-title">Layers</h2>
+            <div id="layer-list" class="layer-list" role="list" aria-label="Layer list"></div>
+            <div class="layer-actions-row">
+              <button id="layer-add-btn" class="tool-button" type="button">Add Layer</button>
+              <button id="layer-move-selection-btn" class="tool-button" type="button">Move Selection to Active</button>
+            </div>
+          </section>
+
         </aside>
 
         <div class="canvas-wrap">

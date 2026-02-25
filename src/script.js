@@ -908,7 +908,88 @@ function renderLayerList() {
       renderLayerList();
     });
 
-    row.append(activeDot, nameButton, visibleBtn, lockBtn);
+    const moveUpBtn = document.createElement("button");
+    moveUpBtn.type = "button";
+    moveUpBtn.className = "layer-row-action";
+    moveUpBtn.textContent = "↑";
+    moveUpBtn.title = "Move layer up";
+    moveUpBtn.disabled = layers[0]?.id === layer.id;
+    moveUpBtn.addEventListener("click", () => {
+      const currentOrder = shapeStore.getLayerOrderIds();
+      const index = currentOrder.indexOf(layer.id);
+      if (index <= 0) {
+        appState.notifyStatus?.("Layer is already at the top", 1300);
+        return;
+      }
+      const nextOrder = [...currentOrder];
+      [nextOrder[index - 1], nextOrder[index]] = [nextOrder[index], nextOrder[index - 1]];
+      pushHistoryState();
+      const reorderResult = shapeStore.reorderLayers(nextOrder);
+      if (!reorderResult?.ok || !reorderResult.changed) {
+        appState.notifyStatus?.("Unable to reorder layers", 1500);
+        return;
+      }
+      renderLayerList();
+      appState.notifyStatus?.(`Moved layer \"${layer.name}\" up`, 1300);
+    });
+
+    const moveDownBtn = document.createElement("button");
+    moveDownBtn.type = "button";
+    moveDownBtn.className = "layer-row-action";
+    moveDownBtn.textContent = "↓";
+    moveDownBtn.title = "Move layer down";
+    moveDownBtn.disabled = layers[layers.length - 1]?.id === layer.id;
+    moveDownBtn.addEventListener("click", () => {
+      const currentOrder = shapeStore.getLayerOrderIds();
+      const index = currentOrder.indexOf(layer.id);
+      if (index < 0 || index >= currentOrder.length - 1) {
+        appState.notifyStatus?.("Layer is already at the bottom", 1300);
+        return;
+      }
+      const nextOrder = [...currentOrder];
+      [nextOrder[index], nextOrder[index + 1]] = [nextOrder[index + 1], nextOrder[index]];
+      pushHistoryState();
+      const reorderResult = shapeStore.reorderLayers(nextOrder);
+      if (!reorderResult?.ok || !reorderResult.changed) {
+        appState.notifyStatus?.("Unable to reorder layers", 1500);
+        return;
+      }
+      renderLayerList();
+      appState.notifyStatus?.(`Moved layer \"${layer.name}\" down`, 1300);
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "layer-row-delete";
+    deleteBtn.textContent = "✕";
+    deleteBtn.title = "Delete layer";
+    deleteBtn.addEventListener("click", () => {
+      const allLayers = shapeStore.getLayers();
+      if (allLayers.length <= 1) {
+        appState.notifyStatus?.("Cannot delete the final remaining layer", 1700);
+        return;
+      }
+      const deleteTarget = allLayers.find((item) => item.id !== layer.id);
+      const targetName = deleteTarget?.name || "another layer";
+      const approved = window.confirm(`Delete layer \"${layer.name}\"? Its items will be moved to \"${targetName}\".`);
+      if (!approved) return;
+
+      pushHistoryState();
+      const deletionResult = shapeStore.deleteLayer(layer.id, { targetLayerId: deleteTarget?.id ?? null });
+      if (!deletionResult?.ok) {
+        const failureMessage = deletionResult?.reason === "cannot_delete_last_layer"
+          ? "Cannot delete the final remaining layer"
+          : "Unable to delete layer";
+        appState.notifyStatus?.(failureMessage, 1700);
+        return;
+      }
+
+      renderLayerList();
+      const movedCount = deletionResult.movedChildCount ?? 0;
+      appState.notifyStatus?.(`Deleted \"${layer.name}\" and moved ${movedCount} item${movedCount === 1 ? "" : "s"}`, 1800);
+    });
+
+    row.append(activeDot, nameButton, visibleBtn, lockBtn, moveUpBtn, moveDownBtn, deleteBtn);
     layerListEl.appendChild(row);
   }
 }
