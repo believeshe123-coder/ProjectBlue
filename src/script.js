@@ -623,10 +623,12 @@ function getSnapshot() {
 
 function isSnapshotEmpty(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return true;
-  const shapes = Array.isArray(snapshot.shapes)
-    ? snapshot.shapes
-    : (snapshot.shapes?.rootIds ?? []);
-  return shapes.length === 0;
+  if (Array.isArray(snapshot.shapes)) return snapshot.shapes.length === 0;
+  const nodes = snapshot.shapes?.nodes ?? null;
+  if (nodes && typeof nodes === "object") {
+    return Object.values(nodes).filter((node) => node?.kind === "shape").length === 0;
+  }
+  return (snapshot.shapes?.rootIds ?? []).length === 0;
 }
 
 let hasHistoryBaseline = false;
@@ -634,9 +636,12 @@ const HISTORY_DEBUG_ENABLED = false;
 
 function getSnapshotShapeCount(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return 0;
-  const shapes = Array.isArray(snapshot.shapes)
-    ? snapshot.shapes
-    : (snapshot.shapes?.rootIds ?? []);
+  if (Array.isArray(snapshot.shapes)) return snapshot.shapes.length;
+  const nodes = snapshot.shapes?.nodes ?? null;
+  if (nodes && typeof nodes === "object") {
+    return Object.values(nodes).filter((node) => node?.kind === "shape").length;
+  }
+  const shapes = snapshot.shapes?.rootIds ?? [];
   return Array.isArray(shapes) ? shapes.length : 0;
 }
 
@@ -1213,7 +1218,7 @@ function coerceProjectPayload(project) {
   }
 
   if (Array.isArray(project.nodes) && Array.isArray(project.rootIds)) {
-    return { ...project, shapes: { nodes: project.nodes, rootIds: project.rootIds } };
+    return { ...project, shapes: { nodes: project.nodes, rootIds: project.rootIds, parentById: project.parentById ?? {}, activeLayerId: project.activeLayerId ?? null } };
   }
 
   throw new Error("Unsupported project file");

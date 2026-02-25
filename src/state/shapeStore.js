@@ -9,6 +9,10 @@ function makeId(prefix = "node") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function makeLayerId() {
+  return makeId("layer");
+}
+
 function normalizeRect(rect) {
   if (!rect) return null;
   return {
@@ -63,13 +67,95 @@ export class ShapeStore {
     this.cachedRegions = [];
     this.cachedRegionDebug = { totalEdges: 0, totalVertices: 0, totalRegions: 0, outerArea: 0 };
     this.cachedLinesHash = "";
-    this.lineGroups = {};
+    this.activeLayerId = null;
+    this.ensureDefaultLayer();
   }
 
   invalidateDerivedData() { this.cachedLinesHash = ""; }
 
   ensureNodeTransform(node) {
     if (!node.nodeTransform) node.nodeTransform = { ...IDENTITY_TRANSFORM };
+  }
+
+  ensureDefaultLayer() {
+    const existingLayerId = this.rootIds.find((id) => this.nodes[id]?.kind === "layer");
+    if (existingLayerId) {
+      this.activeLayerId = this.nodes[existingLayerId] ? (this.activeLayerId ?? existingLayerId) : null;
+      return existingLayerId;
+    }
+
+    const layerId = makeLayerId();
+    this.nodes[layerId] = {
+      id: layerId,
+      kind: "layer",
+      name: "Layer 1",
+      visible: true,
+      locked: false,
+      children: [],
+      createdAt: Date.now(),
+    };
+    this.rootIds = [layerId];
+    this.activeLayerId = layerId;
+    return layerId;
+  }
+
+  getLayerNode(id) {
+    const node = this.nodes[id];
+    return node?.kind === "layer" ? node : null;
+  }
+
+  getLayerOrderIds() {
+    this.ensureDefaultLayer();
+    return this.rootIds.filter((id) => this.nodes[id]?.kind === "layer");
+  }
+
+  getNodeLayerId(id) {
+    let currentId = id;
+    while (currentId) {
+      const node = this.nodes[currentId];
+      if (!node) return null;
+      if (node.kind === "layer") return node.id;
+      currentId = this.parentById[currentId] ?? null;
+    }
+    return null;
+  }
+
+  attachNodeToLayer(nodeId, layerId = null, insertAt = null) {
+    const node = this.nodes[nodeId];
+    if (!node) return null;
+    const targetLayerId = layerId && this.getLayerNode(layerId)
+      ? layerId
+      : (this.activeLayerId && this.getLayerNode(this.activeLayerId) ? this.activeLayerId : this.ensureDefaultLayer());
+    const layer = this.nodes[targetLayerId];
+
+    const currentParentId = this.parentById[nodeId];
+    if (currentParentId) {
+      const currentParent = this.nodes[currentParentId];
+      if (currentParent?.children) currentParent.children = currentParent.children.filter((id) => id !== nodeId);
+    }
+
+    this.parentById[nodeId] = targetLayerId;
+    if (!Array.isArray(layer.children)) layer.children = [];
+    const baseChildren = layer.children.filter((id) => id !== nodeId);
+    const index = Number.isInteger(insertAt) ? Math.max(0, Math.min(insertAt, baseChildren.length)) : baseChildren.length;
+    baseChildren.splice(index, 0, nodeId);
+    layer.children = baseChildren;
+    return targetLayerId;
+  }
+
+  isNodeInteractable(id, { includeLocked = false } = {}) {
+    let currentId = id;
+    while (currentId) {
+      const node = this.nodes[currentId];
+      if (!node) return false;
+      if (node.kind === "layer") {
+        if (node.visible === false) return false;
+        if (!includeLocked && node.locked === true) return false;
+        return true;
+      }
+      currentId = this.parentById[currentId] ?? null;
+    }
+    return false;
   }
 
   addShape(shape) {
@@ -79,7 +165,7 @@ export class ShapeStore {
         id: shape.id, kind: "shape", shapeType: "fillRegion", localGeom: { uvCycle: shape.uvCycle ?? [] },
         nodeTransform: { ...IDENTITY_TRANSFORM }, style: shape.toJSON(), createdAt: shape.createdAt ?? Date.now(),
       };
-      this.rootIds.push(shape.id);
+      this.attachNodeToLayer(shape.id);
       this.invalidateDerivedData();
       return shape;
     }
@@ -91,7 +177,7 @@ export class ShapeStore {
         nodeTransform: { x: 0, y: 0, rot: 0 },
         style: shape.toJSON(), createdAt: shape.createdAt ?? Date.now(),
       };
-      this.rootIds.push(shape.id);
+      this.attachNodeToLayer(shape.id);
       this.invalidateDerivedData();
       return shape;
     }
@@ -103,7 +189,7 @@ export class ShapeStore {
         nodeTransform: { x: 0, y: 0, rot: 0 },
         style: shape.toJSON(), createdAt: shape.createdAt ?? Date.now(),
       };
-      this.rootIds.push(shape.id);
+      this.attachNodeToLayer(shape.id);
       return shape;
     }
 
@@ -117,7 +203,7 @@ export class ShapeStore {
         style: shape.toJSON(),
         createdAt: shape.createdAt ?? Date.now(),
       };
-      this.rootIds.push(shape.id);
+      this.attachNodeToLayer(shape.id);
       return shape;
     }
     return shape;
@@ -125,31 +211,41 @@ export class ShapeStore {
 
   createObjectFromIds(ids = [], { name = "Object" } = {}) {
     const objectId = makeId("object");
-    const validIds = ids.filter((id) => this.nodes[id]);
-    const rootIndices = validIds.map((id) => this.rootIds.indexOf(id)).filter((i) => i >= 0);
-    const insertAt = rootIndices.length ? Math.min(...rootIndices) : this.rootIds.length;
+    const validIds = [...new Set(ids)].filter((id) => this.nodes[id]);
+    if (!validIds.length) return null;
 
-    for (const childId of validIds) {
+    const layerCandidates = [...new Set(validIds.map((id) => this.getNodeLayerId(id)).filter(Boolean))];
+    const targetLayerId = layerCandidates[0] ?? this.ensureDefaultLayer();
+    const targetLayer = this.getLayerNode(targetLayerId);
+    if (!targetLayer) return null;
+    const rootIndices = validIds
+      .map((id) => targetLayer.children?.indexOf(id) ?? -1)
+      .filter((i) => i >= 0);
+    const insertAt = rootIndices.length ? Math.min(...rootIndices) : (targetLayer.children?.length ?? 0);
+
+    const allowedIds = validIds.filter((id) => this.getNodeLayerId(id) === targetLayerId);
+    if (!allowedIds.length) return null;
+
+    for (const childId of allowedIds) {
       const existingParentId = this.parentById[childId];
       if (!existingParentId) continue;
       const existingParent = this.nodes[existingParentId];
-      if (existingParent?.kind === "object") {
+      if (existingParent?.kind === "object" || existingParent?.kind === "layer") {
         existingParent.children = (existingParent.children ?? []).filter((id) => id !== childId);
       }
       delete this.parentById[childId];
     }
 
-    this.rootIds = this.rootIds.filter((id) => !validIds.includes(id));
     this.nodes[objectId] = {
       id: objectId,
       kind: "object",
       name,
       transform: { ...IDENTITY_TRANSFORM },
-      children: [...validIds],
+      children: [...allowedIds],
       createdAt: Date.now(),
     };
-    for (const childId of validIds) this.parentById[childId] = objectId;
-    this.rootIds.splice(insertAt, 0, objectId);
+    for (const childId of allowedIds) this.parentById[childId] = objectId;
+    this.attachNodeToLayer(objectId, targetLayerId, insertAt);
     return objectId;
   }
 
@@ -170,13 +266,18 @@ export class ShapeStore {
 
   getDrawList() {
     const out = [];
-    const visit = (id) => {
+    const visit = (id, parentHidden = false, parentLocked = false) => {
       const node = this.nodes[id];
       if (!node) return;
-      if (node.kind === "shape") { out.push(id); return; }
-      for (const childId of node.children ?? []) visit(childId);
+      const hidden = parentHidden || (node.kind === "layer" ? node.visible === false : false);
+      const locked = parentLocked || (node.kind === "layer" ? node.locked === true : false);
+      if (node.kind === "shape") {
+        if (!hidden && !locked) out.push(id);
+        return;
+      }
+      for (const childId of node.children ?? []) visit(childId, hidden, locked);
     };
-    for (const id of this.rootIds) visit(id);
+    for (const id of this.getLayerOrderIds()) visit(id, false, false);
     return out;
   }
 
@@ -272,7 +373,8 @@ export class ShapeStore {
       const id = orderedIds[i];
       const node = this.nodes[id];
       if (!node || node.kind !== "shape") continue;
-      if (node.style?.visible === false || node.style?.locked === true) continue;
+      if (!this.isNodeInteractable(id, { includeLocked: options?.includeLocked === true })) continue;
+      if (node.style?.visible === false || (options?.includeLocked !== true && node.style?.locked === true)) continue;
       if (lineOnly && node.shapeType !== "line") continue;
       if (allowedTypes && !allowedTypes.has(node.shapeType)) continue;
       const worldTx = this.getWorldTransform(id);
@@ -447,7 +549,7 @@ export class ShapeStore {
       const parent = this.nodes[parentId];
       if (parent?.kind === "object") parent.children = (parent.children ?? []).filter((id) => id !== lineId);
       delete this.parentById[lineId];
-      if (!this.rootIds.includes(lineId)) this.rootIds.push(lineId);
+      if (!this.parentById[lineId]) this.attachNodeToLayer(lineId);
     }
 
     const orderedIds = [...deleteSet].sort((a, b) => {
@@ -478,24 +580,17 @@ export class ShapeStore {
       }
       delete this.parentById[id];
       delete this.nodes[id];
-      this.rootIds = this.rootIds.filter((rid) => rid !== id);
+      const parentLayerId = this.getNodeLayerId(id);
+    if (parentLayerId) {
+      const layer = this.getLayerNode(parentLayerId);
+      if (layer?.children) layer.children = layer.children.filter((rid) => rid !== id);
+    }
     }
 
     for (const [id, parentId] of Object.entries(this.parentById)) {
       if (!this.nodes[id] || !this.nodes[parentId]) delete this.parentById[id];
     }
-    this.rootIds = this.rootIds.filter((id) => this.nodes[id] && !this.parentById[id]);
-
-    for (const group of Object.values(this.lineGroups)) {
-      group.childIds = (group.childIds ?? []).filter((lineId) => this.nodes[lineId]);
-      if (group.childIds.length < 2) {
-        for (const lineId of group.childIds) {
-          const node = this.nodes[lineId];
-          if (node?.style?.groupId === group.id) node.style.groupId = null;
-        }
-        delete this.lineGroups[group.id];
-      }
-    }
+    this.rootIds = this.rootIds.filter((id) => this.nodes[id]?.kind === "layer");
 
     this.invalidateDerivedData();
     return orderedIds;
@@ -507,15 +602,13 @@ export class ShapeStore {
     const parentId = this.parentById[id];
     if (parentId) {
       const parent = this.nodes[parentId];
-      if (parent?.kind === "object") parent.children = parent.children.filter((cid) => cid !== id);
+      if (parent?.children) parent.children = parent.children.filter((cid) => cid !== id);
       delete this.parentById[id];
     }
     if (node.kind === "object") {
       for (const childId of node.children ?? []) delete this.parentById[childId];
     }
     delete this.nodes[id];
-    this.rootIds = this.rootIds.filter((rid) => rid !== id);
-    this.invalidateDerivedData();
     return true;
   }
 
@@ -646,7 +739,7 @@ export class ShapeStore {
       meta: { sourceLineIds },
       createdAt: Date.now(),
     };
-    this.rootIds.push(nodeId);
+    this.attachNodeToLayer(nodeId);
     this.markRegionBoundaryLinesOwnedByFace(sourceLineIds, nodeId);
     return nodeId;
   }
@@ -732,50 +825,15 @@ export class ShapeStore {
   }
 
 
-  createLineGroup(childIds = []) {
-    const ids = [...new Set(childIds)].filter((id) => {
-      const node = this.nodes[id];
-      return node?.kind === "shape" && node.shapeType === "line";
-    });
-    if (ids.length < 2) return null;
-    const id = makeId("group");
-    const createdAt = Date.now();
-    this.lineGroups[id] = { id, childIds: ids, createdAt };
-    for (const lineId of ids) {
-      const node = this.nodes[lineId];
-      if (node?.style) node.style.groupId = id;
-    }
-    return id;
-  }
+  createLineGroup() { return null; }
 
-  getLineGroup(id) {
-    return this.lineGroups[id] ?? null;
-  }
+  getLineGroup() { return null; }
 
-  hasLineGroups() {
-    return Object.keys(this.lineGroups).length > 0;
-  }
+  hasLineGroups() { return false; }
 
-  deleteLineGroup(id) {
-    const group = this.lineGroups[id];
-    if (!group) return false;
-    for (const lineId of group.childIds ?? []) {
-      const node = this.nodes[lineId];
-      if (node?.style?.groupId === id) node.style.groupId = null;
-    }
-    delete this.lineGroups[id];
-    return true;
-  }
+  deleteLineGroup() { return false; }
 
-  clearAllLineGroups() {
-    for (const group of Object.values(this.lineGroups)) {
-      for (const lineId of group.childIds ?? []) {
-        const node = this.nodes[lineId];
-        if (node?.style?.groupId === group.id) node.style.groupId = null;
-      }
-    }
-    this.lineGroups = {};
-  }
+  clearAllLineGroups() {}
 
   reorderSelectionZ(selectionIds = [], mode = "front") {
     if (mode === "front") return this.bringToFront(selectionIds);
@@ -785,18 +843,36 @@ export class ShapeStore {
     return false;
   }
 
-  clear() { this.nodes = {}; this.parentById = {}; this.rootIds = []; this.lineGroups = {}; this.invalidateDerivedData(); }
+  clear() { this.nodes = {}; this.parentById = {}; this.rootIds = []; this.activeLayerId = null; this.ensureDefaultLayer(); this.invalidateDerivedData(); }
 
   serialize() {
-    return { nodes: this.nodes, parentById: this.parentById, rootIds: this.rootIds, lineGroups: this.lineGroups };
+    return { nodes: this.nodes, parentById: this.parentById, rootIds: this.rootIds, activeLayerId: this.activeLayerId };
   }
 
   replaceFromSerialized(serialized) {
     if (serialized?.nodes && Array.isArray(serialized?.rootIds)) {
       this.nodes = serialized.nodes;
       this.parentById = serialized.parentById ?? {};
-      this.rootIds = serialized.rootIds;
-      this.lineGroups = serialized.lineGroups ?? {};
+      this.rootIds = serialized.rootIds.filter((id) => this.nodes[id]);
+
+      const hasLayers = this.rootIds.some((id) => this.nodes[id]?.kind === "layer");
+      if (!hasLayers) {
+        const oldRootIds = [...this.rootIds];
+        this.rootIds = [];
+        this.activeLayerId = null;
+        const layerId = this.ensureDefaultLayer();
+        const layer = this.getLayerNode(layerId);
+        layer.children = [];
+        for (const id of oldRootIds) {
+          const node = this.nodes[id];
+          if (!node || node.kind === "layer") continue;
+          this.attachNodeToLayer(id, layerId);
+        }
+      } else {
+        this.activeLayerId = serialized.activeLayerId ?? this.getLayerOrderIds()[0] ?? null;
+        this.ensureDefaultLayer();
+      }
+
       this.invalidateDerivedData();
       return;
     }
@@ -811,19 +887,19 @@ export class ShapeStore {
           localGeom: { a: { ...shape.startUV }, b: { ...shape.endUV }, ownedByFaceIds: [...(shape.ownedByFaceIds ?? [])] },
           nodeTransform: { x: 0, y: 0, rot: 0 }, style: { ...shape }, createdAt: shape.createdAt ?? Date.now(),
         };
-        this.rootIds.push(shape.id);
+        this.attachNodeToLayer(shape.id);
       } else if (shape.type === "face") {
         this.nodes[shape.id] = {
           id: shape.id, kind: "shape", shapeType: "face", localGeom: { points: (shape.pointsWorld ?? []).map((p) => ({ ...p })) },
           nodeTransform: { x: 0, y: 0, rot: 0 }, style: { ...shape }, createdAt: shape.createdAt ?? Date.now(),
         };
-        this.rootIds.push(shape.id);
+        this.attachNodeToLayer(shape.id);
       } else if (shape.type === "fillRegion") {
         this.nodes[shape.id] = {
           id: shape.id, kind: "shape", shapeType: "fillRegion", localGeom: { uvCycle: shape.uvCycle ?? [] },
           nodeTransform: { x: 0, y: 0, rot: 0 }, style: { ...shape }, createdAt: shape.createdAt ?? Date.now(),
         };
-        this.rootIds.push(shape.id);
+        this.attachNodeToLayer(shape.id);
       } else if (shape.type === "polygon") {
         this.nodes[shape.id] = {
           id: shape.id,
@@ -834,12 +910,12 @@ export class ShapeStore {
           style: { ...shape },
           createdAt: shape.createdAt ?? Date.now(),
         };
-        this.rootIds.push(shape.id);
+        this.attachNodeToLayer(shape.id);
       } else if (shape.type === "group") {
         this.nodes[shape.id] = {
           id: shape.id, kind: "object", name: "Object", transform: { x: 0, y: 0, rot: 0 }, children: [...(shape.childIds ?? [])], createdAt: shape.createdAt ?? Date.now(),
         };
-        this.rootIds.push(shape.id);
+        this.attachNodeToLayer(shape.id);
         for (const childId of (shape.childIds ?? [])) this.parentById[childId] = shape.id;
       }
     }
