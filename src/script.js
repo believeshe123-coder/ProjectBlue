@@ -85,6 +85,9 @@ const menuEditButton = document.getElementById("menuEditBtn");
 const menuEditDropdown = document.getElementById("menuEditDropdown");
 const clearGroupsButton = document.getElementById("clear-groups-btn");
 const duplicateSelectionButton = document.getElementById("duplicate-selection-btn");
+const layerListEl = document.getElementById("layer-list");
+const layerAddButton = document.getElementById("layer-add-btn");
+const layerMoveSelectionButton = document.getElementById("layer-move-selection-btn");
 const menuFileCloseButton = document.getElementById("menu-file-close-btn");
 const menuEditCloseButton = document.getElementById("menu-edit-close-btn");
 const menuSettingsCloseButton = document.getElementById("menu-settings-close-btn");
@@ -388,6 +391,7 @@ function setActiveTool(toolName) {
   refreshToolHelperText();
   closeContextMenu();
   updateSelectionBar();
+  renderLayerList();
 }
 
 function getCurrentToolName() {
@@ -848,6 +852,67 @@ function updateSelectionBar() {
 
 appState.updateSelectionBar = updateSelectionBar;
 
+
+function renderLayerList() {
+  if (!layerListEl) return;
+  const layers = shapeStore.getLayers();
+  layerListEl.textContent = "";
+  for (const layer of layers) {
+    const row = document.createElement("div");
+    row.className = `layer-row${layer.active ? " is-active" : ""}`;
+    row.dataset.layerId = layer.id;
+
+    const activeDot = document.createElement("span");
+    activeDot.className = "layer-chip";
+    activeDot.textContent = layer.active ? "Active" : "Layer";
+
+    const nameButton = document.createElement("button");
+    nameButton.type = "button";
+    nameButton.className = "layer-row-name";
+    nameButton.textContent = layer.name;
+    nameButton.title = "Click to activate • Double-click to rename";
+    nameButton.addEventListener("click", () => {
+      shapeStore.setActiveLayer(layer.id);
+      renderLayerList();
+      appState.notifyStatus?.(`Active layer: ${layer.name}`, 1200);
+    });
+    nameButton.addEventListener("dblclick", () => {
+      const nextName = window.prompt("Rename layer", layer.name);
+      if (nextName == null) return;
+      const didRename = shapeStore.setLayerName(layer.id, nextName);
+      if (!didRename) {
+        appState.notifyStatus?.("Layer name cannot be empty", 1500);
+        return;
+      }
+      renderLayerList();
+      appState.notifyStatus?.("Layer renamed", 1200);
+    });
+
+    const visibleBtn = document.createElement("button");
+    visibleBtn.type = "button";
+    visibleBtn.className = "layer-row-toggle";
+    visibleBtn.textContent = layer.visible ? "👁" : "🙈";
+    visibleBtn.title = layer.visible ? "Hide layer" : "Show layer";
+    visibleBtn.addEventListener("click", () => {
+      shapeStore.setLayerVisibility(layer.id, !layer.visible);
+      renderLayerList();
+    });
+
+    const lockBtn = document.createElement("button");
+    lockBtn.type = "button";
+    lockBtn.className = "layer-row-toggle";
+    lockBtn.textContent = layer.locked ? "🔒" : "🔓";
+    lockBtn.title = layer.locked ? "Unlock layer" : "Lock layer";
+    lockBtn.addEventListener("click", () => {
+      shapeStore.setLayerLocked(layer.id, !layer.locked);
+      renderLayerList();
+    });
+
+    row.append(activeDot, nameButton, visibleBtn, lockBtn);
+    layerListEl.appendChild(row);
+  }
+}
+
 function updateSelectedFlags() {
   const ids = appState.selectedIds;
   for (const shape of shapeStore.getShapes()) {
@@ -857,6 +922,7 @@ function updateSelectedFlags() {
   selectionCountEl.textContent = count > 0 ? `${count} selected` : "";
   if (count === 0) closeSelectionPanel();
   updateSelectionBar();
+  renderLayerList();
 }
 
 function setSelection(ids = [], type = null, lastId = null) {
@@ -1403,7 +1469,7 @@ function applyProjectData(project, { announce = true } = {}) {
   localStorage.setItem("debugSnap", appState.debugSnap ? "1" : "0");
   localStorage.setItem("eraseMode", appState.eraseMode);
   updateControlsFromState();
-
+  renderLayerList();
 
   if (announce) {
     appState.notifyStatus?.("Project loaded");
@@ -1779,9 +1845,35 @@ clearGroupsButton?.addEventListener("click", () => {
   closeAllMenus();
 });
 
+layerAddButton?.addEventListener("click", () => {
+  pushHistoryState();
+  const layerId = shapeStore.createLayer();
+  shapeStore.setActiveLayer(layerId);
+  renderLayerList();
+  appState.notifyStatus?.("Layer added", 1200);
+});
+
+layerMoveSelectionButton?.addEventListener("click", () => {
+  const targetLayerId = shapeStore.getActiveLayerId();
+  const selectedIds = [...appState.selectedIds];
+  if (!selectedIds.length) {
+    appState.notifyStatus?.("Select shapes to move to active layer", 1500);
+    return;
+  }
+  pushHistoryState();
+  const moved = shapeStore.moveNodesToLayer(selectedIds, targetLayerId);
+  if (!moved.length) {
+    appState.notifyStatus?.("Selection is already on active layer", 1400);
+    return;
+  }
+  renderLayerList();
+  appState.notifyStatus?.(`Moved ${moved.length} item${moved.length === 1 ? "" : "s"} to active layer`, 1500);
+});
+
 duplicateSelectionButton?.addEventListener("click", () => {
   duplicateSelection();
   updateSelectionBar();
+  renderLayerList();
 });
 
 document.addEventListener("click", () => {
@@ -1918,6 +2010,7 @@ selectionFillColor?.addEventListener("change", () => pushHistoryState());
 selectionKeepCheckbox?.addEventListener("change", (event) => {
   appState.keepSelecting = event.target.checked;
   updateSelectionBar();
+  renderLayerList();
 });
 
 selectionIncludeFacesCheckbox?.addEventListener("change", (event) => {
@@ -1925,11 +2018,13 @@ selectionIncludeFacesCheckbox?.addEventListener("change", (event) => {
   const status = appState.includeEnclosedFacesInObjectAssembly ? "on" : "off";
   appState.notifyStatus?.(`Include enclosed faces: ${status}`, 1500);
   updateSelectionBar();
+  renderLayerList();
 });
 
 selectionGroupButton?.addEventListener("click", () => {
   createGroupFromSelection();
   updateSelectionBar();
+  renderLayerList();
 });
 selectionDoneButton?.addEventListener("click", () => {
   clearSelectionState();
@@ -1937,6 +2032,7 @@ selectionDoneButton?.addEventListener("click", () => {
 selectionDeleteButton?.addEventListener("click", () => {
   deleteSelection();
   updateSelectionBar();
+  renderLayerList();
 });
 
 zOrderFrontButton?.addEventListener("click", () => runContextMenuZOrder("front"));
@@ -2147,6 +2243,7 @@ if (!didRestoreAutosave && !didRestoreHistory && HISTORY_DEBUG_ENABLED) {
 }
 renderUiVisibility();
 updateControlsFromState();
+renderLayerList();
 startOnboarding();
 
 let pendingEntryLoadOpen = false;

@@ -157,6 +157,30 @@ export class ShapeStore {
     return true;
   }
 
+  setLayerName(id, name) {
+    const layer = this.getLayerNode(id);
+    if (!layer) return false;
+    const trimmed = String(name ?? "").trim();
+    if (!trimmed) return false;
+    layer.name = trimmed;
+    return true;
+  }
+
+  getLayers() {
+    const activeId = this.getActiveLayerId();
+    return this.getLayerOrderIds().map((id, index) => {
+      const layer = this.getLayerNode(id);
+      return {
+        id,
+        name: layer?.name || `Layer ${index + 1}`,
+        visible: layer?.visible !== false,
+        locked: layer?.locked === true,
+        active: id === activeId,
+        childCount: Array.isArray(layer?.children) ? layer.children.length : 0,
+      };
+    });
+  }
+
   reorderLayers(nextOrderedIds = []) {
     const known = new Set(this.getLayerOrderIds());
     const filtered = nextOrderedIds.filter((id) => known.has(id));
@@ -164,6 +188,32 @@ export class ShapeStore {
     this.rootIds = [...filtered, ...missing];
     if (!this.getLayerNode(this.activeLayerId)) this.activeLayerId = this.rootIds[0] ?? null;
     return [...this.rootIds];
+  }
+
+  moveNodesToLayer(ids = [], layerId) {
+    const targetLayer = this.getLayerNode(layerId);
+    if (!targetLayer) return [];
+
+    const movedIds = [];
+    const uniqueIds = [...new Set(ids)].filter((id) => {
+      const node = this.nodes[id];
+      return node && node.kind !== "layer";
+    });
+
+    for (const id of uniqueIds) {
+      let rootId = id;
+      let parentId = this.parentById[rootId] ?? null;
+      while (parentId && this.nodes[parentId]?.kind === "object") {
+        rootId = parentId;
+        parentId = this.parentById[rootId] ?? null;
+      }
+      if (!this.nodes[rootId] || movedIds.includes(rootId)) continue;
+      if (this.getNodeLayerId(rootId) === layerId) continue;
+      this.attachNodeToLayer(rootId, layerId);
+      movedIds.push(rootId);
+    }
+
+    return movedIds;
   }
 
   ensureLayerHierarchyIntegrity() {
