@@ -162,10 +162,9 @@ export class Renderer {
     let computedRegions = [];
 
     if (disableSceneGraph) {
-      const lines = Object.values(this.shapeStore.nodes)
-        .filter((node) => node?.kind === "shape" && node.shapeType === "line" && node.style?.visible !== false)
-        .map((node) => this.shapeStore.toShapeView(node.id))
-        .filter(Boolean);
+      const lines = this.shapeStore
+        .getShapes()
+        .filter((shape) => shape.type === "line" && shape.visible !== false);
       const fillRegions = this.shapeStore.getFillRegions();
       if (fillRegions?.length) console.log("[RENDER] fillRegions", fillRegions.length);
       computedRegions = this.shapeStore.getComputedRegions();
