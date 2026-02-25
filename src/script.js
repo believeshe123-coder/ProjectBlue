@@ -70,6 +70,7 @@ const zOrderFrontButton = document.getElementById("z-order-front-btn");
 const zOrderForwardButton = document.getElementById("z-order-forward-btn");
 const zOrderBackwardButton = document.getElementById("z-order-backward-btn");
 const zOrderBackButton = document.getElementById("z-order-back-btn");
+const zOrderDuplicateButton = document.getElementById("z-order-duplicate-btn");
 
 const menuFileButton = document.getElementById("menuFileBtn");
 const menuFileDropdown = document.getElementById("menuFileDropdown");
@@ -1199,6 +1200,19 @@ function runContextMenuZOrder(mode) {
   closeContextMenu();
 }
 
+function runContextMenuDuplicate() {
+  const ids = appState.contextMenu?.targetIds ?? [];
+  if (ids.length) {
+    const firstNode = shapeStore.getNodeById(ids[0]);
+    const selectionType = firstNode?.kind === "object"
+      ? "object"
+      : (firstNode?.shapeType === "face" ? "face" : "line");
+    setSelection(ids, selectionType, ids[ids.length - 1] ?? null);
+  }
+  duplicateSelection();
+  closeContextMenu();
+}
+
 function convertSelectedRegionToFace() {
   if (appState.disableSceneGraph) {
     appState.notifyStatus?.("Disabled while scene graph is off", 1500);
@@ -1878,6 +1892,7 @@ zOrderFrontButton?.addEventListener("click", () => runContextMenuZOrder("front")
 zOrderForwardButton?.addEventListener("click", () => runContextMenuZOrder("forward"));
 zOrderBackwardButton?.addEventListener("click", () => runContextMenuZOrder("backward"));
 zOrderBackButton?.addEventListener("click", () => runContextMenuZOrder("back"));
+zOrderDuplicateButton?.addEventListener("click", () => runContextMenuDuplicate());
 
 fillColorPicker?.addEventListener("input", (event) => {
   setUnifiedColor(event.target.value);

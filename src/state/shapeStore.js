@@ -606,7 +606,6 @@ export class ShapeStore {
       this.nodes[newId] = cloned;
     }
 
-    const parentInsertCount = new Map();
     for (const oldRootId of sortedRootIds) {
       const oldParentId = this.parentById[oldRootId] ?? null;
       const newRootId = idMap.get(oldRootId);
@@ -616,11 +615,8 @@ export class ShapeStore {
         const parentNode = this.nodes[newParentId];
         if (parentNode?.children) {
           const existingIndex = parentNode.children.indexOf(oldRootId);
-          const baseIndex = existingIndex >= 0 ? existingIndex + 1 : parentNode.children.length;
-          const extraInsertions = parentInsertCount.get(newParentId) ?? 0;
-          const insertAt = Math.max(0, Math.min(baseIndex + extraInsertions, parentNode.children.length));
+          const insertAt = existingIndex >= 0 ? existingIndex + 1 : parentNode.children.length;
           parentNode.children.splice(insertAt, 0, newRootId);
-          parentInsertCount.set(newParentId, extraInsertions + 1);
         }
       }
     }

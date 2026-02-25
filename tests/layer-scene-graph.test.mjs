@@ -135,3 +135,26 @@ test('duplicateNodes clones subtree, remaps metadata, and inserts above source r
     assert.deepEqual(lineNode.localGeom.ownedByFaceIds, [cloneFaceId]);
   }
 });
+
+test('duplicateNodes keeps each duplicated root adjacent to its source in sibling order', () => {
+  const store = new ShapeStore();
+  const layerId = store.getLayerOrderIds()[0];
+
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 2, 0, 3, 0));
+  store.addShape(makeLine('line-c', 4, 0, 5, 0));
+
+  const duplicates = store.duplicateNodes(['line-a', 'line-c'], { offset: { x: 5, y: 5 } });
+  assert.equal(duplicates.length, 2);
+
+  const [dupA, dupC] = duplicates;
+  const order = store.nodes[layerId].children;
+  assert.deepEqual(order, ['line-a', dupA, 'line-b', 'line-c', dupC]);
+
+  assert.equal(store.parentById[dupA], layerId);
+  assert.equal(store.parentById[dupC], layerId);
+  assert.equal(store.nodes[dupA].nodeTransform.x, 5);
+  assert.equal(store.nodes[dupA].nodeTransform.y, 5);
+  assert.equal(store.nodes[dupC].nodeTransform.x, 5);
+  assert.equal(store.nodes[dupC].nodeTransform.y, 5);
+});
