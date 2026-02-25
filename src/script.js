@@ -105,6 +105,7 @@ const STORAGE_KEYS = {
   autosaveProject: "bp_autosave_project",
   historyState: "bp_history_state_v1",
   walkthroughSeen: "bp_walkthrough_seen_v1",
+  recentColors: "bp_recent_colors_v1",
 };
 
 const BUILTIN_THEMES = [
@@ -244,15 +245,33 @@ function applyColorToTarget(target, color) {
 }
 
 function addRecentColor(color) {
-  recentColors = [...recentColors, color].slice(-RECENT_COLOR_LIMIT).reverse();
+  const normalizedColor = String(color || "").trim();
+  if (!normalizedColor) return;
+  recentColors = [normalizedColor, ...recentColors.filter((savedColor) => savedColor !== normalizedColor)]
+    .slice(0, RECENT_COLOR_LIMIT);
+  localStorage.setItem(STORAGE_KEYS.recentColors, JSON.stringify(recentColors));
   renderRecentColors();
   refreshStyleUI();
 }
 
 function applySampledColor(target, color) {
   applyColorToTarget(target, color);
-  addRecentColor(color);
   refreshStyleUI();
+}
+
+function loadRecentColors() {
+  const rawValue = localStorage.getItem(STORAGE_KEYS.recentColors);
+  if (!rawValue) return [];
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((color) => String(color || "").trim())
+      .filter(Boolean)
+      .slice(0, RECENT_COLOR_LIMIT);
+  } catch {
+    return [];
+  }
 }
 
 function renderRecentColors() {
@@ -1918,6 +1937,7 @@ function initializeEraseModePreference() {
   return appState.eraseMode;
 }
 
+recentColors = loadRecentColors();
 renderRecentColors();
 resetStyleAlphaDefaults();
 refreshStyleUI();
