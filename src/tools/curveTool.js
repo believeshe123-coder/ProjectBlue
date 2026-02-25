@@ -38,6 +38,7 @@ function createCurveSegments(start, control, end, lineStyle) {
     const currentPoint = evaluateQuadraticBezier(start, control, end, t);
     segments.push(new Line({
       ...lineStyle,
+      snapToGrid: false,
       start: previousPoint,
       end: currentPoint,
     }));
