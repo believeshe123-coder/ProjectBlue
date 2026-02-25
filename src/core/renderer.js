@@ -150,9 +150,12 @@ export class Renderer {
 
     const selectedIds = this.appState.selectedIds instanceof Set ? [...this.appState.selectedIds] : [];
     const selectionSet = new Set(selectedIds);
-    if (this.appState.selectedType === "group" && this.appState.selectedGroupId) {
-      const group = this.shapeStore.getLineGroup?.(this.appState.selectedGroupId);
-      if (group) for (const lineId of group.childIds) selectionSet.add(lineId);
+    if (this.appState.selectedType === "object" && selectedIds.length) {
+      for (const objectId of selectedIds) {
+        for (const childId of this.shapeStore.getDescendantIds?.(objectId) ?? []) {
+          selectionSet.add(childId);
+        }
+      }
     }
 
     const disableSceneGraph = this.appState.disableSceneGraph === true;
