@@ -1,6 +1,7 @@
 import { BaseTool } from "./baseTool.js";
 import { worldToIsoUV } from "../core/isoGrid.js";
 import { findSmallestRegionContainingPoint } from "../core/regionBuilder.js";
+import { ensureActiveLayerWritable } from "./toolUtils.js";
 
 export class FillTool extends BaseTool {
   onActivate() {
@@ -23,6 +24,7 @@ export class FillTool extends BaseTool {
     if (event.button !== 0) return;
 
     const { shapeStore, camera, appState } = this.context;
+    if (!ensureActiveLayerWritable(this.context)) return;
     if (!appState.enableFill) {
       appState.notifyStatus?.("Fill is disabled in stability mode", 1500);
       return;

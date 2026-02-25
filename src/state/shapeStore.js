@@ -272,7 +272,7 @@ export class ShapeStore {
 
   moveNodesToLayer(ids = [], layerId) {
     const targetLayer = this.getLayerNode(layerId);
-    if (!targetLayer) return [];
+    if (!targetLayer || targetLayer.visible === false || targetLayer.locked === true) return [];
 
     const movedIds = [];
     const uniqueIds = [...new Set(ids)].filter((id) => {
@@ -288,6 +288,7 @@ export class ShapeStore {
         parentId = this.parentById[rootId] ?? null;
       }
       if (!this.nodes[rootId] || movedIds.includes(rootId)) continue;
+      if (!this.isNodeInteractable(rootId, { includeLocked: false })) continue;
       if (this.getNodeLayerId(rootId) === layerId) continue;
       this.attachNodeToLayer(rootId, layerId);
       movedIds.push(rootId);
@@ -726,7 +727,7 @@ export class ShapeStore {
   }
 
   duplicateNodes(ids = [], { offset = null } = {}) {
-    const inputIds = [...new Set(ids.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer"))];
+    const inputIds = [...new Set(ids.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer" && this.isNodeInteractable(id, { includeLocked: false })) )];
     if (!inputIds.length) return [];
 
     const rootIds = inputIds.filter((id) => {
@@ -880,7 +881,7 @@ export class ShapeStore {
   }
 
   deleteNodesInEntirety(ids = []) {
-    const targetIds = [...new Set(ids.filter((id) => this.nodes[id]))];
+    const targetIds = [...new Set(ids.filter((id) => this.nodes[id] && this.isNodeInteractable(id, { includeLocked: false })) )];
     if (!targetIds.length) return [];
 
     const deleteSet = new Set();
@@ -1273,7 +1274,9 @@ export class ShapeStore {
   }
 
   reorderSelectionZ(selectionIds = [], mode = "front") {
-    const lineIds = [...new Set(selectionIds.flatMap((id) => this.getLineDescendantsForNode(id)))];
+    const lineIds = [...new Set(selectionIds
+      .filter((id) => this.isNodeInteractable(id, { includeLocked: false }))
+      .flatMap((id) => this.getLineDescendantsForNode(id)))];
     if (!lineIds.length) return false;
     if (mode === "front") return this.bringToFront(lineIds);
     if (mode === "forward") return this.bringForward(lineIds);

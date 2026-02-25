@@ -248,3 +248,41 @@ test('deleteLayer blocks deleting last layer and rehomes children before removal
   assert.equal(store.getNodeLayerId('line-b'), layerB);
   assert.equal(store.activeLayerId, layerB);
 });
+
+test('move/duplicate/delete/reorder respect locked and hidden layer constraints', () => {
+  const store = new ShapeStore();
+  const layerA = store.getLayerOrderIds()[0];
+  const layerB = store.createLayer({ name: 'Layer B' });
+
+  store.setActiveLayer(layerA);
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 2, 0, 3, 0));
+
+  store.setLayerLocked(layerA, true);
+  assert.deepEqual(store.duplicateNodes(['line-a'], { offset: { x: 5, y: 5 } }), []);
+  store.deleteNodesInEntirety(['line-a']);
+  assert.ok(store.getNodeById('line-a'));
+  assert.equal(store.reorderSelectionZ(['line-a'], 'front'), false);
+
+  store.setLayerLocked(layerA, false);
+  store.setLayerVisibility(layerA, false);
+  assert.deepEqual(store.duplicateNodes(['line-b'], { offset: { x: 5, y: 5 } }), []);
+  store.deleteNodesInEntirety(['line-b']);
+  assert.ok(store.getNodeById('line-b'));
+  assert.equal(store.reorderSelectionZ(['line-b'], 'front'), false);
+
+  store.setLayerVisibility(layerA, true);
+  store.setLayerLocked(layerB, true);
+  assert.deepEqual(store.moveNodesToLayer(['line-a'], layerB), []);
+  assert.equal(store.getNodeLayerId('line-a'), layerA);
+
+  store.setLayerLocked(layerB, false);
+  store.setLayerVisibility(layerB, false);
+  assert.deepEqual(store.moveNodesToLayer(['line-a'], layerB), []);
+  assert.equal(store.getNodeLayerId('line-a'), layerA);
+
+  store.setLayerVisibility(layerB, true);
+  const moved = store.moveNodesToLayer(['line-a'], layerB);
+  assert.deepEqual(moved, ['line-a']);
+  assert.equal(store.getNodeLayerId('line-a'), layerB);
+});

@@ -1,6 +1,6 @@
 import { BaseTool } from "./baseTool.js";
 import { Line } from "../models/line.js";
-import { getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
+import { ensureActiveLayerWritable, getLineStyle, getSnappedPoint, updateSnapIndicator } from "./toolUtils.js";
 
 export class IsoLineTool extends BaseTool {
   constructor(context) {
@@ -22,11 +22,18 @@ export class IsoLineTool extends BaseTool {
 
   onMouseDown({ screenPoint }) {
     const { appState, historyStore, shapeStore } = this.context;
+    if (!this.startPoint && !ensureActiveLayerWritable(this.context)) return;
     const snapped = getSnappedPoint(this.context, screenPoint);
 
     if (!this.startPoint) {
       this.startPoint = snapped.pt;
       updateSnapIndicator(appState, snapped);
+      return;
+    }
+
+    if (!ensureActiveLayerWritable(this.context)) {
+      this.startPoint = null;
+      appState.previewShape = null;
       return;
     }
 

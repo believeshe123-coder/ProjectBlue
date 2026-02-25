@@ -1044,6 +1044,27 @@ function clearSelectionState() {
   updateSelectedFlags();
 }
 
+
+function getLayerBlockReasonForNode(id) {
+  const layerId = shapeStore.getNodeLayerId(id);
+  const layer = shapeStore.getLayerNode(layerId);
+  if (!layer) return "hidden";
+  if (layer.visible === false) return "hidden";
+  if (layer.locked === true) return "locked";
+  return null;
+}
+
+function filterSelectionForLayerAccess(ids = []) {
+  const blocked = { locked: 0, hidden: 0 };
+  const allowedIds = ids.filter((id) => {
+    const reason = getLayerBlockReasonForNode(id);
+    if (!reason) return true;
+    blocked[reason] += 1;
+    return false;
+  });
+  return { allowedIds, blocked };
+}
+
 function getSelectedShapes() {
   return [...appState.selectedIds]
     .map((id) => shapeStore.getShapeById(id) ?? shapeStore.getNodeById(id))
@@ -1089,6 +1110,14 @@ function normalizeSelectionForOperation(ids = [...appState.selectedIds], { opera
     if (appState.selectedIds.size > 0) clearSelectionState();
     return { ids: [], selectionType: null, kind: null };
   }
+
+  const { allowedIds, blocked } = filterSelectionForLayerAccess(idsByKind);
+  if (!allowedIds.length && idsByKind.length) {
+    const reason = blocked.locked >= blocked.hidden ? "locked" : "hidden";
+    appState.notifyStatus?.(reason === "locked" ? "Layer is locked" : "Layer is hidden", 1500);
+    return { ids: [], selectionType: null, kind: null };
+  }
+  idsByKind = allowedIds;
 
   let selectionType = "line";
   if (resolvedKind === "object") {
@@ -1936,7 +1965,16 @@ layerAddButton?.addEventListener("click", () => {
 
 layerMoveSelectionButton?.addEventListener("click", () => {
   const targetLayerId = shapeStore.getActiveLayerId();
-  const selectedIds = [...appState.selectedIds];
+  const targetLayer = shapeStore.getLayerNode(targetLayerId);
+  if (!targetLayer || targetLayer.visible === false) {
+    appState.notifyStatus?.("Layer is hidden", 1500);
+    return;
+  }
+  if (targetLayer.locked === true) {
+    appState.notifyStatus?.("Layer is locked", 1500);
+    return;
+  }
+  const { ids: selectedIds } = normalizeSelectionForOperation([...appState.selectedIds], { operation: "move" });
   if (!selectedIds.length) {
     appState.notifyStatus?.("Select shapes to move to active layer", 1500);
     return;
