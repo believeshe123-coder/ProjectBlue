@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Blueprint Builder Editor</title>
-    <link rel="stylesheet" href="./assets/style.css?v=2" />
+    <link rel="stylesheet" href="./assets/style.css?v=3" />
   </head>
   <body>
     <div class="app">
@@ -54,7 +54,6 @@
               <div class="panel-header"><div class="menu-title">Options</div><button type="button" class="panel-close-btn" id="menu-settings-close-btn" aria-label="Close Settings menu">×</button></div>
               <button class="menu-row menu-row-button" id="measurement-mode-toggle" type="button">Measurement mode: SMART</button>
               <label class="menu-row"><input id="show-grid-units-toggle" type="checkbox" />Show grid units</label>
-              <label class="menu-row"><input id="continue-polyline-toggle" type="checkbox" checked />Continue polyline</label>
               <button class="menu-row menu-row-button" id="reset-tips-btn" type="button">Reset tips</button>
             </div>
             <div class="menu-section">
@@ -78,7 +77,7 @@
             <div class="tool-grid">
               <button class="tool-button tool-tile" data-tool="select" type="button">Select</button>
               <button class="tool-button tool-tile" data-tool="iso-line" type="button">Line</button>
-              <button class="tool-button tool-tile" data-tool="polyline" type="button">Polyline</button>
+              <button class="tool-button tool-tile" data-tool="curve" type="button">Curve</button>
               <button class="tool-button tool-tile" data-tool="measure" type="button">Measure</button>
               <button class="tool-button tool-tile" data-tool="fill" type="button">Fill</button>
               <button class="tool-button tool-tile" data-tool="erase" type="button" title="Erase line geometry or fill regions based on mode">Erase</button>
@@ -146,6 +145,6 @@
       <button id="z-order-back-btn" class="z-order-context-item" type="button">Send to Back</button>
     </div>
 
-    <script type="module" src="./src/script.js?v=2"></script>
+    <script type="module" src="./src/script.js?v=3"></script>
   </body>
 </html>

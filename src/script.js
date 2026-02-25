@@ -6,7 +6,7 @@ import { ShapeStore } from "./state/shapeStore.js";
 import { IsoLineTool } from "./tools/isoLineTool.js";
 import { SelectTool } from "./tools/selectTool.js";
 import { MeasureTool } from "./tools/measureTool.js";
-import { PolylineTool } from "./tools/polylineTool.js";
+import { CurveTool } from "./tools/curveTool.js";
 import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
 import { normalizeEraseMode } from "./state/eraseMode.js";
@@ -34,7 +34,6 @@ const unitPerCellInput = document.getElementById("unit-per-cell");
 const unitNameInput = document.getElementById("unit-name");
 const scaleDisplay = document.getElementById("scale-display");
 const measurementModeToggle = document.getElementById("measurement-mode-toggle");
-const continuePolylineToggle = document.getElementById("continue-polyline-toggle");
 const showGridUnitsToggle = document.getElementById("show-grid-units-toggle");
 const canvasThemeSelect = document.getElementById("canvas-theme-select");
 const customBgColorPicker = document.getElementById("custom-bg-color-picker");
@@ -120,7 +119,7 @@ let savedThemes = [];
 const TOOL_METADATA = {
   select: { displayName: "Select", shortcut: "V", clickSummary: "Select and move lines/groups" },
   "iso-line": { displayName: "Line", shortcut: "L", clickSummary: "Click start and end points" },
-  polyline: { displayName: "Polyline", shortcut: "P", clickSummary: "Click to chain segments; Enter/Escape to finish" },
+  curve: { displayName: "Curve", shortcut: "C", clickSummary: "Click start, click control, click end" },
   measure: { displayName: "Measure", shortcut: "M", clickSummary: "Click two points to place measurement" },
   fill: { displayName: "Fill", shortcut: "F", clickSummary: "Click inside a closed region to fill" },
   erase: { displayName: "Erase", shortcut: "E", clickSummary: "Line mode erases line geometry only. Fill mode erases fill regions only." },
@@ -151,7 +150,6 @@ const appState = {
   unitName: "ft",
   unitPerCell: 1,
   measurementMode: "smart",
-  continuePolyline: true,
   showGridUnits: false,
   selectedType: null,
   selectedIds: new Set(),
@@ -200,7 +198,7 @@ const tools = {
   select: new SelectTool(sharedContext),
   "iso-line": new IsoLineTool(sharedContext),
   measure: new MeasureTool(sharedContext),
-  polyline: new PolylineTool(sharedContext),
+  curve: new CurveTool(sharedContext),
   fill: new FillTool(sharedContext),
   erase: new EraseTool(sharedContext),
 };
@@ -355,13 +353,6 @@ function updateMeasurementModeControl() {
   measurementModeToggle.textContent = `Measurement mode: ${appState.measurementMode.toUpperCase()}`;
 }
 
-function updateContinuePolylineControl() {
-  if (!continuePolylineToggle) return;
-  continuePolylineToggle.title = appState.continuePolyline
-    ? "Polyline chaining enabled"
-    : "Polyline chaining disabled";
-}
-
 function updateEraseControls() {
   if (eraseModeToggle) {
     eraseModeToggle.value = appState.eraseMode;
@@ -460,7 +451,7 @@ function refreshScaleDisplay() {
 const TOOL_HELPER_TEXT = {
   select: "Select: click-drag to marquee, click to select.",
   "iso-line": "Line: click once to start, click again to finish.",
-  polyline: "Polyline: click-click to add segments, double-click to finish.",
+  curve: "Curve: click start, click control point, then click end.",
   measure: "Measure: click and drag to measure between points.",
   fill: "Fill: click inside an enclosed region to fill it.",
   erase: "Erase: line mode erases line geometry only; fill mode erases fill regions only.",
@@ -469,7 +460,7 @@ const TOOL_HELPER_TEXT = {
 const ONBOARDING_STEPS = [
   {
     title: "Tool selection",
-    body: "Pick tools from the Tool Grid. Start with Select, then Line or Polyline for drawing.",
+    body: "Pick tools from the Tool Grid. Start with Select, then Line or Curve for drawing.",
     selector: ".tool-grid",
   },
   {
@@ -1671,11 +1662,6 @@ debugRegionsToggle?.addEventListener("change", (event) => {
 debugSelectionDragToggle?.addEventListener("change", (event) => {
   appState.debugSelectionDrag = event.target.checked;
   localStorage.setItem("debugSelectionDrag", appState.debugSelectionDrag ? "1" : "0");
-});
-
-continuePolylineToggle.addEventListener("change", (event) => {
-  appState.continuePolyline = event.target.checked;
-  updateContinuePolylineControl();
 });
 
 showGridUnitsToggle.addEventListener("change", (event) => {
