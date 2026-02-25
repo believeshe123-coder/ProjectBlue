@@ -176,9 +176,9 @@ body {
 .sidebar {
   position: relative;
   z-index: 15;
-  width: 260px;
-  min-width: 240px;
-  max-width: 300px;
+  width: 228px;
+  min-width: 208px;
+  max-width: 244px;
   height: 100%;
   overflow: auto;
   background: var(--sidebar-bg);
@@ -187,10 +187,10 @@ body {
 }
 
 .side-section {
-  padding: 10px 0;
+  padding: 7px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .section-title {
@@ -205,27 +205,37 @@ body {
 .tool-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
 .tool-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
 .tool-button,
 .style-select,
 .scale-input,
 .tool-toggle {
-  min-height: 36px;
+  min-height: 30px;
   border: 1px solid var(--soft-border);
   border-radius: 8px;
   background: var(--button-bg);
   color: #1f2937;
-  font-size: 12px;
-  padding: 6px 8px;
+  font-size: 11px;
+  padding: 4px 6px;
   transition: transform 120ms ease, box-shadow 120ms ease, background 140ms ease;
+}
+
+.tool-button,
+.style-select,
+.scale-input,
+.field-inline,
+.field-block,
+.recent-colors-row,
+.recent-row {
+  min-width: 0;
 }
 
 .tool-button { cursor: pointer; }
@@ -252,6 +262,7 @@ body {
   justify-content: center;
   font-weight: 500;
 }
+
 
 .color-chips {
   display: grid;
@@ -335,9 +346,9 @@ body {
 }
 
 .recent-colors-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
 }
 
 .recent-colors-row input[type="color"] {
@@ -353,13 +364,15 @@ body {
 
 
 .save-color-button {
+  width: 100%;
   padding: 4px 8px;
   font-size: 11px;
 }
 
 .recent-row {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(5, var(--swatch-size));
+  grid-template-columns: repeat(5, minmax(0, var(--swatch-size)));
   gap: 6px;
 }
 
