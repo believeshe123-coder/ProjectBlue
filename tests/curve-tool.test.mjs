@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createCurveSegments } from '../src/tools/curveTool.js';
+import { CurveTool, createCurveSegments } from '../src/tools/curveTool.js';
 
 function point(x, y) {
   return { x, y };
@@ -33,4 +33,42 @@ test('createCurveSegments scales up and clamps for long curves', () => {
   );
 
   assert.equal(segments.length, 192);
+});
+
+
+test('CurveTool commits the previewed end point on final click', () => {
+  const added = [];
+  const context = {
+    appState: {
+      snapToGrid: false,
+      snapToMidpoints: false,
+      snapIndicator: null,
+      snapDebugStatus: 'SNAP: OFF',
+      previewShape: null,
+      currentStyle: {
+        strokeColor: '#ffffff',
+        strokeOpacity: 1,
+        strokeWidth: 2,
+        fillEnabled: false,
+        fillColor: '#000000',
+        fillOpacity: 0,
+      },
+    },
+    camera: { zoom: 1, screenToWorld: (point) => point },
+    shapeStore: { addShape(shape) { added.push(shape); } },
+    pushHistoryState() {},
+  };
+
+  const tool = new CurveTool(context);
+
+  tool.onMouseDown({ screenPoint: point(0, 0) });
+  tool.onMouseDown({ screenPoint: point(20, 20) });
+  tool.onMouseMove({ screenPoint: point(60, 0) });
+
+  tool.onMouseDown({ screenPoint: point(80, 0) });
+
+  assert.equal(added.length > 0, true);
+  const committedEnd = added.at(-1).end;
+  assert.equal(committedEnd.x, 60);
+  assert.equal(committedEnd.y, 0);
 });

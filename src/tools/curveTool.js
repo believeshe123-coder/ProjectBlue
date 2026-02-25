@@ -79,11 +79,13 @@ export class CurveTool extends BaseTool {
     super(context);
     this.startPoint = null;
     this.controlPoint = null;
+    this.previewEndPoint = null;
   }
 
   resetCurve() {
     this.startPoint = null;
     this.controlPoint = null;
+    this.previewEndPoint = null;
     this.context.appState.previewShape = null;
   }
 
@@ -104,6 +106,7 @@ export class CurveTool extends BaseTool {
 
     if (!this.startPoint) {
       this.startPoint = snapped.pt;
+      this.previewEndPoint = null;
       return;
     }
 
@@ -113,7 +116,8 @@ export class CurveTool extends BaseTool {
     }
 
     this.context.pushHistoryState?.();
-    const segments = createCurveSegments(this.startPoint, this.controlPoint, snapped.pt, getLineStyle(appState));
+    const finalPoint = this.previewEndPoint ?? snapped.pt;
+    const segments = createCurveSegments(this.startPoint, this.controlPoint, finalPoint, getLineStyle(appState));
     for (const segment of segments) {
       shapeStore.addShape(segment);
     }
@@ -128,6 +132,7 @@ export class CurveTool extends BaseTool {
     updateSnapIndicator(appState, snapped);
 
     if (!this.startPoint) {
+      this.previewEndPoint = null;
       appState.previewShape = null;
       return;
     }
@@ -152,6 +157,7 @@ export class CurveTool extends BaseTool {
         strokeOpacity: Math.min(0.9, appState.currentStyle.strokeOpacity),
       },
     });
+    this.previewEndPoint = snapped.pt;
   }
 
   onKeyDown(event) {
