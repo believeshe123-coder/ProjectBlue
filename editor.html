@@ -25,7 +25,15 @@
           <button class="menu-item" id="menuEditBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="menuEditDropdown">Edit</button>
           <div class="menu-dropdown" id="menuEditDropdown" role="menu" aria-label="Edit menu" data-open="false">
             <div class="menu-section">
-              <div class="panel-header"><div class="menu-title">Groups</div><button type="button" class="panel-close-btn" id="menu-edit-close-btn" aria-label="Close Edit menu">×</button></div>
+              <div class="panel-header"><div class="menu-title">Layers</div><button type="button" class="panel-close-btn" id="menu-edit-close-btn" aria-label="Close Edit menu">×</button></div>
+              <div id="layer-list" class="layer-list" role="list" aria-label="Layer list"></div>
+              <div class="layer-actions-row">
+                <button id="layer-add-btn" class="menu-link-btn" type="button">Add Layer</button>
+                <button id="layer-move-selection-btn" class="menu-link-btn" type="button">Move Selection to Active</button>
+              </div>
+            </div>
+            <div class="menu-section">
+              <div class="menu-title">Groups (legacy)</div>
               <button id="clear-groups-btn" class="menu-link-btn" type="button">Clear All Groups</button>
             </div>
             <div class="menu-section">
