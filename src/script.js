@@ -1199,12 +1199,30 @@ function updateControlsFromState() {
   refreshToolHelperText();
 }
 
-function applyProjectData(project, { announce = true } = {}) {
-  if (!project || !project.shapes) {
+function coerceProjectPayload(project) {
+  if (Array.isArray(project)) {
+    return { shapes: project };
+  }
+
+  if (!project || typeof project !== "object") {
     throw new Error("Unsupported project file");
   }
 
-  const settings = project.settings ?? {};
+  if (project.shapes) {
+    return project;
+  }
+
+  if (Array.isArray(project.nodes) && Array.isArray(project.rootIds)) {
+    return { ...project, shapes: { nodes: project.nodes, rootIds: project.rootIds } };
+  }
+
+  throw new Error("Unsupported project file");
+}
+
+function applyProjectData(project, { announce = true } = {}) {
+  const normalizedProject = coerceProjectPayload(project);
+
+  const settings = normalizedProject.settings ?? {};
   appState.unitPerCell = Number.isFinite(settings.unitPerGrid) && settings.unitPerGrid > 0 ? settings.unitPerGrid : 1;
   appState.unitName = typeof settings.unit === "string" && settings.unit ? settings.unit : "ft";
   appState.snapToGrid = settings.snapGrid !== false;
@@ -1216,19 +1234,19 @@ function applyProjectData(project, { announce = true } = {}) {
     ? Math.max(0, Math.min(1, settings.fillOpacity))
     : 1;
 
-  const loadedThemes = project.themes?.savedThemes;
+  const loadedThemes = normalizedProject.themes?.savedThemes;
   savedThemes = Array.isArray(loadedThemes) ? loadedThemes.filter((theme) => (
     theme && theme.id && theme.name && isValidHexColor(theme.bgColor) && isValidHexColor(theme.gridColor)
   )) : [];
   persistSavedThemes();
 
-  const selectedThemeId = project.themes?.builtInSelectedId;
+  const selectedThemeId = normalizedProject.themes?.builtInSelectedId;
   const fallbackTheme = getThemeById(selectedThemeId) || BUILTIN_THEMES[0];
   appState.activeThemeId = fallbackTheme.id;
   populateThemeSelect();
   applyTheme(fallbackTheme, fallbackTheme.id);
 
-  shapeStore.replaceFromSerialized(normalizeShapePayload(project.shapes));
+  shapeStore.replaceFromSerialized(normalizeShapePayload(normalizedProject.shapes));
   resetHistoryWithBaseline();
   appState.previewShape = null;
   appState.selectedRegionKey = null;
@@ -1527,6 +1545,7 @@ projectSaveButton?.addEventListener("click", () => {
 });
 
 projectLoadButton?.addEventListener("click", () => {
+  pendingEntryLoadOpen = false;
   projectLoadInput?.click();
 });
 
@@ -1968,6 +1987,14 @@ renderUiVisibility();
 updateControlsFromState();
 startOnboarding();
 
+let pendingEntryLoadOpen = false;
+
+function consumePendingEntryLoadOpen() {
+  if (!pendingEntryLoadOpen || !projectLoadInput) return;
+  pendingEntryLoadOpen = false;
+  projectLoadInput.click();
+}
+
 function triggerProjectLoadFromEntry() {
   if (!projectLoadInput) return;
   const hasUserActivation = navigator.userActivation?.isActive === true;
@@ -1976,10 +2003,15 @@ function triggerProjectLoadFromEntry() {
     return;
   }
 
+  pendingEntryLoadOpen = true;
   setFileMenuOpen(true);
   projectLoadButton?.focus();
-  appState.notifyStatus?.("Browser blocked automatic file picker. Use File → Load.", 3200);
+  appState.notifyStatus?.("Click anywhere to open your drawing file, or use File → Load.", 4200);
 }
+
+window.addEventListener("pointerdown", () => {
+  consumePendingEntryLoadOpen();
+}, { once: false });
 
 const entryAction = new URLSearchParams(window.location.search).get("start");
 if (entryAction === "open") {
