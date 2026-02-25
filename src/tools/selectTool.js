@@ -26,6 +26,39 @@ function getSelectedIds(appState) {
   return appState.selectedIds instanceof Set ? [...appState.selectedIds] : [];
 }
 
+function normalizeDragSelection(shapeStore, appState, ids = [], { operation = "move" } = {}) {
+  const inputIds = [...new Set(ids)];
+  const existingIds = inputIds.filter((id) => shapeStore.getNodeById(id));
+  const staleCount = inputIds.length - existingIds.length;
+  const normalizedIds = shapeStore.getObjectRootIds(existingIds);
+  const objectIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
+  const shapeIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "shape");
+
+  if (staleCount > 0) {
+    appState.notifyStatus?.(`Recovered from ${staleCount} stale selection item${staleCount === 1 ? "" : "s"}`, 1200);
+  }
+
+  const preferredKind = appState.selectedType === "object" ? "object" : "shape";
+  let finalIds = preferredKind === "object" ? objectIds : shapeIds;
+  let kind = preferredKind;
+
+  if (!finalIds.length && objectIds.length) {
+    finalIds = objectIds;
+    kind = "object";
+  } else if (!finalIds.length && shapeIds.length) {
+    finalIds = shapeIds;
+    kind = "shape";
+  }
+
+  if (objectIds.length && shapeIds.length) {
+    const fallbackLabel = kind === "object" ? "objects" : "shapes";
+    appState.notifyStatus?.(`Mixed selection detected; ${operation} applied to ${fallbackLabel} only`, 1600);
+  }
+
+  if (kind === "object") finalIds = shapeStore.getObjectRootIds(finalIds);
+  return { ids: finalIds, kind };
+}
+
 function notifyNonMovable(appState, shape) {
   if (!shape?.type) return;
   appState.notifyStatus?.(`${shape.type} is selectable but not movable`, 1400);
@@ -160,8 +193,14 @@ export class SelectTool extends BaseTool {
     }
 
     const selectedIds = getSelectedIds(appState);
-    let dragIds = selectedIds.includes(targetId) ? selectedIds : [targetId];
-    const isDraggingObjects = dragIds.some((id) => shapeStore.getNodeById(id)?.kind === "object");
+    const baseDragIds = selectedIds.includes(targetId) ? selectedIds : [targetId];
+    const { ids: dragIds, kind: dragKind } = normalizeDragSelection(shapeStore, appState, baseDragIds, { operation: "move" });
+    if (!dragIds.length) {
+      this.dragState = null;
+      appState.setSelection?.([], null);
+      return;
+    }
+    const isDraggingObjects = dragKind === "object";
 
     this.dragState = {
       startMouseWorld: { ...worldPoint },
@@ -191,6 +230,19 @@ export class SelectTool extends BaseTool {
     }
 
     if (this.dragState) {
+      const liveDragIds = this.dragState.dragIds.filter((id) => shapeStore.getNodeById(id));
+      if (!liveDragIds.length) {
+        appState.notifyStatus?.("Selection changed while dragging; recovering", 1200);
+        this.dragState = null;
+        appState.setSelection?.([], null);
+        if (canvas) canvas.style.cursor = "default";
+        return;
+      }
+      if (liveDragIds.length !== this.dragState.dragIds.length) {
+        this.dragState.dragIds = liveDragIds;
+        appState.notifyStatus?.("Some selected items were removed during drag", 1200);
+      }
+
       const rawDelta = {
         x: worldPoint.x - this.dragState.startMouseWorld.x,
         y: worldPoint.y - this.dragState.startMouseWorld.y,
