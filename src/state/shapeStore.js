@@ -52,6 +52,11 @@ function segmentMatchesBoundary(line, edgeStart, edgeEnd, tolerance = 1.5) {
   return sameDirection || reversedDirection;
 }
 
+function deepClone(value) {
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
 function regionCentroid(uvCycle = []) {
   if (!Array.isArray(uvCycle) || uvCycle.length < 3) return null;
   const worldPoints = uvCycle.map((point) => isoUVToWorld(point.u, point.v));
@@ -468,6 +473,141 @@ export class ShapeStore {
       if (child?.kind === "object") stack.push(...(child.children ?? []));
     }
     return out;
+  }
+
+  duplicateNodes(ids = [], { offset = null } = {}) {
+    const inputIds = [...new Set(ids.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer"))];
+    if (!inputIds.length) return [];
+
+    const rootIds = inputIds.filter((id) => {
+      let parentId = this.parentById[id] ?? null;
+      while (parentId) {
+        if (inputIds.includes(parentId)) return false;
+        parentId = this.parentById[parentId] ?? null;
+      }
+      return true;
+    });
+    if (!rootIds.length) return [];
+
+    const sortedRootIds = [...rootIds].sort((a, b) => {
+      const parentA = this.parentById[a] ?? "";
+      const parentB = this.parentById[b] ?? "";
+      if (parentA !== parentB) return parentA.localeCompare(parentB);
+      const parentNode = this.nodes[parentA];
+      const indexA = parentNode?.children?.indexOf(a) ?? -1;
+      const indexB = parentNode?.children?.indexOf(b) ?? -1;
+      if (indexA !== indexB) return indexA - indexB;
+      return a.localeCompare(b);
+    });
+
+    const cloneOrder = [];
+    const visited = new Set();
+    const collectSubtree = (rootId) => {
+      const stack = [rootId];
+      while (stack.length) {
+        const currentId = stack.pop();
+        if (!currentId || visited.has(currentId)) continue;
+        const currentNode = this.nodes[currentId];
+        if (!currentNode || currentNode.kind === "layer") continue;
+        visited.add(currentId);
+        cloneOrder.push(currentId);
+        if (currentNode.kind === "object") {
+          const children = [...(currentNode.children ?? [])];
+          for (let i = children.length - 1; i >= 0; i -= 1) stack.push(children[i]);
+        }
+      }
+    };
+    for (const rootId of sortedRootIds) collectSubtree(rootId);
+    if (!cloneOrder.length) return [];
+
+    const idMap = new Map();
+    for (const oldId of cloneOrder) {
+      const oldNode = this.nodes[oldId];
+      const prefix = oldNode?.kind === "object" ? "object" : (oldNode?.shapeType ?? "node");
+      idMap.set(oldId, makeId(prefix));
+    }
+
+    const remapRefId = (refId) => (idMap.has(refId) ? idMap.get(refId) : refId);
+    const remapRefList = (arr) => (Array.isArray(arr) ? arr.map((refId) => remapRefId(refId)) : arr);
+
+    for (const oldId of cloneOrder) {
+      const newId = idMap.get(oldId);
+      const oldNode = this.nodes[oldId];
+      const cloned = deepClone(oldNode);
+      cloned.id = newId;
+      if (cloned?.style?.id) cloned.style.id = newId;
+
+      if (cloned.kind === "object") {
+        cloned.children = (cloned.children ?? []).map((childId) => idMap.get(childId) ?? childId);
+      }
+
+      if (cloned.kind === "shape" && cloned.shapeType === "line") {
+        if (cloned.localGeom?.ownedByFaceIds) cloned.localGeom.ownedByFaceIds = remapRefList(cloned.localGeom.ownedByFaceIds);
+        if (cloned.localGeom?.ownedByFaceId) cloned.localGeom.ownedByFaceId = remapRefId(cloned.localGeom.ownedByFaceId);
+        if (cloned.style?.sourceForPolygonId) cloned.style.sourceForPolygonId = remapRefId(cloned.style.sourceForPolygonId);
+      }
+
+      if (cloned.kind === "shape" && cloned.shapeType === "face") {
+        if (cloned.style?.sourceLineIds) cloned.style.sourceLineIds = remapRefList(cloned.style.sourceLineIds);
+        if (cloned.meta?.sourceLineIds) cloned.meta.sourceLineIds = remapRefList(cloned.meta.sourceLineIds);
+      }
+
+      if (cloned.kind === "shape" && cloned.shapeType === "polygon") {
+        if (cloned.style?.sourceLineIds) cloned.style.sourceLineIds = remapRefList(cloned.style.sourceLineIds);
+      }
+
+      this.nodes[newId] = cloned;
+    }
+
+    const parentInsertCount = new Map();
+    for (const oldRootId of sortedRootIds) {
+      const oldParentId = this.parentById[oldRootId] ?? null;
+      const newRootId = idMap.get(oldRootId);
+      const newParentId = oldParentId && idMap.has(oldParentId) ? idMap.get(oldParentId) : oldParentId;
+      if (newParentId) {
+        this.parentById[newRootId] = newParentId;
+        const parentNode = this.nodes[newParentId];
+        if (parentNode?.children) {
+          const existingIndex = parentNode.children.indexOf(oldRootId);
+          const baseIndex = existingIndex >= 0 ? existingIndex + 1 : parentNode.children.length;
+          const extraInsertions = parentInsertCount.get(newParentId) ?? 0;
+          const insertAt = Math.max(0, Math.min(baseIndex + extraInsertions, parentNode.children.length));
+          parentNode.children.splice(insertAt, 0, newRootId);
+          parentInsertCount.set(newParentId, extraInsertions + 1);
+        }
+      }
+    }
+
+    for (const oldId of cloneOrder) {
+      const oldParentId = this.parentById[oldId] ?? null;
+      if (!oldParentId || sortedRootIds.includes(oldId)) continue;
+      const newId = idMap.get(oldId);
+      const newParentId = idMap.get(oldParentId);
+      if (newParentId) this.parentById[newId] = newParentId;
+    }
+
+    const delta = {
+      x: Number.isFinite(offset?.x) ? offset.x : 0,
+      y: Number.isFinite(offset?.y) ? offset.y : 0,
+    };
+    if (delta.x !== 0 || delta.y !== 0) {
+      for (const oldRootId of sortedRootIds) {
+        const rootClone = this.nodes[idMap.get(oldRootId)];
+        if (!rootClone) continue;
+        if (rootClone.kind === "object") {
+          rootClone.transform = rootClone.transform ?? { ...IDENTITY_TRANSFORM };
+          rootClone.transform.x += delta.x;
+          rootClone.transform.y += delta.y;
+        } else if (rootClone.kind === "shape") {
+          rootClone.nodeTransform = rootClone.nodeTransform ?? { ...IDENTITY_TRANSFORM };
+          rootClone.nodeTransform.x += delta.x;
+          rootClone.nodeTransform.y += delta.y;
+        }
+      }
+    }
+
+    this.invalidateDerivedData();
+    return sortedRootIds.map((id) => idMap.get(id)).filter(Boolean);
   }
 
   buildLineOwnerMap() {

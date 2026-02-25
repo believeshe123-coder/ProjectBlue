@@ -83,3 +83,55 @@ test('serialize/replaceFromSerialized preserve layer properties and order', () =
   assert.equal(restored.nodes[layerA].locked, true);
   assert.equal(restored.activeLayerId, layerB);
 });
+
+test('duplicateNodes clones subtree, remaps metadata, and inserts above source roots', () => {
+  const store = new ShapeStore();
+  const layerId = store.getLayerOrderIds()[0];
+  store.addShape(makeLine('line-a', 0, 0, 1, 0));
+  store.addShape(makeLine('line-b', 1, 0, 2, 0));
+
+  const faceId = 'face-a';
+  store.nodes[faceId] = {
+    id: faceId,
+    kind: 'shape',
+    shapeType: 'face',
+    localGeom: { points: [isoUVToWorld(0, 0), isoUVToWorld(1, 0), isoUVToWorld(0, 1)] },
+    nodeTransform: { x: 0, y: 0, rot: 0 },
+    style: { id: faceId, type: 'face', sourceLineIds: ['line-a', 'line-b'], visible: true, locked: false },
+    meta: { sourceLineIds: ['line-a', 'line-b'] },
+    createdAt: Date.now(),
+  };
+  store.attachNodeToLayer(faceId, layerId);
+  store.nodes['line-a'].localGeom.ownedByFaceIds = [faceId];
+  store.nodes['line-b'].localGeom.ownedByFaceIds = [faceId];
+
+  const objectId = store.createObjectFromIds(['line-a', 'line-b', faceId], { name: 'Obj' });
+  const beforeChildren = [...store.nodes[layerId].children];
+
+  const [cloneObjectId] = store.duplicateNodes([objectId], { offset: { x: 10, y: 12 } });
+  assert.ok(cloneObjectId);
+  assert.notEqual(cloneObjectId, objectId);
+
+  const afterChildren = store.nodes[layerId].children;
+  const sourceIndex = afterChildren.indexOf(objectId);
+  assert.equal(afterChildren[sourceIndex + 1], cloneObjectId);
+  assert.equal(afterChildren.length, beforeChildren.length + 1);
+
+  const cloneObject = store.nodes[cloneObjectId];
+  assert.equal(cloneObject.transform.x, 10);
+  assert.equal(cloneObject.transform.y, 12);
+  assert.equal(cloneObject.children.length, 3);
+
+  const cloneLines = cloneObject.children.filter((id) => store.nodes[id]?.shapeType === 'line');
+  const cloneFaceId = cloneObject.children.find((id) => store.nodes[id]?.shapeType === 'face');
+  assert.equal(cloneLines.length, 2);
+  assert.ok(cloneFaceId);
+
+  const cloneFace = store.nodes[cloneFaceId];
+  const clonedSourceLineIds = cloneFace.meta.sourceLineIds;
+  assert.deepEqual(new Set(clonedSourceLineIds), new Set(cloneLines));
+  for (const lineId of cloneLines) {
+    const lineNode = store.nodes[lineId];
+    assert.deepEqual(lineNode.localGeom.ownedByFaceIds, [cloneFaceId]);
+  }
+});
