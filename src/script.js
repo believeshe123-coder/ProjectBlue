@@ -60,6 +60,7 @@ const selectionFillColor = document.getElementById("selection-fill-color");
 const selectionBar = document.getElementById("selection-bar");
 const selectionBarCountEl = document.getElementById("selection-bar-count");
 const selectionKeepCheckbox = document.getElementById("selection-keep-checkbox");
+const selectionIncludeFacesCheckbox = document.getElementById("selection-include-faces-checkbox");
 const selectionGroupButton = document.getElementById("btnGroup");
 const selectionDoneButton = document.getElementById("selection-done-btn");
 const selectionDeleteButton = document.getElementById("selection-delete-btn");
@@ -155,6 +156,7 @@ const appState = {
   selectedIds: new Set(),
   selectedGroupId: null,
   keepSelecting: false,
+  includeEnclosedFacesInObjectAssembly: false,
   selectedRegionKey: null,
   lastSelectedId: null,
   marqueeRect: null,
@@ -832,6 +834,7 @@ function updateSelectionBar() {
   selectionBar.classList.toggle("is-visible", shouldShow);
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.size})`;
   if (selectionKeepCheckbox) selectionKeepCheckbox.checked = appState.keepSelecting === true;
+  if (selectionIncludeFacesCheckbox) selectionIncludeFacesCheckbox.checked = appState.includeEnclosedFacesInObjectAssembly === true;
   if (selectionGroupButton) selectionGroupButton.disabled = !canGroupSelection();
 }
 
@@ -951,43 +954,106 @@ function makeObjectFromSelection() {
   const hasSelectionBox = !!appState.selectionBoxWorld;
   if (!hasSelection && !hasSelectionBox) return;
 
+  const resolveIdsFromSelectionBounds = (selectionBounds) => {
+    if (!selectionBounds) return [];
+    const hitShapes = shapeStore.getShapesIntersectingRect(selectionBounds);
+    return [...new Set(hitShapes
+      .map((shape) => {
+        let currentId = shape.id;
+        let parentId = shapeStore.parentById[currentId];
+        while (parentId) {
+          const parentNode = shapeStore.getNodeById(parentId);
+          if (parentNode?.kind === "object") currentId = parentId;
+          parentId = shapeStore.parentById[parentId];
+        }
+        return currentId;
+      })
+      .filter(Boolean))];
+  };
+
+  let selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
+  if (!selectedIds.length && hasSelectionBox) {
+    selectedIds = resolveIdsFromSelectionBounds(appState.selectionBoxWorld);
+    if (selectedIds.length) {
+      const firstNode = shapeStore.getNodeById(selectedIds[0]);
+      const selectionType = firstNode?.kind === "object"
+        ? "object"
+        : (firstNode?.shapeType === "face" ? "face" : "line");
+      setSelection(selectedIds, selectionType, selectedIds[selectedIds.length - 1] ?? null);
+    }
+  }
+
   const selectionBounds = appState.selectionBoxWorld
-    ?? shapeStore.getSelectionBoundsFromIds([...appState.selectedIds]);
+    ?? shapeStore.getSelectionBoundsFromIds(selectedIds);
   if (!selectionBounds) {
     appState.notifyStatus?.("No selection bounds", 1200);
     return;
   }
 
-  const intersectingLineIds = shapeStore.getShapes()
-    .filter((shape) => shape.type === "line" && shape.visible !== false && shape.locked !== true)
-    .filter((shape) => {
-      const bounds = shapeStore.getShapeBounds(shape);
-      if (!bounds) return false;
-      return !(bounds.maxX < selectionBounds.minX
-        || bounds.minX > selectionBounds.maxX
-        || bounds.maxY < selectionBounds.minY
-        || bounds.minY > selectionBounds.maxY);
-    })
-    .map((shape) => shape.id);
-  const filledRegionCount = shapeStore.getFilledRegionCountInBounds(selectionBounds);
+  const selectedNodes = selectedIds
+    .map((id) => shapeStore.getNodeById(id))
+    .filter(Boolean);
+  const selectedLineIds = selectedNodes
+    .filter((node) => node.kind === "shape" && node.shapeType === "line")
+    .map((node) => node.id);
+  const selectedFaceIds = selectedNodes
+    .filter((node) => node.kind === "shape" && node.shapeType === "face")
+    .map((node) => node.id);
+  const selectedObjectIds = selectedNodes
+    .filter((node) => node.kind === "object")
+    .map((node) => node.id);
 
-  if (!intersectingLineIds.length && !filledRegionCount) {
-    appState.notifyStatus?.("Nothing in selection to group", 1500);
+  if (!selectedLineIds.length && !selectedFaceIds.length && selectedObjectIds.length) {
+    appState.notifyStatus?.("Select lines/faces instead of objects to create a new object", 1800);
+    return;
+  }
+
+  let capturedFaceIds = [];
+  if (appState.includeEnclosedFacesInObjectAssembly) {
+    capturedFaceIds = shapeStore.captureFilledRegionsAsFacesInBounds(selectionBounds);
+  }
+
+  const childIds = [...new Set([...selectedLineIds, ...selectedFaceIds, ...capturedFaceIds])];
+  const childNodes = childIds.map((id) => shapeStore.getNodeById(id)).filter(Boolean);
+  const validShapeChildIds = childNodes
+    .filter((node) => node.kind === "shape" && (node.shapeType === "line" || node.shapeType === "face"))
+    .map((node) => node.id);
+
+  if (!validShapeChildIds.length) {
+    appState.notifyStatus?.("No valid lines/faces in selection", 1500);
+    return;
+  }
+
+  const validShapeChildIdSet = new Set(validShapeChildIds);
+  const hasSelfReference = validShapeChildIds.some((id) => {
+    let parentId = shapeStore.parentById[id];
+    const visited = new Set();
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      if (validShapeChildIdSet.has(parentId)) return true;
+      parentId = shapeStore.parentById[parentId];
+    }
+    return false;
+  });
+  if (hasSelfReference) {
+    appState.notifyStatus?.("Selection has nested/self-referential children; refine selection", 1800);
     return;
   }
 
   pushHistoryState();
 
-  const faceIds = shapeStore.captureFilledRegionsAsFacesInBounds(selectionBounds);
-
-  const childIds = [...new Set([...intersectingLineIds, ...faceIds])];
-
-  const objectId = shapeStore.createObjectFromIds(childIds, { name: "Object" });
+  const objectId = shapeStore.createObjectFromIds(validShapeChildIds, { name: "Object" });
+  if (!objectId) {
+    appState.notifyStatus?.("Unable to create object from selection", 1500);
+    return;
+  }
 
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
   setSelection([objectId], "object", objectId);
-  appState.notifyStatus?.("Object created", 1400);
+  const lineCount = selectedLineIds.length;
+  const faceCount = [...new Set([...selectedFaceIds, ...capturedFaceIds])].length;
+  appState.notifyStatus?.(`Object created (${lineCount} lines, ${faceCount} faces)`, 1800);
 }
 
 function ungroupSelection() {
@@ -1773,6 +1839,13 @@ selectionFillColor?.addEventListener("change", () => pushHistoryState());
 
 selectionKeepCheckbox?.addEventListener("change", (event) => {
   appState.keepSelecting = event.target.checked;
+  updateSelectionBar();
+});
+
+selectionIncludeFacesCheckbox?.addEventListener("change", (event) => {
+  appState.includeEnclosedFacesInObjectAssembly = event.target.checked;
+  const status = appState.includeEnclosedFacesInObjectAssembly ? "on" : "off";
+  appState.notifyStatus?.(`Include enclosed faces: ${status}`, 1500);
   updateSelectionBar();
 });
 
