@@ -40,7 +40,7 @@ function normalizeDragSelection(shapeStore, appState, ids = [], { operation = "m
   const inputIds = [...new Set(ids)];
   const existingIds = inputIds.filter((id) => shapeStore.getNodeById(id));
   const staleCount = inputIds.length - existingIds.length;
-  const normalizedIds = shapeStore.getObjectRootIds(existingIds);
+  const normalizedIds = shapeStore.getSelectionRootIds(existingIds);
   const objectIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
   const shapeIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "shape");
 
@@ -65,7 +65,7 @@ function normalizeDragSelection(shapeStore, appState, ids = [], { operation = "m
     appState.notifyStatus?.(`Mixed selection detected; ${operation} applied to ${fallbackLabel} only`, 1600);
   }
 
-  if (kind === "object") finalIds = shapeStore.getObjectRootIds(finalIds);
+  if (kind === "object") finalIds = shapeStore.getSelectionRootIds(finalIds);
 
   const blocked = { locked: 0, hidden: 0 };
   const interactableIds = finalIds.filter((id) => {

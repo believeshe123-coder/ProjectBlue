@@ -727,13 +727,6 @@ function applySnapshot(snapshot) {
 
   shapeStore.replaceFromSerialized(normalizeShapePayload(snapshot.shapes ?? []));
   appState.keepSelecting = snapshot.keepSelecting === true;
-  const legacySelectedGroupId = snapshot.selectedGroupId ?? null;
-  if (snapshot.selectedType === "group") {
-    appState.selectedType = legacySelectedGroupId ? "object" : null;
-    appState.selectedIds = legacySelectedGroupId ? new Set([legacySelectedGroupId]) : new Set();
-    appState.lastSelectedId = legacySelectedGroupId;
-    return;
-  }
   appState.selectedType = snapshot.selectedType ?? null;
 }
 
@@ -831,6 +824,12 @@ function resetProject() {
 
 function isShapeInteractive(shape) {
   return !!shape && shape.visible !== false && shape.locked !== true;
+}
+
+function isSingleSelectedObject() {
+  if (appState.selectedType !== "object" || appState.selectedIds.size !== 1) return false;
+  const [objectId] = appState.selectedIds;
+  return shapeStore.getNodeById(objectId)?.kind === "object";
 }
 
 function canGroupSelection() {
@@ -1081,7 +1080,7 @@ function normalizeSelectionForOperation(ids = [...appState.selectedIds], { opera
   const inputIds = [...new Set(ids)];
   const existingIds = inputIds.filter((id) => shapeStore.getNodeById(id));
   const staleCount = inputIds.length - existingIds.length;
-  const normalizedIds = shapeStore.getObjectRootIds(existingIds);
+  const normalizedIds = shapeStore.getSelectionRootIds(existingIds);
   const objectIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
   const shapeIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "shape");
 
@@ -1296,10 +1295,9 @@ function ungroupSelection() {
     appState.notifyStatus?.("Disabled while scene graph is off", 1500);
     return;
   }
-  if (!isSingleSelectedGroup()) return;
+  if (!isSingleSelectedObject()) return;
   const [groupId] = appState.selectedIds;
   const group = shapeStore.getNodeById(groupId);
-  if (!group || group.kind !== "object") return;
   pushHistoryState();
   shapeStore.removeShape(group.id);
   clearSelectionState();

@@ -275,18 +275,13 @@ export class ShapeStore {
     if (!targetLayer || targetLayer.visible === false || targetLayer.locked === true) return [];
 
     const movedIds = [];
-    const uniqueIds = [...new Set(ids)].filter((id) => {
+    const uniqueIds = this.getSelectionRootIds(ids).filter((id) => {
       const node = this.nodes[id];
       return node && node.kind !== "layer";
     });
 
     for (const id of uniqueIds) {
-      let rootId = id;
-      let parentId = this.parentById[rootId] ?? null;
-      while (parentId && this.nodes[parentId]?.kind === "object") {
-        rootId = parentId;
-        parentId = this.parentById[rootId] ?? null;
-      }
+      const rootId = id;
       if (!this.nodes[rootId] || movedIds.includes(rootId)) continue;
       if (!this.isNodeInteractable(rootId, { includeLocked: false })) continue;
       if (this.getNodeLayerId(rootId) === layerId) continue;
@@ -691,6 +686,36 @@ export class ShapeStore {
     });
   }
 
+  getSelectionRootIds(ids = []) {
+    const visited = new Set();
+    const normalizedIds = [];
+    for (const id of ids) {
+      if (!id || visited.has(id) || !this.nodes[id]) continue;
+      visited.add(id);
+      let currentId = id;
+      let parentId = this.parentById[currentId] ?? null;
+      const loopGuard = new Set([currentId]);
+      while (parentId && !loopGuard.has(parentId)) {
+        loopGuard.add(parentId);
+        if (this.nodes[parentId]?.kind === "object") currentId = parentId;
+        parentId = this.parentById[parentId] ?? null;
+      }
+      normalizedIds.push(currentId);
+    }
+
+    const uniqueIds = [...new Set(normalizedIds)];
+    return uniqueIds.filter((id) => {
+      let parentId = this.parentById[id] ?? null;
+      const loopGuard = new Set([id]);
+      while (parentId && !loopGuard.has(parentId)) {
+        loopGuard.add(parentId);
+        if (uniqueIds.includes(parentId)) return false;
+        parentId = this.parentById[parentId] ?? null;
+      }
+      return true;
+    });
+  }
+
   getAllObjectIds({ rootOnly = false } = {}) {
     const objectIds = Object.values(this.nodes)
       .filter((node) => node?.kind === "object")
@@ -727,10 +752,11 @@ export class ShapeStore {
   }
 
   duplicateNodes(ids = [], { offset = null } = {}) {
-    const inputIds = [...new Set(ids.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer" && this.isNodeInteractable(id, { includeLocked: false })) )];
+    const rootIds = this.getSelectionRootIds(ids);
+    const inputIds = [...new Set(rootIds.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer" && this.isNodeInteractable(id, { includeLocked: false })) )];
     if (!inputIds.length) return [];
 
-    const rootIds = inputIds.filter((id) => {
+    const duplicableRootIds = inputIds.filter((id) => {
       let parentId = this.parentById[id] ?? null;
       while (parentId) {
         if (inputIds.includes(parentId)) return false;
@@ -738,9 +764,9 @@ export class ShapeStore {
       }
       return true;
     });
-    if (!rootIds.length) return [];
+    if (!duplicableRootIds.length) return [];
 
-    const sortedRootIds = [...rootIds].sort((a, b) => {
+    const sortedRootIds = [...duplicableRootIds].sort((a, b) => {
       const parentA = this.parentById[a] ?? "";
       const parentB = this.parentById[b] ?? "";
       if (parentA !== parentB) return parentA.localeCompare(parentB);
@@ -881,7 +907,8 @@ export class ShapeStore {
   }
 
   deleteNodesInEntirety(ids = []) {
-    const targetIds = [...new Set(ids.filter((id) => this.nodes[id] && this.isNodeInteractable(id, { includeLocked: false })) )];
+    const rootIds = this.getSelectionRootIds(ids);
+    const targetIds = [...new Set(rootIds.filter((id) => this.nodes[id] && this.isNodeInteractable(id, { includeLocked: false })) )];
     if (!targetIds.length) return [];
 
     const deleteSet = new Set();
