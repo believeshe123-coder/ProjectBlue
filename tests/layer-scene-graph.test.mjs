@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { ShapeStore } from '../src/state/shapeStore.js';
 import { Line } from '../src/models/line.js';
+import { FillRegion } from '../src/models/fillRegion.js';
 import { isoUVToWorld } from '../src/core/isoGrid.js';
 
 function makeLine(id, startU, startV, endU, endV) {
@@ -139,7 +140,6 @@ test('duplicateNodes clones subtree, remaps metadata, and inserts above source r
 test('duplicateNodes keeps each duplicated root adjacent to its source in sibling order', () => {
   const store = new ShapeStore();
   const layerId = store.getLayerOrderIds()[0];
-
   store.addShape(makeLine('line-a', 0, 0, 1, 0));
   store.addShape(makeLine('line-b', 2, 0, 3, 0));
   store.addShape(makeLine('line-c', 4, 0, 5, 0));
@@ -285,4 +285,32 @@ test('move/duplicate/delete/reorder respect locked and hidden layer constraints'
   const moved = store.moveNodesToLayer(['line-a'], layerB);
   assert.deepEqual(moved, ['line-a']);
   assert.equal(store.getNodeLayerId('line-a'), layerB);
+});
+
+test('fillRegion toShapeView and hit-test respect node and parent transforms', () => {
+  const store = new ShapeStore();
+  const fill = new FillRegion({
+    id: 'fill-a',
+    regionId: 'region-a',
+    uvCycle: [{ u: 0, v: 0 }, { u: 1, v: 0 }, { u: 0, v: 1 }],
+  });
+  store.addShape(fill);
+
+  const objectId = store.createObjectFromIds(['fill-a'], { name: 'fill-object' });
+  assert.ok(objectId);
+
+  store.nodes[objectId].transform = { x: 20, y: 15, rot: 0 };
+  store.nodes['fill-a'].nodeTransform = { x: 10, y: 5, rot: 0 };
+
+  const view = store.toShapeView('fill-a');
+  assert.equal(view?.type, 'fillRegion');
+
+  const expected = [{ u: 0, v: 0 }, { u: 1, v: 0 }, { u: 0, v: 1 }]
+    .map((uv) => isoUVToWorld(uv.u, uv.v))
+    .map((point) => ({ x: point.x + 30, y: point.y + 20 }));
+
+  assert.deepEqual(view.pointsWorld, expected);
+  const hit = store.getTopmostHitShape({ x: 30, y: 20 }, 1, { allowedTypes: ['fillRegion'] });
+  assert.equal(hit?.id, 'fill-a');
+  assert.deepEqual(hit?.pointsWorld, expected);
 });
