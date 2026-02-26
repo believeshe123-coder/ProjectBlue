@@ -43,7 +43,7 @@ Anchor: `duplicateSelection` (invokes store duplication APIs).
   - Keyboard shortcut: `Ctrl/Cmd + D`.
   - Selection/menu button action for Duplicate.
 - Duplication acts on currently selected root IDs.
-- Default duplicate offset is one isometric step (`isoUVToWorld(1, 1)`).
+- Default duplicate offset is zero (`{ x: 0, y: 0 }`) so duplicates are created directly on top of the source selection.
 - Resulting selection is replaced with duplicated root IDs, with the last duplicated ID as active/last-selected.
 
 ## 5) Edge cases
