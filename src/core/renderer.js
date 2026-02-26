@@ -225,6 +225,8 @@ export class Renderer {
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
     this.ctx.globalAlpha = 1;
+    this.ctx.fillStyle = this.appState.theme?.bgColor ?? "#183547";
+    this.ctx.fillRect(0, 0, canvasCssW, canvasCssH);
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH, { gridColor: this.appState.theme?.gridColor });
 
     const selectedIds = this.appState.selectedIds instanceof Set ? [...this.appState.selectedIds] : [];
