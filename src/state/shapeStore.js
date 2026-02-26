@@ -649,7 +649,9 @@ export class ShapeStore {
       for (const lineId of sourceLineIds) {
         const lineNode = this.nodes[lineId];
         if (!lineNode || lineNode.kind !== "shape" || lineNode.shapeType !== "line") continue;
-        if (this.parentById[lineId]) continue;
+        const lineParentId = this.parentById[lineId] ?? null;
+        const lineParentNode = lineParentId ? this.nodes[lineParentId] : null;
+        if (lineParentNode?.kind === "object") continue;
         lineNode.nodeTransform.x += delta.x;
         lineNode.nodeTransform.y += delta.y;
       }
@@ -1147,6 +1149,36 @@ export class ShapeStore {
   }
 
   getFillRegions() { return this.getShapes().filter((shape) => shape.type === "fillRegion"); }
+
+
+  convertPolygonToFace(polygonId, fillStyle = {}) {
+    const node = this.nodes[polygonId];
+    if (!node || node.kind !== "shape" || node.shapeType !== "polygon") return null;
+
+    const localPoints = node.localGeom.points
+      ?? (node.style.pointsUV ?? []).map((point) => isoUVToWorld(point.u, point.v));
+    if (!Array.isArray(localPoints) || localPoints.length < 3) return null;
+
+    const sourceLineIds = [...(node.style?.sourceLineIds ?? node.meta?.sourceLineIds ?? [])];
+    node.shapeType = "face";
+    node.localGeom = { points: localPoints.map((point) => ({ ...point })) };
+    node.style = {
+      ...node.style,
+      type: "face",
+      fillColor: fillStyle.fillColor ?? fillStyle.color ?? node.style.fillColor ?? "#4aa3ff",
+      fillAlpha: fillStyle.fillAlpha ?? fillStyle.alpha ?? fillStyle.fillOpacity ?? node.style.fillAlpha ?? node.style.fillOpacity ?? 1,
+      fillOpacity: fillStyle.fillOpacity ?? fillStyle.alpha ?? fillStyle.fillAlpha ?? node.style.fillOpacity ?? node.style.fillAlpha ?? 1,
+      sourceRegionKey: node.style?.sourceRegionKey ?? null,
+      sourceLineIds,
+      strokeColor: "transparent",
+      strokeWidth: 0,
+    };
+    delete node.style.pointsUV;
+    delete node.style.pointsWorld;
+    node.meta = { ...(node.meta ?? {}), sourceLineIds };
+    this.invalidateDerivedData();
+    return this.toShapeView(polygonId);
+  }
 
   getFaceBySourceRegionKey(regionKey) {
     if (!regionKey) return null;

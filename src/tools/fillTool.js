@@ -33,6 +33,22 @@ export class FillTool extends BaseTool {
     const worldPt = worldPoint ?? camera.screenToWorld(screenPoint);
     console.log("[FILL] pointerDown reached", { worldPt, zoom: camera.zoom });
 
+    const toleranceWorld = 8 / camera.zoom;
+    const polygonHit = shapeStore.getTopmostHitShape(worldPt, toleranceWorld, {
+      includeLocked: false,
+      allowedTypes: ["polygon"],
+    });
+    if (polygonHit?.type === "polygon") {
+      this.context.pushHistoryState?.();
+      const convertedFace = shapeStore.convertPolygonToFace?.(polygonHit.id, {
+        color: appState.currentStyle.fillColor,
+        alpha: appState.currentStyle.fillOpacity ?? 1,
+      });
+      appState.setSelection?.(convertedFace ? [convertedFace.id] : [], convertedFace ? "face" : null, convertedFace?.id ?? null);
+      appState.notifyStatus?.(convertedFace ? "Polygon converted to Face" : "Unable to convert polygon", 1100);
+      return;
+    }
+
     const regions = shapeStore.getComputedRegions();
     console.log("[FILL] regions", shapeStore.getRegions?.()?.length ?? shapeStore.regions?.length ?? regions.length);
 
@@ -51,7 +67,7 @@ export class FillTool extends BaseTool {
       alpha: appState.currentStyle.fillOpacity ?? 1,
     });
 
-    appState.setSelection?.(fill ? [fill.id] : [], fill?.id ?? null);
+    appState.setSelection?.(fill ? [fill.id] : [], fill ? "fillRegion" : null, fill?.id ?? null);
     appState.notifyStatus?.("Region filled", 900);
   }
 }
