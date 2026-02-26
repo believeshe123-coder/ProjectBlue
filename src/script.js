@@ -1172,7 +1172,7 @@ function duplicateSelection() {
   const { ids: selectedIds } = normalizeSelectionForOperation([...appState.selectedIds], { operation: "duplicate" });
   if (!selectedIds.length) return false;
 
-  const offset = isoUVToWorld(1, 1);
+  const offset = { x: 0, y: 0 };
   pushHistoryState();
   const duplicatedRootIds = shapeStore.duplicateNodes(selectedIds, { offset });
   if (!duplicatedRootIds.length) return false;
