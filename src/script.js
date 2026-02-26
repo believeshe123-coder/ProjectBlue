@@ -76,6 +76,8 @@ const menuFileButton = document.getElementById("menuFileBtn");
 const menuFileDropdown = document.getElementById("menuFileDropdown");
 const projectSaveButton = document.getElementById("project-save-btn");
 const projectLoadButton = document.getElementById("project-load-btn");
+const projectSaveLocalButton = document.getElementById("project-save-local-btn");
+const projectLoadLocalButton = document.getElementById("project-load-local-btn");
 const projectLoadInput = document.getElementById("project-load-input");
 const projectResetButton = document.getElementById("project-reset-btn");
 
@@ -109,6 +111,7 @@ const STORAGE_KEYS = {
   savedThemes: "bp_savedThemes",
   activeThemeId: "bp_activeThemeId",
   autosaveProject: "bp_autosave_project",
+  localSavedProject: "bp_local_saved_project",
   historyState: "bp_history_state_v1",
   walkthroughSeen: "bp_walkthrough_seen_v1",
   recentColors: "bp_recent_colors_v1",
@@ -1598,6 +1601,25 @@ function saveProjectToFile() {
   appState.notifyStatus?.("Project saved");
 }
 
+function saveProjectToLocalStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.localSavedProject, JSON.stringify(buildProjectData()));
+    appState.notifyStatus?.("Project saved locally", 1800);
+  } catch {
+    appState.notifyStatus?.("Failed to save local project", 2200);
+  }
+}
+
+function loadProjectFromLocalStorage() {
+  const serialized = localStorage.getItem(STORAGE_KEYS.localSavedProject);
+  if (!serialized) {
+    appState.notifyStatus?.("No local saved project found", 2200);
+    return;
+  }
+
+  loadProjectFromText(serialized);
+}
+
 function loadProjectFromText(jsonText) {
   let parsed;
   try {
@@ -1644,6 +1666,25 @@ function queueAutosave() {
     localStorage.setItem(STORAGE_KEYS.autosaveProject, autosaveSignature);
     autosaveTimeout = null;
   }, 500);
+}
+
+function restoreLocalSaveIfAvailable() {
+  const serialized = localStorage.getItem(STORAGE_KEYS.localSavedProject);
+  if (!serialized) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(serialized);
+    applyProjectData(parsed, { announce: false });
+    autosaveSignature = serialized;
+    pendingAutosaveSignature = "";
+    appState.notifyStatus?.("Loaded local save", 1800);
+    return true;
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.localSavedProject);
+    return false;
+  }
 }
 
 function restoreAutosaveIfAvailable() {
@@ -1863,8 +1904,17 @@ projectSaveButton?.addEventListener("click", () => {
 });
 
 projectLoadButton?.addEventListener("click", () => {
-  pendingEntryLoadOpen = false;
   projectLoadInput?.click();
+});
+
+projectSaveLocalButton?.addEventListener("click", () => {
+  saveProjectToLocalStorage();
+  closeAllMenus();
+});
+
+projectLoadLocalButton?.addEventListener("click", () => {
+  loadProjectFromLocalStorage();
+  closeAllMenus();
 });
 
 projectResetButton?.addEventListener("click", () => {
@@ -2350,12 +2400,13 @@ updateEraseControls();
 renderToolButtons();
 renderHelpModal();
 setActiveTool("select");
-const didRestoreAutosave = restoreAutosaveIfAvailable();
-const didRestoreHistory = didRestoreAutosave ? restoreHistoryState() : false;
-if (!didRestoreHistory) {
+const didRestoreLocalSave = restoreLocalSaveIfAvailable();
+const didRestoreAutosave = didRestoreLocalSave ? false : restoreAutosaveIfAvailable();
+const didRestoreHistory = (didRestoreLocalSave || didRestoreAutosave) ? false : restoreHistoryState();
+if (!didRestoreLocalSave && !didRestoreAutosave && !didRestoreHistory) {
   resetHistoryWithBaseline();
 }
-if (!didRestoreAutosave && !didRestoreHistory && HISTORY_DEBUG_ENABLED) {
+if (!didRestoreLocalSave && !didRestoreAutosave && !didRestoreHistory && HISTORY_DEBUG_ENABLED) {
   console.log("[HISTORY:start] initialized empty baseline for new session");
 }
 renderUiVisibility();
@@ -2363,36 +2414,6 @@ updateControlsFromState();
 renderLayerList();
 startOnboarding();
 
-let pendingEntryLoadOpen = false;
-
-function consumePendingEntryLoadOpen() {
-  if (!pendingEntryLoadOpen || !projectLoadInput) return;
-  pendingEntryLoadOpen = false;
-  projectLoadInput.click();
-}
-
-function triggerProjectLoadFromEntry() {
-  if (!projectLoadInput) return;
-  const hasUserActivation = navigator.userActivation?.isActive === true;
-  if (hasUserActivation) {
-    projectLoadInput.click();
-    return;
-  }
-
-  pendingEntryLoadOpen = true;
-  setFileMenuOpen(true);
-  projectLoadButton?.focus();
-  appState.notifyStatus?.("Click anywhere to open your drawing file, or use File → Load.", 4200);
-}
-
-window.addEventListener("pointerdown", () => {
-  consumePendingEntryLoadOpen();
-}, { once: false });
-
-const entryAction = new URLSearchParams(window.location.search).get("start");
-if (entryAction === "open") {
-  window.setTimeout(triggerProjectLoadFromEntry, 120);
-}
 
 function frame() {
   queueAutosave();
