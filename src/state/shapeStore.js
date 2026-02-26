@@ -488,11 +488,15 @@ export class ShapeStore {
   toShapeView(id) {
     const node = this.nodes[id];
     if (!node || node.kind !== "shape") return null;
+    const worldTx = this.getWorldTransform(id);
     if (node.shapeType === "fillRegion") {
-      return FillRegion.fromJSON(node.style);
+      const region = FillRegion.fromJSON(node.style);
+      const localPoints = (node.localGeom.uvCycle ?? []).map((point) => isoUVToWorld(point.u, point.v));
+      region.pointsWorld = localPoints.map((point) => applyTransformPoint(worldTx, point));
+      region.updateBounds();
+      return region;
     }
 
-    const worldTx = this.getWorldTransform(id);
     if (node.shapeType === "line") {
       const aLocal = isoUVToWorld(node.localGeom.a.u, node.localGeom.a.v);
       const bLocal = isoUVToWorld(node.localGeom.b.u, node.localGeom.b.v);
