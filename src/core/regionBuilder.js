@@ -353,7 +353,10 @@ export function buildRegionsFromLines(lines) {
 
 export function findSmallestRegionContainingPoint(regions, pointUV) {
   const boundedRegions = regions.filter((region) => Array.isArray(region?.uvCycle) && region.uvCycle.length >= 3);
-  const candidateRegions = boundedRegions.filter((region) => isPointStrictlyInPolygonUV(pointUV, region.uvCycle));
+  let candidateRegions = boundedRegions.filter((region) => isPointStrictlyInPolygonUV(pointUV, region.uvCycle));
+  if (!candidateRegions.length) {
+    candidateRegions = boundedRegions.filter((region) => isPointInPolygonUV(pointUV, region.uvCycle));
+  }
   console.debug("[FillTool] candidate region ids:", candidateRegions.map((region) => region.id));
 
   if (!candidateRegions.length) {

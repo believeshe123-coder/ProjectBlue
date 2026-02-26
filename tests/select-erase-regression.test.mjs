@@ -105,6 +105,45 @@ test('filling a polygon converts it into a face', () => {
   assert.equal(historyPushes, 1);
 });
 
+
+test('filling still succeeds when clicking exactly on a region boundary', () => {
+  const shapeStore = new ShapeStore();
+  const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
+  const lineC = new Line({ id: 'line-c', start: isoUVToWorld(2, 2), end: isoUVToWorld(0, 2) });
+  const lineD = new Line({ id: 'line-d', start: isoUVToWorld(0, 2), end: isoUVToWorld(0, 0) });
+  shapeStore.addShape(lineA);
+  shapeStore.addShape(lineB);
+  shapeStore.addShape(lineC);
+  shapeStore.addShape(lineD);
+
+  const appState = {
+    enableFill: true,
+    currentStyle: { fillColor: '#00ff88', fillOpacity: 0.75 },
+    setSelection(ids = [], type = null, lastId = null) {
+      this.selectedIds = new Set(ids);
+      this.selectedType = type;
+      this.lastSelectedId = lastId;
+    },
+    notifyStatus() {},
+  };
+
+  const fillTool = new FillTool({
+    shapeStore,
+    appState,
+    camera: { zoom: 1, screenToWorld: (p) => p },
+    pushHistoryState() {},
+  });
+
+  const onBoundary = isoUVToWorld(1, 0);
+  fillTool.onMouseDown({ event: { button: 0 }, worldPoint: onBoundary, screenPoint: onBoundary });
+
+  const createdFaceId = appState.lastSelectedId;
+  const createdFace = shapeStore.getShapeById(createdFaceId);
+  assert.equal(appState.selectedType, 'face');
+  assert.equal(createdFace?.type, 'face');
+});
+
 test('filling a detected region creates/selects a face and dragging moves boundary lines', () => {
   const shapeStore = new ShapeStore();
   const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
