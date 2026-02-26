@@ -125,11 +125,7 @@ export function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorP
   ctx.translate(centerX, centerY);
   ctx.scale(magnification, magnification);
   ctx.translate(-focusScreen.x, -focusScreen.y);
-  const sampleRadius = radius / magnification;
-  const sourceX = focusScreen.x - sampleRadius;
-  const sourceY = focusScreen.y - sampleRadius;
-  const sourceSize = sampleRadius * 2;
-  ctx.drawImage(sourceCanvas, sourceX, sourceY, sourceSize, sourceSize, sourceX, sourceY, sourceSize, sourceSize);
+  ctx.drawImage(sourceCanvas, 0, 0);
 
   const focusPoint = camera.worldToScreen(focusWorld);
   ctx.save();
