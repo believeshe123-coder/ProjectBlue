@@ -758,8 +758,7 @@ export class ShapeStore {
   }
 
   duplicateNodes(ids = [], { offset = null } = {}) {
-    const rootIds = this.getSelectionRootIds(ids);
-    const inputIds = [...new Set(rootIds.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer" && this.isNodeInteractable(id, { includeLocked: false })) )];
+    const inputIds = [...new Set(ids.filter((id) => this.nodes[id] && this.nodes[id].kind !== "layer" && this.isNodeInteractable(id, { includeLocked: false })) )];
     if (!inputIds.length) return [];
 
     const duplicableRootIds = inputIds.filter((id) => {

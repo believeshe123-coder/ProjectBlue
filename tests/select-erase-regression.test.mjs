@@ -351,6 +351,26 @@ test('clicking a filled child inside an object selects the fill itself', () => {
   assert.notEqual(objectId, null);
 });
 
+test('clicking a face child inside an object selects the face itself', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const face = new FaceShape({
+    id: 'face-1',
+    pointsWorld: [isoUVToWorld(0, 0), isoUVToWorld(2, 0), isoUVToWorld(1, 1)],
+  });
+  shapeStore.addShape(line);
+  shapeStore.addShape(face);
+  const objectId = shapeStore.createObjectFromIds([line.id, face.id], { name: 'Object 1' });
+
+  const selectTool = new SelectTool(makeSelectContext(shapeStore));
+  const insideFace = isoUVToWorld(1, 0.4);
+  selectTool.onMouseDown({ worldPoint: insideFace, screenPoint: { x: 0, y: 0 } });
+
+  assert.equal(selectTool.context.appState.selectedType, 'face');
+  assert.deepEqual([...selectTool.context.appState.selectedIds], [face.id]);
+  assert.notEqual(objectId, null);
+});
+
 
 test('dragging selected fill child does not move parent object or sibling lines', () => {
   const shapeStore = new ShapeStore();
@@ -389,6 +409,69 @@ test('dragging selected fill child does not move parent object or sibling lines'
   assert.ok(Math.abs(lineAfter.start.y - lineBefore.start.y) < 1e-6);
   assert.ok(Math.abs(objectNode.transform.x) < 1e-6);
   assert.ok(Math.abs(objectNode.transform.y) < 1e-6);
+});
+
+test('dragging selected face child does not move parent object or sibling lines', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const face = new FaceShape({
+    id: 'face-1',
+    pointsWorld: [isoUVToWorld(0, 0), isoUVToWorld(2, 0), isoUVToWorld(1, 1)],
+  });
+  shapeStore.addShape(line);
+  shapeStore.addShape(face);
+  const objectId = shapeStore.createObjectFromIds([line.id, face.id], { name: 'Object 1' });
+
+  let historyPushes = 0;
+  const selectContext = makeSelectContext(shapeStore);
+  selectContext.pushHistoryState = () => { historyPushes += 1; };
+  const selectTool = new SelectTool(selectContext);
+  const lineBefore = shapeStore.getShapeById(line.id);
+  const faceBefore = shapeStore.getShapeById(face.id);
+
+  const insideFace = isoUVToWorld(1, 0.4);
+  selectTool.onMouseDown({ worldPoint: insideFace, screenPoint: { x: 0, y: 0 } });
+  selectTool.onMouseMove({
+    worldPoint: { x: insideFace.x + 40, y: insideFace.y + 8 },
+    screenPoint: { x: 40, y: 8 },
+  });
+  selectTool.onMouseUp({
+    worldPoint: { x: insideFace.x + 40, y: insideFace.y + 8 },
+    screenPoint: { x: 40, y: 8 },
+  });
+
+  const lineAfter = shapeStore.getShapeById(line.id);
+  const faceAfter = shapeStore.getShapeById(face.id);
+  const objectNode = shapeStore.getNodeById(objectId);
+
+  assert.equal(historyPushes, 1);
+  assert.ok(Math.abs(faceAfter.pointsWorld[0].x - faceBefore.pointsWorld[0].x) > 1e-6);
+  assert.ok(Math.abs(lineAfter.start.x - lineBefore.start.x) < 1e-6);
+  assert.ok(Math.abs(lineAfter.start.y - lineBefore.start.y) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.x) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.y) < 1e-6);
+});
+
+test('duplicating a selected face child duplicates the face root (not parent object)', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const face = new FaceShape({
+    id: 'face-1',
+    pointsWorld: [isoUVToWorld(0, 0), isoUVToWorld(2, 0), isoUVToWorld(1, 1)],
+  });
+  shapeStore.addShape(line);
+  shapeStore.addShape(face);
+  const objectId = shapeStore.createObjectFromIds([line.id, face.id], { name: 'Object 1' });
+
+  const duplicatedIds = shapeStore.duplicateNodes([face.id], { offset: isoUVToWorld(1, 1) });
+  assert.equal(duplicatedIds.length, 1);
+
+  const duplicatedNode = shapeStore.getNodeById(duplicatedIds[0]);
+  assert.equal(duplicatedNode?.kind, 'shape');
+  assert.equal(duplicatedNode?.shapeType, 'face');
+
+  const duplicatedParent = shapeStore.parentById[duplicatedIds[0]];
+  assert.equal(duplicatedParent, objectId);
 });
 
 
@@ -833,4 +916,3 @@ test('line tool snaps to line intersections when midpoint snapping is enabled', 
   assert.equal(Math.round(appState.snapIndicator.point.x), Math.round(intersection.x));
   assert.equal(Math.round(appState.snapIndicator.point.y), Math.round(intersection.y));
 });
-
