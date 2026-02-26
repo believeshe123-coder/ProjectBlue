@@ -105,6 +105,62 @@ export function drawErasePreview(ctx, camera, erasePreview) {
   ctx.restore();
 }
 
+
+function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorPreview) {
+  if (!cursorPreview?.screenPoint || !cursorPreview?.worldPoint) return;
+
+  const radius = 68;
+  const padding = 16;
+  const centerX = canvasCssW - radius - padding;
+  const centerY = canvasCssH - radius - padding;
+  const magnification = 7;
+  const focusScreen = cursorPreview.screenPoint;
+  const focusWorld = cursorPreview.worldPoint;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.clip();
+
+  ctx.translate(centerX, centerY);
+  ctx.scale(magnification, magnification);
+  ctx.translate(-focusScreen.x, -focusScreen.y);
+  drawIsoGrid(ctx, camera, canvasCssW, canvasCssH, { gridColor: "rgba(74, 163, 255, 0.45)" });
+
+  const focusPoint = camera.worldToScreen(focusWorld);
+  ctx.save();
+  ctx.strokeStyle = "#ffd166";
+  ctx.lineWidth = 1 / magnification;
+  const crossLen = 7;
+  ctx.beginPath();
+  ctx.moveTo(focusPoint.x - crossLen, focusPoint.y);
+  ctx.lineTo(focusPoint.x + crossLen, focusPoint.y);
+  ctx.moveTo(focusPoint.x, focusPoint.y - crossLen);
+  ctx.lineTo(focusPoint.x, focusPoint.y + crossLen);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius + 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(13, 17, 23, 0.45)";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255, 209, 102, 0.95)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.font = "10px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("cursor x7", centerX, centerY + radius + 14);
+  ctx.restore();
+}
+
 function drawLine(ctx, camera, line, selected) {
   const s = camera.worldToScreen(line.start);
   const e = camera.worldToScreen(line.end);
@@ -214,6 +270,10 @@ export class Renderer {
     if (!disableSceneGraph && this.appState.debugRegions === true) drawRegionDebugOverlay(this.ctx, this.camera, computedRegions);
 
     if (this.appState.erasePreview) drawErasePreview(this.ctx, this.camera, this.appState.erasePreview);
+
+    if (this.appState.cursorPreview) {
+      drawCursorMagnifier(this.ctx, this.camera, canvasCssW, canvasCssH, this.appState.cursorPreview);
+    }
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
       const centerUV = worldToIsoUV(this.appState.snapIndicator.rawPoint);
