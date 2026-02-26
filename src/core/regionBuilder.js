@@ -3,9 +3,20 @@ import { worldToIsoUV } from "./isoGrid.js";
 const EPS = 1e-9;
 
 function canonicalUv(uv = { u: 0, v: 0 }) {
+  const canonicalizeScalar = (value) => {
+    const next = Number.isFinite(value) ? value : 0;
+    const nearestInt = Math.round(next);
+    if (Math.abs(next - nearestInt) <= EPS) return nearestInt;
+
+    const nearestHalf = Math.round(next * 2) / 2;
+    if (Math.abs(next - nearestHalf) <= EPS) return nearestHalf;
+
+    return Math.round(next * 10000) / 10000;
+  };
+
   return {
-    u: Math.round((uv.u ?? 0) * 2) / 2,
-    v: Math.round((uv.v ?? 0) * 2) / 2,
+    u: canonicalizeScalar(uv.u),
+    v: canonicalizeScalar(uv.v),
   };
 }
 
