@@ -236,6 +236,7 @@ export class SelectTool extends BaseTool {
       clickedShapeId: event?.button === 2 ? targetId : null,
       dragIds,
       moveOptions: isDraggingObjects ? {} : { lineOnly: appState.selectedType === "line" },
+      forceGridSnap: !isDraggingObjects && appState.selectedType === "face",
       anchorOriginal: this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint },
       didDrag: false,
       historyCaptured: false,
@@ -279,7 +280,7 @@ export class SelectTool extends BaseTool {
         x: this.dragState.anchorOriginal.x + rawDelta.x,
         y: this.dragState.anchorOriginal.y + rawDelta.y,
       };
-      const forceGridSnap = appState.selectedType === "face";
+      const forceGridSnap = this.dragState.forceGridSnap === true;
       const anchorSnapped = (appState.snapToGrid || forceGridSnap)
         ? snapWorldToIso(anchorMoved).point
         : anchorMoved;

@@ -334,6 +334,34 @@ test('dragging a face moves the filled section and attached boundary lines toget
   assert.ok(Math.abs(lineDy - expectedDy) < 1e-6);
 });
 
+
+test('dragging object does not auto-snap when snap-to-grid is disabled', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'child-line', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  shapeStore.addShape(line);
+  const objectId = shapeStore.createObjectFromIds([line.id], { name: 'Object 1' });
+
+  const selectContext = makeSelectContext(shapeStore);
+  selectContext.appState.snapToGrid = false;
+  const selectTool = new SelectTool(selectContext);
+  selectTool.context.appState.setSelection([objectId], 'object', objectId);
+
+  const initial = shapeStore.getShapeById(line.id);
+  const anchor = { ...initial.start };
+
+  selectTool.onMouseDown({ worldPoint: anchor, screenPoint: { x: 0, y: 0 } });
+  selectTool.onMouseMove({ worldPoint: { x: anchor.x + 3, y: anchor.y + 2 }, screenPoint: { x: 3, y: 2 } });
+  selectTool.onMouseUp({ worldPoint: { x: anchor.x + 3, y: anchor.y + 2 }, screenPoint: { x: 3, y: 2 } });
+
+  const objectNode = shapeStore.getNodeById(objectId);
+  assert.ok(Math.abs(objectNode.transform.x - 3) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.y - 2) < 1e-6);
+
+  const moved = shapeStore.getShapeById(line.id);
+  assert.ok(Math.abs(moved.start.x - (initial.start.x + 3)) < 1e-6);
+  assert.ok(Math.abs(moved.start.y - (initial.start.y + 2)) < 1e-6);
+});
+
 test('dragging object selection moves object transform and descendants', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ id: 'child-line', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
