@@ -10,7 +10,10 @@ function isMovableShape(shape) {
 function getNodeSelectionType(node) {
   if (!node) return null;
   if (node.kind === "object") return "object";
-  if (node.kind === "shape") return node.shapeType;
+  if (node.kind === "shape") {
+    if (node.shapeType === "fillRegion") return "face";
+    return node.shapeType;
+  }
   return null;
 }
 
@@ -236,7 +239,7 @@ export class SelectTool extends BaseTool {
       clickedShapeId: event?.button === 2 ? targetId : null,
       dragIds,
       moveOptions: isDraggingObjects ? {} : { lineOnly: appState.selectedType === "line" },
-      forceGridSnap: !isDraggingObjects && appState.selectedType === "face",
+      forceGridSnap: !isDraggingObjects && targetNode?.kind === "shape" && targetNode.shapeType === "face",
       anchorOriginal: this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint },
       didDrag: false,
       historyCaptured: false,

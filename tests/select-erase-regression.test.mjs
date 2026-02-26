@@ -185,7 +185,7 @@ test('clicking a filled child inside an object selects the fill itself', () => {
   const insideFill = isoUVToWorld(1, 0.4);
   selectTool.onMouseDown({ worldPoint: insideFill, screenPoint: { x: 0, y: 0 } });
 
-  assert.equal(selectTool.context.appState.selectedType, 'fillRegion');
+  assert.equal(selectTool.context.appState.selectedType, 'face');
   assert.deepEqual([...selectTool.context.appState.selectedIds], [fill.id]);
   assert.notEqual(objectId, null);
 });
