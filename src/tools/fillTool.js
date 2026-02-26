@@ -64,16 +64,6 @@ export class FillTool extends BaseTool {
     this.context.pushHistoryState?.();
     const fillColor = appState.currentStyle.fillColor;
     const fillAlpha = appState.currentStyle.fillOpacity ?? 1;
-    if (appState.disableSceneGraph === true) {
-      const fillRegion = shapeStore.upsertFillRegion?.(hit, {
-        color: fillColor,
-        alpha: fillAlpha,
-      }) ?? null;
-      appState.setSelection?.(fillRegion ? [fillRegion.id] : [], fillRegion ? "fillRegion" : null, fillRegion?.id ?? null);
-      appState.notifyStatus?.("Region filled", 900);
-      return;
-    }
-
     const existingFace = shapeStore.getFaceBySourceRegionKey?.(hit.id) ?? null;
     let faceId = existingFace?.id ?? null;
     if (existingFace) {
