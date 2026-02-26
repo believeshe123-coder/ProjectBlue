@@ -11,6 +11,7 @@ import { EraseTool } from "./tools/eraseTool.js";
 import { FillTool } from "./tools/fillTool.js";
 import { isoUVToWorld } from "./core/isoGrid.js";
 import { normalizeEraseMode } from "./state/eraseMode.js";
+import { resolveSelectionGroupingAction } from "./utils/selectionGrouping.js";
 
 const DISABLE_SCENE_GRAPH = true;
 const ENABLE_GROUPING = true;
@@ -842,23 +843,18 @@ function isSingleSelectedObject() {
 }
 
 function getSelectionGroupingAction() {
-  if (!appState.enableGrouping) return null;
   const count = appState.selectedIds.size;
-  if (!count) return null;
+  const selectionBounds = appState.selectedType === "line"
+    ? shapeStore.getSelectionBoundsFromIds([...appState.selectedIds])
+    : null;
+  const enclosedFillCount = selectionBounds ? shapeStore.getFilledRegionCountInBounds(selectionBounds) : 0;
 
-  if (appState.selectedType === "line") {
-    const selectionBounds = shapeStore.getSelectionBoundsFromIds([...appState.selectedIds]);
-    const enclosedFillCount = selectionBounds ? shapeStore.getFilledRegionCountInBounds(selectionBounds) : 0;
-    if (enclosedFillCount > 0) return { kind: "make-face", label: "Group as Face" };
-    if (count >= 2) return { kind: "make-object", label: "Group to Object" };
-    return null;
-  }
-
-  if (appState.selectedType === "face" && count >= 2) {
-    return { kind: "make-object", label: "Group to Object" };
-  }
-
-  return null;
+  return resolveSelectionGroupingAction({
+    enableGrouping: appState.enableGrouping,
+    selectedType: appState.selectedType,
+    selectedCount: count,
+    enclosedFillCount,
+  });
 }
 
 function updateSelectionBar() {
