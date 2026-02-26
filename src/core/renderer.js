@@ -106,7 +106,7 @@ export function drawErasePreview(ctx, camera, erasePreview) {
 }
 
 
-function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorPreview) {
+export function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorPreview, sourceCanvas = ctx.canvas) {
   if (!cursorPreview?.screenPoint || !cursorPreview?.worldPoint) return;
 
   const radius = 68;
@@ -125,7 +125,11 @@ function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorPreview)
   ctx.translate(centerX, centerY);
   ctx.scale(magnification, magnification);
   ctx.translate(-focusScreen.x, -focusScreen.y);
-  drawIsoGrid(ctx, camera, canvasCssW, canvasCssH, { gridColor: "rgba(74, 163, 255, 0.45)" });
+  const sampleRadius = radius / magnification;
+  const sourceX = focusScreen.x - sampleRadius;
+  const sourceY = focusScreen.y - sampleRadius;
+  const sourceSize = sampleRadius * 2;
+  ctx.drawImage(sourceCanvas, sourceX, sourceY, sourceSize, sourceSize, sourceX, sourceY, sourceSize, sourceSize);
 
   const focusPoint = camera.worldToScreen(focusWorld);
   ctx.save();
@@ -190,6 +194,28 @@ export class Renderer {
     this.getCanvasMetrics = getCanvasMetrics;
     this.ensureCanvasSize = ensureCanvasSize;
     this.renderFrameId = 0;
+    this.cursorPreviewSnapshotCanvas = null;
+  }
+
+  getCursorPreviewSourceCanvas() {
+    if (typeof document === "undefined") return this.ctx.canvas;
+    const sourceCanvas = this.ctx.canvas;
+    if (!sourceCanvas) return sourceCanvas;
+
+    const snapshot = this.cursorPreviewSnapshotCanvas ?? document.createElement("canvas");
+    if (snapshot.width !== sourceCanvas.width || snapshot.height !== sourceCanvas.height) {
+      snapshot.width = sourceCanvas.width;
+      snapshot.height = sourceCanvas.height;
+    }
+
+    const snapshotCtx = snapshot.getContext("2d");
+    if (!snapshotCtx) return sourceCanvas;
+
+    snapshotCtx.setTransform(1, 0, 0, 1, 0, 0);
+    snapshotCtx.clearRect(0, 0, snapshot.width, snapshot.height);
+    snapshotCtx.drawImage(sourceCanvas, 0, 0);
+    this.cursorPreviewSnapshotCanvas = snapshot;
+    return snapshot;
   }
 
   renderFrame() {
@@ -272,7 +298,8 @@ export class Renderer {
     if (this.appState.erasePreview) drawErasePreview(this.ctx, this.camera, this.appState.erasePreview);
 
     if (this.appState.cursorPreview) {
-      drawCursorMagnifier(this.ctx, this.camera, canvasCssW, canvasCssH, this.appState.cursorPreview);
+      const sourceCanvas = this.getCursorPreviewSourceCanvas();
+      drawCursorMagnifier(this.ctx, this.camera, canvasCssW, canvasCssH, this.appState.cursorPreview, sourceCanvas);
     }
 
     if (this.appState.debugSnap && this.appState.snapIndicator?.rawPoint) {
