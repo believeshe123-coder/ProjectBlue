@@ -113,7 +113,7 @@ export function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorP
   const padding = 16;
   const centerX = canvasCssW - radius - padding;
   const centerY = canvasCssH - radius - padding;
-  const magnification = 7;
+  const magnification = 6.5;
   const focusScreen = cursorPreview.screenPoint;
   const focusWorld = cursorPreview.worldPoint;
 
@@ -149,8 +149,9 @@ export function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorP
   ctx.save();
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius + 1.5, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(13, 17, 23, 0.45)";
-  ctx.fill();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
+  ctx.fillStyle = "#0d1117";
+  ctx.fill("evenodd");
 
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
@@ -161,7 +162,7 @@ export function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorP
   ctx.fillStyle = "rgba(255,255,255,0.9)";
   ctx.font = "10px monospace";
   ctx.textAlign = "center";
-  ctx.fillText("cursor x7", centerX, centerY + radius + 14);
+  ctx.fillText(`cursor x${magnification.toFixed(1)}`, centerX, centerY + radius + 14);
   ctx.restore();
 }
 
