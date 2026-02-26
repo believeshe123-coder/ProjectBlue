@@ -125,11 +125,7 @@ export function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorP
   ctx.translate(centerX, centerY);
   ctx.scale(magnification, magnification);
   ctx.translate(-focusScreen.x, -focusScreen.y);
-  const sampleRadius = radius / magnification;
-  const sourceX = focusScreen.x - sampleRadius;
-  const sourceY = focusScreen.y - sampleRadius;
-  const sourceSize = sampleRadius * 2;
-  ctx.drawImage(sourceCanvas, sourceX, sourceY, sourceSize, sourceSize, sourceX, sourceY, sourceSize, sourceSize);
+  ctx.drawImage(sourceCanvas, 0, 0);
 
   const focusPoint = camera.worldToScreen(focusWorld);
   ctx.save();
@@ -229,6 +225,8 @@ export class Renderer {
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
     this.ctx.globalAlpha = 1;
+    this.ctx.fillStyle = this.appState.theme?.bgColor ?? "#183547";
+    this.ctx.fillRect(0, 0, canvasCssW, canvasCssH);
     drawIsoGrid(this.ctx, this.camera, canvasCssW, canvasCssH, { gridColor: this.appState.theme?.gridColor });
 
     const selectedIds = this.appState.selectedIds instanceof Set ? [...this.appState.selectedIds] : [];
