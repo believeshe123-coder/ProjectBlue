@@ -62,12 +62,22 @@ export class FillTool extends BaseTool {
     }
 
     this.context.pushHistoryState?.();
-    const fill = shapeStore.upsertFillRegion(hit, {
-      color: appState.currentStyle.fillColor,
-      alpha: appState.currentStyle.fillOpacity ?? 1,
-    });
+    const existingFace = shapeStore.getFaceBySourceRegionKey?.(hit.id) ?? null;
+    let faceId = existingFace?.id ?? null;
+    if (existingFace) {
+      const updatedFace = shapeStore.updateFaceStyle?.(existingFace.id, {
+        fillColor: appState.currentStyle.fillColor,
+        fillAlpha: appState.currentStyle.fillOpacity ?? 1,
+      });
+      faceId = updatedFace?.id ?? faceId;
+    } else {
+      faceId = shapeStore.createFaceFromRegion?.(hit, {
+        fillColor: appState.currentStyle.fillColor,
+        fillAlpha: appState.currentStyle.fillOpacity ?? 1,
+      }) ?? null;
+    }
 
-    appState.setSelection?.(fill ? [fill.id] : [], fill ? "fillRegion" : null, fill?.id ?? null);
+    appState.setSelection?.(faceId ? [faceId] : [], faceId ? "face" : null, faceId ?? null);
     appState.notifyStatus?.("Region filled", 900);
   }
 }
