@@ -96,3 +96,53 @@ test('selected face outline is rendered after lines so all edges remain visible'
     'expected final selected-face stroke to run after the line stroke',
   );
 });
+
+
+test('disableSceneGraph mode still renders faces for compatibility', () => {
+  const ctx = makeMockContext();
+  const camera = { worldToScreen: (p) => p, screenToWorld: (p) => p };
+
+  const shapeStore = {
+    getShapes() {
+      return [
+        {
+          id: 'face-1',
+          type: 'face',
+          pointsWorld: [
+            { x: 10, y: 10 },
+            { x: 50, y: 10 },
+            { x: 50, y: 50 },
+          ],
+          fillColor: '#4aa3ff',
+          fillAlpha: 1,
+          visible: true,
+        },
+      ];
+    },
+    getFillRegions() { return []; },
+    getComputedRegions() { return []; },
+    getDescendantIds() { return []; },
+  };
+
+  const appState = {
+    selectedIds: new Set(['face-1']),
+    selectedType: 'face',
+    disableSceneGraph: true,
+    enableFill: true,
+    debugRegions: false,
+  };
+
+  const renderer = new Renderer({
+    ctx,
+    camera,
+    shapeStore,
+    appState,
+    getCanvasMetrics: () => ({ canvasCssW: 200, canvasCssH: 200, currentDpr: 1 }),
+    ensureCanvasSize: () => {},
+  });
+
+  renderer.renderFrame();
+
+  const fillCount = ctx.ops.filter((op) => op[0] === 'fill').length;
+  assert.ok(fillCount >= 1, 'expected face fill to render in disableSceneGraph compatibility mode');
+});
