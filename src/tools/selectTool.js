@@ -138,7 +138,7 @@ export class SelectTool extends BaseTool {
     const chain = this.getAncestorChain(hitShapeId);
     if (!chain.length) return null;
     const directHitNode = chain[0];
-    if (directHitNode?.kind === "shape" && directHitNode.shapeType === "fillRegion") return directHitNode;
+    if (directHitNode?.kind === "shape" && (directHitNode.shapeType === "fillRegion" || directHitNode.shapeType === "face")) return directHitNode;
     if (directHitNode?.kind === "shape" && !isMovableNode(directHitNode)) return directHitNode;
     const movableChain = chain.filter((node) => isMovableNode(node));
     if (!movableChain.length) return chain[0];
