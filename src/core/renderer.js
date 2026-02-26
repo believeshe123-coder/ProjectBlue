@@ -51,12 +51,23 @@ function drawFace(ctx, camera, face, selected) {
   for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.closePath();
   ctx.fill();
-  if (selected) {
-    ctx.strokeStyle = "#ffd166";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 4]);
-    ctx.stroke();
-  }
+  if (selected) drawFaceSelectionOutline(ctx, camera, face);
+  ctx.restore();
+}
+
+function drawFaceSelectionOutline(ctx, camera, face) {
+  if (!face.pointsWorld?.length) return;
+  const pts = face.pointsWorld.map((p) => camera.worldToScreen(p));
+  ctx.save();
+  ctx.strokeStyle = "#ffd166";
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -269,6 +280,10 @@ export class Renderer {
       for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
       for (const face of faces) drawFace(this.ctx, this.camera, face, selectionSet.has(face.id));
       for (const line of lines) drawLine(this.ctx, this.camera, line, selectionSet.has(line.id));
+      for (const face of faces) {
+        if (!selectionSet.has(face.id)) continue;
+        drawFaceSelectionOutline(this.ctx, this.camera, face);
+      }
 
       if (this.appState.selectedRegionKey) {
         const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
