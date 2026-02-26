@@ -105,6 +105,85 @@ test('filling a polygon converts it into a face', () => {
   assert.equal(historyPushes, 1);
 });
 
+test('filling a detected region creates/selects a face and dragging moves boundary lines', () => {
+  const shapeStore = new ShapeStore();
+  const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
+  const lineC = new Line({ id: 'line-c', start: isoUVToWorld(2, 2), end: isoUVToWorld(0, 2) });
+  const lineD = new Line({ id: 'line-d', start: isoUVToWorld(0, 2), end: isoUVToWorld(0, 0) });
+  shapeStore.addShape(lineA);
+  shapeStore.addShape(lineB);
+  shapeStore.addShape(lineC);
+  shapeStore.addShape(lineD);
+
+  const appState = {
+    enableFill: true,
+    currentStyle: { fillColor: '#00ff88', fillOpacity: 0.75 },
+    setSelection(ids = [], type = null, lastId = null) {
+      this.selectedIds = new Set(ids);
+      this.selectedType = type;
+      this.lastSelectedId = lastId;
+    },
+    notifyStatus() {},
+  };
+
+  let historyPushes = 0;
+  const fillTool = new FillTool({
+    shapeStore,
+    appState,
+    camera: { zoom: 1, screenToWorld: (p) => p },
+    pushHistoryState() { historyPushes += 1; },
+  });
+
+  const center = isoUVToWorld(1, 1);
+  fillTool.onMouseDown({ event: { button: 0 }, worldPoint: center, screenPoint: center });
+
+  const createdFaceId = appState.lastSelectedId;
+  const createdFace = shapeStore.getShapeById(createdFaceId);
+  assert.equal(appState.selectedType, 'face');
+  assert.equal(createdFace?.type, 'face');
+  assert.equal(createdFace?.sourceRegionKey != null, true);
+  assert.equal(createdFace?.fillColor, '#00ff88');
+  assert.ok(Math.abs((createdFace?.fillAlpha ?? 0) - 0.75) < 1e-6);
+  assert.equal(historyPushes, 1);
+
+  appState.currentStyle = { fillColor: '#aa00ff', fillOpacity: 0.35 };
+  fillTool.onMouseDown({ event: { button: 0 }, worldPoint: center, screenPoint: center });
+  const updatedFace = shapeStore.getShapeById(createdFaceId);
+  assert.equal(updatedFace?.fillColor, '#aa00ff');
+  assert.ok(Math.abs((updatedFace?.fillAlpha ?? 0) - 0.35) < 1e-6);
+  assert.equal(historyPushes, 2);
+
+  const selectTool = new SelectTool(makeSelectContext(shapeStore));
+  const faceBefore = shapeStore.getShapeById(createdFaceId);
+  const lineBefore = shapeStore.getShapeById('line-a');
+  const anchor = {
+    x: (faceBefore.pointsWorld[0].x + faceBefore.pointsWorld[2].x) / 2,
+    y: (faceBefore.pointsWorld[0].y + faceBefore.pointsWorld[2].y) / 2,
+  };
+
+  selectTool.onMouseDown({ worldPoint: anchor, screenPoint: { x: 0, y: 0 } });
+  assert.equal(selectTool.context.appState.selectedType, 'face');
+  selectTool.onMouseMove({ worldPoint: { x: anchor.x + 11, y: anchor.y + 5 }, screenPoint: { x: 11, y: 5 } });
+  selectTool.onMouseUp({ worldPoint: { x: anchor.x + 11, y: anchor.y + 5 }, screenPoint: { x: 11, y: 5 } });
+
+  const faceAfter = shapeStore.getShapeById(createdFaceId);
+  const lineAfter = shapeStore.getShapeById('line-a');
+  const faceDx = faceAfter.pointsWorld[0].x - faceBefore.pointsWorld[0].x;
+  const faceDy = faceAfter.pointsWorld[0].y - faceBefore.pointsWorld[0].y;
+  const lineDx = lineAfter.start.x - lineBefore.start.x;
+  const lineDy = lineAfter.start.y - lineBefore.start.y;
+
+  const snapped = snapWorldToIso({ x: anchor.x + 11, y: anchor.y + 5 }).point;
+  const expectedDx = snapped.x - anchor.x;
+  const expectedDy = snapped.y - anchor.y;
+  assert.ok(Math.abs(faceDx - expectedDx) < 1e-6);
+  assert.ok(Math.abs(faceDy - expectedDy) < 1e-6);
+  assert.ok(Math.abs(lineDx - expectedDx) < 1e-6);
+  assert.ok(Math.abs(lineDy - expectedDy) < 1e-6);
+});
+
+
 test('line selection and line erase still work', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });

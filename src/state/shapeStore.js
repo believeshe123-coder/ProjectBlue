@@ -1186,6 +1186,19 @@ export class ShapeStore {
     return faceNode ? this.toShapeView(faceNode.id) : null;
   }
 
+  updateFaceStyle(faceId, fillStyle = {}) {
+    const node = this.nodes[faceId];
+    if (!node || node.kind !== "shape" || node.shapeType !== "face") return null;
+    const fillColor = fillStyle.fillColor ?? fillStyle.color;
+    const fillAlpha = fillStyle.fillAlpha ?? fillStyle.alpha ?? fillStyle.fillOpacity;
+    if (fillColor != null) node.style.fillColor = fillColor;
+    if (fillAlpha != null) {
+      node.style.fillAlpha = fillAlpha;
+      node.style.fillOpacity = fillAlpha;
+    }
+    return this.toShapeView(faceId);
+  }
+
   createFaceFromRegion(region, fillStyle = {}) {
     if (!region?.uvCycle || region.uvCycle.length < 3) return null;
     const pointsWorld = region.uvCycle.map((p) => isoUVToWorld(p.u, p.v));
