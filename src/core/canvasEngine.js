@@ -1,5 +1,5 @@
 export class CanvasEngine {
-  constructor({ canvas, canvasWrap, camera, getTool, getToolName, getTools, onContextMenuPrevent, onViewChange }) {
+  constructor({ canvas, canvasWrap, camera, getTool, getToolName, getTools, onContextMenuPrevent, onViewChange, onPointerMove, onPointerLeave }) {
     this.canvas = canvas;
     this.canvasWrap = canvasWrap;
     this.camera = camera;
@@ -7,6 +7,8 @@ export class CanvasEngine {
     this.getToolName = getToolName;
     this.getTools = getTools;
     this.onViewChange = onViewChange;
+    this.onPointerMove = onPointerMove;
+    this.onPointerLeave = onPointerLeave;
     this.isPanning = false;
     this.isMiddlePanning = false;
     this.middlePanStartScreen = null;
@@ -25,11 +27,13 @@ export class CanvasEngine {
     this.handleMouseDown = this.handleMouseDown.bind(this);
     this.handleMouseMove = this.handleMouseMove.bind(this);
     this.handleMouseUp = this.handleMouseUp.bind(this);
+    this.handleMouseLeave = this.handleMouseLeave.bind(this);
 
     window.addEventListener("resize", this.handleResize);
     canvas.addEventListener("wheel", this.handleWheel, { passive: false });
     canvas.addEventListener("mousedown", this.handleMouseDown);
     canvas.addEventListener("mousemove", this.handleMouseMove);
+    canvas.addEventListener("mouseleave", this.handleMouseLeave);
     window.addEventListener("mouseup", this.handleMouseUp);
     canvas.addEventListener("auxclick", (e) => {
       if (e.button === 1) {
@@ -151,6 +155,7 @@ export class CanvasEngine {
   handleMouseMove(event) {
     const screenPoint = this.getScreenPointFromEvent(event);
     const worldPoint = this.camera.screenToWorld(screenPoint);
+    this.onPointerMove?.({ screenPoint, worldPoint, event });
 
     if (this.isMiddlePanning && this.middlePanStartScreen && this.middlePanCameraStart) {
       const dx = screenPoint.x - this.middlePanStartScreen.x;
@@ -170,6 +175,10 @@ export class CanvasEngine {
     }
 
     this.getTool()?.onMouseMove({ event, screenPoint, worldPoint });
+  }
+
+  handleMouseLeave(event) {
+    this.onPointerLeave?.({ event });
   }
 
   handleMouseUp(event) {

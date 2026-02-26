@@ -179,6 +179,7 @@ const appState = {
   },
   eraseMode: "line",
   erasePreview: null,
+  cursorPreview: null,
   deleteSourceLinesOnPolygonDelete: false,
   theme: null,
   activeThemeId: "builtin:light",
@@ -228,6 +229,15 @@ const canvasEngine = new CanvasEngine({
     openContextMenuForSelection(point, targetId);
   },
   onViewChange: refreshStatus,
+  onPointerMove: ({ screenPoint, worldPoint }) => {
+    appState.cursorPreview = {
+      screenPoint: { ...screenPoint },
+      worldPoint: { ...worldPoint },
+    };
+  },
+  onPointerLeave: () => {
+    appState.cursorPreview = null;
+  },
 });
 
 const renderer = new Renderer({
@@ -2267,6 +2277,11 @@ function isTypingInInput(event) {
 }
 
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Shift") {
+    appState.keepSelecting = true;
+    updateSelectionBar();
+  }
+
   if (event.key === "Escape") {
     closeAllMenus();
     closeContextMenu();
@@ -2381,6 +2396,12 @@ window.addEventListener("keydown", (event) => {
   }
 
   currentTool.onKeyDown(event);
+});
+
+window.addEventListener("keyup", (event) => {
+  if (event.key !== "Shift") return;
+  appState.keepSelecting = false;
+  updateSelectionBar();
 });
 
 function initializeEraseModePreference() {
