@@ -536,6 +536,156 @@ test('creating adjacent filled faces duplicates shared boundary lines per face o
   assert.equal(leftSharedSegmentCount, 1);
   assert.equal(rightSharedSegmentCount, 1);
 });
+
+
+test('moving face duplicates shared boundary even when ownedByFaceIds metadata is missing', () => {
+  const shapeStore = new ShapeStore();
+
+  const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
+  const lineC = new Line({ id: 'line-c', start: isoUVToWorld(2, 2), end: isoUVToWorld(0, 2) });
+  const lineD = new Line({ id: 'line-d', start: isoUVToWorld(0, 2), end: isoUVToWorld(0, 0) });
+  const lineE = new Line({ id: 'line-e', start: isoUVToWorld(2, 0), end: isoUVToWorld(4, 0) });
+  const lineF = new Line({ id: 'line-f', start: isoUVToWorld(4, 0), end: isoUVToWorld(4, 2) });
+  const lineG = new Line({ id: 'line-g', start: isoUVToWorld(4, 2), end: isoUVToWorld(2, 2) });
+  shapeStore.addShape(lineA);
+  shapeStore.addShape(lineB);
+  shapeStore.addShape(lineC);
+  shapeStore.addShape(lineD);
+  shapeStore.addShape(lineE);
+  shapeStore.addShape(lineF);
+  shapeStore.addShape(lineG);
+
+  const regions = shapeStore.getComputedRegions();
+  const leftRegion = regions.find((region) => region.uvCycle.some((point) => point.u === 0 && point.v === 0));
+  const rightRegion = regions.find((region) => region.uvCycle.some((point) => point.u === 4 && point.v === 0));
+  const leftFaceId = shapeStore.createFaceFromRegion(leftRegion, { color: '#66ccff', alpha: 0.8 });
+  const rightFaceId = shapeStore.createFaceFromRegion(rightRegion, { color: '#ffcc66', alpha: 0.8 });
+
+  // simulate legacy/corrupt metadata: two faces share a line id but ownedByFaceIds is empty
+  const leftBoundaryAtX2 = (shapeStore.getShapeById(leftFaceId).sourceLineIds ?? []).find((lineId) => {
+    const line = shapeStore.getShapeById(lineId);
+    const au = Math.round(line.startUV.u);
+    const bu = Math.round(line.endUV.u);
+    return au === 2 && bu === 2;
+  });
+  const rightBoundaryAtX2 = (shapeStore.getShapeById(rightFaceId).sourceLineIds ?? []).find((lineId) => {
+    const line = shapeStore.getShapeById(lineId);
+    const au = Math.round(line.startUV.u);
+    const bu = Math.round(line.endUV.u);
+    return au === 2 && bu === 2;
+  });
+  assert.ok(leftBoundaryAtX2);
+  assert.ok(rightBoundaryAtX2);
+
+  const rightNode = shapeStore.getNodeById(rightFaceId);
+  rightNode.meta.sourceLineIds = (rightNode.meta.sourceLineIds ?? []).map((lineId) => (lineId === rightBoundaryAtX2 ? leftBoundaryAtX2 : lineId));
+  rightNode.style.sourceLineIds = [...rightNode.meta.sourceLineIds];
+
+  const sharedNode = shapeStore.getNodeById(leftBoundaryAtX2);
+  sharedNode.localGeom.ownedByFaceIds = [];
+
+  shapeStore.applyWorldDeltaToNode(rightFaceId, { x: 20, y: 0 });
+
+  const leftAfter = shapeStore.getShapeById(leftFaceId);
+  const rightAfter = shapeStore.getShapeById(rightFaceId);
+  const leftLines = (leftAfter.sourceLineIds ?? []).map((id) => shapeStore.getShapeById(id));
+  const rightLines = (rightAfter.sourceLineIds ?? []).map((id) => shapeStore.getShapeById(id));
+
+  const hasX2Segment = (line) => {
+    const au = Math.round(line.startUV.u);
+    const bu = Math.round(line.endUV.u);
+    return au === 2 && bu === 2;
+  };
+  const hasX4Segment = (line) => {
+    const au = Math.round(line.startUV.u);
+    const bu = Math.round(line.endUV.u);
+    return au === 4 && bu === 4;
+  };
+
+  assert.ok(leftLines.some((line) => hasX2Segment(line)));
+  assert.ok(rightLines.some((line) => hasX4Segment(line)));
+});
+
+test('moving one of two adjacent faces reconciles boundaries for moved and stationary faces', () => {
+  const shapeStore = new ShapeStore();
+
+  const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
+  const lineC = new Line({ id: 'line-c', start: isoUVToWorld(2, 2), end: isoUVToWorld(0, 2) });
+  const lineD = new Line({ id: 'line-d', start: isoUVToWorld(0, 2), end: isoUVToWorld(0, 0) });
+  const lineE = new Line({ id: 'line-e', start: isoUVToWorld(2, 0), end: isoUVToWorld(4, 0) });
+  const lineF = new Line({ id: 'line-f', start: isoUVToWorld(4, 0), end: isoUVToWorld(4, 2) });
+  const lineG = new Line({ id: 'line-g', start: isoUVToWorld(4, 2), end: isoUVToWorld(2, 2) });
+  shapeStore.addShape(lineA);
+  shapeStore.addShape(lineB);
+  shapeStore.addShape(lineC);
+  shapeStore.addShape(lineD);
+  shapeStore.addShape(lineE);
+  shapeStore.addShape(lineF);
+  shapeStore.addShape(lineG);
+
+  const regions = shapeStore.getComputedRegions();
+  const leftRegion = regions.find((region) => region.uvCycle.some((point) => point.u === 0 && point.v === 0));
+  const rightRegion = regions.find((region) => region.uvCycle.some((point) => point.u === 4 && point.v === 0));
+  const leftFaceId = shapeStore.createFaceFromRegion(leftRegion, { color: '#66ccff', alpha: 0.8 });
+  const rightFaceId = shapeStore.createFaceFromRegion(rightRegion, { color: '#ffcc66', alpha: 0.8 });
+
+  const leftBefore = shapeStore.getShapeById(leftFaceId);
+  const rightBefore = shapeStore.getShapeById(rightFaceId);
+
+  shapeStore.applyWorldDeltaToNode(rightFaceId, { x: 20, y: 0 });
+
+  const leftAfter = shapeStore.getShapeById(leftFaceId);
+  const rightAfter = shapeStore.getShapeById(rightFaceId);
+
+  const leftLineIds = leftAfter.sourceLineIds ?? [];
+  const rightLineIds = rightAfter.sourceLineIds ?? [];
+  assert.equal(leftLineIds.length, leftAfter.pointsWorld.length);
+  assert.equal(rightLineIds.length, rightAfter.pointsWorld.length);
+
+  const sharedAfterMove = leftLineIds.filter((lineId) => rightLineIds.includes(lineId));
+  assert.deepEqual(sharedAfterMove, []);
+
+  const hasSegment = (line, a, b) => {
+    const tol = 1e-6;
+    const same = Math.abs(line.start.x - a.x) < tol && Math.abs(line.start.y - a.y) < tol
+      && Math.abs(line.end.x - b.x) < tol && Math.abs(line.end.y - b.y) < tol;
+    const rev = Math.abs(line.start.x - b.x) < tol && Math.abs(line.start.y - b.y) < tol
+      && Math.abs(line.end.x - a.x) < tol && Math.abs(line.end.y - a.y) < tol;
+    return same || rev;
+  };
+
+  const leftFormerSharedA = isoUVToWorld(2, 0);
+  const leftFormerSharedB = isoUVToWorld(2, 2);
+  const movedSharedA = { x: leftFormerSharedA.x + 20, y: leftFormerSharedA.y };
+  const movedSharedB = { x: leftFormerSharedB.x + 20, y: leftFormerSharedB.y };
+
+  const leftBoundaryLines = leftLineIds.map((id) => shapeStore.getShapeById(id)).filter(Boolean);
+  const rightBoundaryLines = rightLineIds.map((id) => shapeStore.getShapeById(id)).filter(Boolean);
+
+  assert.ok(leftBoundaryLines.some((line) => hasSegment(line, leftFormerSharedA, leftFormerSharedB)));
+  assert.ok(rightBoundaryLines.some((line) => hasSegment(line, movedSharedA, movedSharedB)));
+
+  const lineBShape = shapeStore.getShapeById('line-b');
+  assert.ok(hasSegment(lineBShape, leftFormerSharedA, leftFormerSharedB));
+
+  const movedOffsetX = rightAfter.pointsWorld[0].x - rightBefore.pointsWorld[0].x;
+  const movedOffsetY = rightAfter.pointsWorld[0].y - rightBefore.pointsWorld[0].y;
+  assert.ok(Math.abs(movedOffsetX - 20) < 1e-6);
+  assert.ok(Math.abs(movedOffsetY) < 1e-6);
+
+  const stationaryOffsetX = leftAfter.pointsWorld[0].x - leftBefore.pointsWorld[0].x;
+  const stationaryOffsetY = leftAfter.pointsWorld[0].y - leftBefore.pointsWorld[0].y;
+  assert.ok(Math.abs(stationaryOffsetX) < 1e-6);
+  assert.ok(Math.abs(stationaryOffsetY) < 1e-6);
+
+  for (const lineId of rightLineIds) {
+    const node = shapeStore.getNodeById(lineId);
+    assert.ok(!(node?.localGeom?.ownedByFaceIds ?? []).includes(leftFaceId));
+  }
+});
+
 test('dragging a face auto-snaps movement to grid lines', () => {
   const shapeStore = new ShapeStore();
 

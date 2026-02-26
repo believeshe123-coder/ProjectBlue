@@ -639,6 +639,26 @@ export class ShapeStore {
     return ids.map((id) => this.toShapeView(id)).filter(Boolean);
   }
 
+  getFaceIdsReferencingLine(lineId) {
+    if (!lineId) return [];
+    const ownerIds = [];
+    for (const node of Object.values(this.nodes)) {
+      if (node?.kind !== "shape" || node.shapeType !== "face") continue;
+      const sourceLineIds = [...new Set(node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [])];
+      if (sourceLineIds.includes(lineId)) ownerIds.push(node.id);
+    }
+    return ownerIds;
+  }
+
+  isLineSharedWithOtherFace(lineId, faceId) {
+    const lineNode = this.nodes[lineId];
+    if (!lineNode || lineNode.kind !== "shape" || lineNode.shapeType !== "line") return false;
+    const explicitOwners = [...new Set(lineNode.localGeom?.ownedByFaceIds ?? [])].filter(Boolean);
+    if (explicitOwners.some((ownerId) => ownerId !== faceId)) return true;
+    const referencedByFaces = this.getFaceIdsReferencingLine(lineId);
+    return referencedByFaces.some((ownerId) => ownerId !== faceId);
+  }
+
   applyWorldDeltaToNode(id, delta, options = {}) {
     const node = this.nodes[id];
     if (!node) return;
@@ -654,6 +674,8 @@ export class ShapeStore {
       for (const lineId of sourceLineIds) {
         const lineNode = this.nodes[lineId];
         if (!lineNode || lineNode.kind !== "shape" || lineNode.shapeType !== "line") continue;
+        const isSharedWithAnotherFace = this.isLineSharedWithOtherFace(lineId, id);
+        if (isSharedWithAnotherFace) continue;
         const lineParentId = this.parentById[lineId] ?? null;
         const lineParentNode = lineParentId ? this.nodes[lineParentId] : null;
         if (lineParentNode?.kind === "object") continue;
@@ -663,6 +685,9 @@ export class ShapeStore {
     }
     node.nodeTransform.x += delta.x;
     node.nodeTransform.y += delta.y;
+    if (node.kind === "shape" && node.shapeType === "face") {
+      this.reconcileFaceBoundariesAfterMove(node.id);
+    }
     this.invalidateDerivedData();
   }
 
@@ -1295,6 +1320,87 @@ export class ShapeStore {
     });
     this.addShape(line);
     return line.id;
+  }
+
+  ensureFaceHasBoundaryForEdge(faceId, edgeStart, edgeEnd, templateLineNode = null) {
+    const faceNode = this.nodes[faceId];
+    if (!faceNode || faceNode.kind !== "shape" || faceNode.shapeType !== "face") return null;
+
+    const currentIds = [...new Set(faceNode.meta?.sourceLineIds ?? faceNode.style?.sourceLineIds ?? [])];
+    for (const lineId of currentIds) {
+      const line = this.toShapeView(lineId);
+      if (line?.type === "line" && segmentMatchesBoundary(line, edgeStart, edgeEnd)) return lineId;
+    }
+
+    const startUV = worldToIsoUV(edgeStart);
+    const endUV = worldToIsoUV(edgeEnd);
+    const createdLineId = this.createFaceBoundaryLine({
+      start: edgeStart,
+      end: edgeEnd,
+      startUV,
+      endUV,
+      faceId,
+      templateNode: templateLineNode,
+    });
+    if (!createdLineId) return null;
+
+    const nextIds = [...new Set([...currentIds, createdLineId])];
+    faceNode.meta = { ...(faceNode.meta ?? {}), sourceLineIds: nextIds };
+    faceNode.style = { ...(faceNode.style ?? {}), sourceLineIds: nextIds };
+    return createdLineId;
+  }
+
+  reconcileFaceBoundariesAfterMove(faceId) {
+    const faceNode = this.nodes[faceId];
+    if (!faceNode || faceNode.kind !== "shape" || faceNode.shapeType !== "face") return;
+
+    const sourceLineIds = [...new Set(faceNode.meta?.sourceLineIds ?? faceNode.style?.sourceLineIds ?? [])];
+    const faceShape = this.toShapeView(faceId);
+    const points = faceShape?.pointsWorld ?? [];
+    if (points.length < 3) return;
+
+    const requiredEdges = [];
+    for (let i = 0; i < points.length; i += 1) {
+      requiredEdges.push({ start: points[i], end: points[(i + 1) % points.length] });
+    }
+
+    const keepLineIds = new Set();
+
+    for (const edge of requiredEdges) {
+      const matchingLineId = sourceLineIds.find((lineId) => {
+        const line = this.toShapeView(lineId);
+        return line?.type === "line" && segmentMatchesBoundary(line, edge.start, edge.end);
+      });
+
+      if (matchingLineId) {
+        const lineNode = this.nodes[matchingLineId];
+        if (lineNode?.kind === "shape" && lineNode.shapeType === "line") {
+          lineNode.localGeom.ownedByFaceIds = [...new Set([...(lineNode.localGeom.ownedByFaceIds ?? []), faceId])];
+        }
+        keepLineIds.add(matchingLineId);
+        continue;
+      }
+
+      const templateLineNode = sourceLineIds
+        .map((lineId) => this.nodes[lineId])
+        .find((lineNode) => lineNode?.kind === "shape" && lineNode.shapeType === "line") ?? null;
+      const createdLineId = this.ensureFaceHasBoundaryForEdge(faceId, edge.start, edge.end, templateLineNode);
+      if (createdLineId) keepLineIds.add(createdLineId);
+    }
+
+    for (const lineId of sourceLineIds) {
+      const lineNode = this.nodes[lineId];
+      if (!lineNode || lineNode.kind !== "shape" || lineNode.shapeType !== "line") continue;
+      if (!keepLineIds.has(lineId)) {
+        lineNode.localGeom.ownedByFaceIds = [...new Set((lineNode.localGeom.ownedByFaceIds ?? []).filter((ownerId) => ownerId !== faceId))];
+      } else {
+        lineNode.localGeom.ownedByFaceIds = [...new Set([...(lineNode.localGeom.ownedByFaceIds ?? []), faceId])];
+      }
+    }
+
+    const nextSourceLineIds = [...new Set([...keepLineIds])];
+    faceNode.meta = { ...(faceNode.meta ?? {}), sourceLineIds: nextSourceLineIds };
+    faceNode.style = { ...(faceNode.style ?? {}), sourceLineIds: nextSourceLineIds };
   }
 
   getBoundaryLineIdsForRegion(uvCycle) {

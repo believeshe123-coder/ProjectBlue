@@ -364,6 +364,16 @@ export class SelectTool extends BaseTool {
       appState.openContextMenuForSelection?.(screenPoint, this.dragState.clickedShapeId);
     }
 
+    const completedDragState = this.dragState;
+    if (completedDragState?.didDrag) {
+      const movedFaceIds = completedDragState.dragIds.filter((id) => {
+        const node = shapeStore.getNodeById(id);
+        return node?.kind === "shape" && node.shapeType === "face";
+      });
+      for (const faceId of movedFaceIds) shapeStore.reconcileFaceBoundariesAfterMove(faceId);
+      if (movedFaceIds.length > 0) shapeStore.invalidateDerivedData();
+    }
+
     this.dragState = null;
     if (this.context.canvas) {
       const hoverNode = this.hoverShapeId ? this.context.shapeStore.getNodeById(this.hoverShapeId) : null;
