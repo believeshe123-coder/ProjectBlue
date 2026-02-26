@@ -146,7 +146,7 @@ test('filling still succeeds when clicking exactly on a region boundary', () => 
 
 
 
-test('filling a detected region in stability mode creates a visible fillRegion', () => {
+test('filling a detected region in stability mode creates/selects a face with source metadata', () => {
   const shapeStore = new ShapeStore();
   const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
   const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
@@ -179,12 +179,13 @@ test('filling a detected region in stability mode creates a visible fillRegion',
   const center = isoUVToWorld(1, 1);
   fillTool.onMouseDown({ event: { button: 0 }, worldPoint: center, screenPoint: center });
 
-  const createdFillId = appState.lastSelectedId;
-  const createdFill = shapeStore.getShapeById(createdFillId);
-  assert.equal(appState.selectedType, 'fillRegion');
-  assert.equal(createdFill?.type, 'fillRegion');
-  assert.equal(createdFill?.fillColor, '#00ff88');
-  assert.ok(Math.abs((createdFill?.fillOpacity ?? 0) - 0.75) < 1e-6);
+  const createdFaceId = appState.lastSelectedId;
+  const createdFace = shapeStore.getShapeById(createdFaceId);
+  assert.equal(appState.selectedType, 'face');
+  assert.equal(createdFace?.type, 'face');
+  assert.equal(createdFace?.sourceRegionKey != null, true);
+  assert.equal(createdFace?.fillColor, '#00ff88');
+  assert.ok(Math.abs((createdFace?.fillAlpha ?? 0) - 0.75) < 1e-6);
 });
 test('filling a detected region creates/selects a face and dragging moves boundary lines', () => {
   const shapeStore = new ShapeStore();
