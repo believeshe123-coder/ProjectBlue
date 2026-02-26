@@ -476,6 +476,66 @@ test('duplicating a selected face child duplicates the face root (not parent obj
 
 
 
+
+
+test('creating adjacent filled faces duplicates shared boundary lines per face ownership', () => {
+  const shapeStore = new ShapeStore();
+
+  const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
+  const lineC = new Line({ id: 'line-c', start: isoUVToWorld(2, 2), end: isoUVToWorld(0, 2) });
+  const lineD = new Line({ id: 'line-d', start: isoUVToWorld(0, 2), end: isoUVToWorld(0, 0) });
+  const lineE = new Line({ id: 'line-e', start: isoUVToWorld(2, 0), end: isoUVToWorld(4, 0) });
+  const lineF = new Line({ id: 'line-f', start: isoUVToWorld(4, 0), end: isoUVToWorld(4, 2) });
+  const lineG = new Line({ id: 'line-g', start: isoUVToWorld(4, 2), end: isoUVToWorld(2, 2) });
+  shapeStore.addShape(lineA);
+  shapeStore.addShape(lineB);
+  shapeStore.addShape(lineC);
+  shapeStore.addShape(lineD);
+  shapeStore.addShape(lineE);
+  shapeStore.addShape(lineF);
+  shapeStore.addShape(lineG);
+
+  const regions = shapeStore.getComputedRegions();
+  assert.equal(regions.length, 2);
+
+  const leftRegion = regions.find((region) => region.uvCycle.some((point) => point.u === 0 && point.v === 0));
+  const rightRegion = regions.find((region) => region.uvCycle.some((point) => point.u === 4 && point.v === 0));
+  assert.ok(leftRegion);
+  assert.ok(rightRegion);
+
+  const leftFaceId = shapeStore.createFaceFromRegion(leftRegion, { color: '#66ccff', alpha: 0.8 });
+  const rightFaceId = shapeStore.createFaceFromRegion(rightRegion, { color: '#ffcc66', alpha: 0.8 });
+  assert.ok(leftFaceId);
+  assert.ok(rightFaceId);
+
+  const leftFace = shapeStore.getShapeById(leftFaceId);
+  const rightFace = shapeStore.getShapeById(rightFaceId);
+  const leftSourceLineIds = leftFace.sourceLineIds ?? [];
+  const rightSourceLineIds = rightFace.sourceLineIds ?? [];
+
+  const sharedById = leftSourceLineIds.filter((lineId) => rightSourceLineIds.includes(lineId));
+  assert.deepEqual(sharedById, []);
+
+  const leftBoundaryLines = leftSourceLineIds.map((lineId) => shapeStore.getShapeById(lineId)).filter(Boolean);
+  const rightBoundaryLines = rightSourceLineIds.map((lineId) => shapeStore.getShapeById(lineId)).filter(Boolean);
+
+  const isSharedSegment = (line) => {
+    const au = Math.round(line.startUV?.u ?? NaN);
+    const av = Math.round(line.startUV?.v ?? NaN);
+    const bu = Math.round(line.endUV?.u ?? NaN);
+    const bv = Math.round(line.endUV?.v ?? NaN);
+    const oneWay = au === 2 && av === 0 && bu === 2 && bv === 2;
+    const reverseWay = au === 2 && av === 2 && bu === 2 && bv === 0;
+    return oneWay || reverseWay;
+  };
+
+  const leftSharedSegmentCount = leftBoundaryLines.filter((line) => isSharedSegment(line)).length;
+  const rightSharedSegmentCount = rightBoundaryLines.filter((line) => isSharedSegment(line)).length;
+
+  assert.equal(leftSharedSegmentCount, 1);
+  assert.equal(rightSharedSegmentCount, 1);
+});
 test('dragging a face auto-snaps movement to grid lines', () => {
   const shapeStore = new ShapeStore();
 

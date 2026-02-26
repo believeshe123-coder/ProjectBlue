@@ -1,4 +1,5 @@
 import { FillRegion } from "../models/fillRegion.js";
+import { Line } from "../models/line.js";
 import { PolygonShape } from "../models/polygonShape.js";
 import { buildRegionsFromLines } from "../core/regionBuilder.js";
 import { isoUVToWorld, worldToIsoUV } from "../core/isoGrid.js";
@@ -1206,7 +1207,7 @@ export class ShapeStore {
     if (!region?.uvCycle || region.uvCycle.length < 3) return null;
     const pointsWorld = region.uvCycle.map((p) => isoUVToWorld(p.u, p.v));
     const nodeId = makeId("face");
-    const sourceLineIds = this.getBoundaryLineIdsForRegion(region.uvCycle);
+    const sourceLineIds = this.resolveFaceBoundaryLineIds(region.uvCycle, nodeId);
     this.nodes[nodeId] = {
       id: nodeId,
       kind: "shape",
@@ -1229,6 +1230,71 @@ export class ShapeStore {
     this.attachNodeToLayer(nodeId);
     this.markRegionBoundaryLinesOwnedByFace(sourceLineIds, nodeId);
     return nodeId;
+  }
+
+  resolveFaceBoundaryLineIds(uvCycle, faceId) {
+    if (!Array.isArray(uvCycle) || uvCycle.length < 3) return [];
+    const candidateLineIds = this.getBoundaryLineIdsForRegion(uvCycle);
+    const resolvedIds = [];
+
+    for (let i = 0; i < uvCycle.length; i += 1) {
+      const startUV = uvCycle[i];
+      const endUV = uvCycle[(i + 1) % uvCycle.length];
+      const start = isoUVToWorld(startUV.u, startUV.v);
+      const end = isoUVToWorld(endUV.u, endUV.v);
+
+      const matchingLineId = candidateLineIds.find((lineId) => {
+        const shape = this.toShapeView(lineId);
+        return shape?.type === "line" && segmentMatchesBoundary(shape, start, end);
+      });
+
+      if (!matchingLineId) {
+        const createdLineId = this.createFaceBoundaryLine({ start, end, startUV, endUV, faceId });
+        if (createdLineId) resolvedIds.push(createdLineId);
+        continue;
+      }
+
+      const lineNode = this.nodes[matchingLineId];
+      const ownedByFaceIds = lineNode?.localGeom?.ownedByFaceIds ?? [];
+      if (ownedByFaceIds.length > 0 && !ownedByFaceIds.includes(faceId)) {
+        const createdLineId = this.createFaceBoundaryLine({
+          start,
+          end,
+          startUV,
+          endUV,
+          faceId,
+          templateNode: lineNode,
+        });
+        if (createdLineId) resolvedIds.push(createdLineId);
+      } else {
+        resolvedIds.push(matchingLineId);
+      }
+    }
+
+    return [...new Set(resolvedIds)];
+  }
+
+  createFaceBoundaryLine({ start, end, startUV, endUV, faceId, templateNode = null }) {
+    const templateStyle = templateNode?.style ?? {};
+    const line = new Line({
+      id: makeId("line"),
+      start,
+      end,
+      startUV,
+      endUV,
+      strokeColor: templateStyle.strokeColor,
+      strokeWidth: templateStyle.strokeWidth,
+      opacity: templateStyle.opacity,
+      strokeOpacity: templateStyle.strokeOpacity,
+      fillOpacity: templateStyle.fillOpacity,
+      fillEnabled: templateStyle.fillEnabled,
+      visible: templateStyle.visible,
+      locked: templateStyle.locked,
+      pinnedMeasure: templateStyle.pinnedMeasure,
+      ownedByFaceIds: faceId ? [faceId] : [],
+    });
+    this.addShape(line);
+    return line.id;
   }
 
   getBoundaryLineIdsForRegion(uvCycle) {
