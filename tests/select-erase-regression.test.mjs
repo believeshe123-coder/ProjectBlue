@@ -5,10 +5,14 @@ import { ShapeStore } from '../src/state/shapeStore.js';
 import { SelectTool } from '../src/tools/selectTool.js';
 import { EraseTool } from '../src/tools/eraseTool.js';
 import { LineTool } from '../src/tools/lineTool.js';
+import { FillTool } from '../src/tools/fillTool.js';
 import { Line } from '../src/models/line.js';
 import { FaceShape } from '../src/models/faceShape.js';
 import { Polygon } from '../src/models/polygon.js';
-import { isoUVToWorld } from '../src/core/isoGrid.js';
+import { PolygonShape } from '../src/models/polygonShape.js';
+import { isoUVToWorld, snapWorldToIso } from '../src/core/isoGrid.js';
+
+import { FillRegion } from '../src/models/fillRegion.js';
 
 function makeSelectContext(shapeStore) {
   const appState = {
@@ -59,6 +63,47 @@ function makeEraseContext(shapeStore) {
     historyStore: { pushState() {} },
   };
 }
+
+
+test('filling a polygon converts it into a face', () => {
+  const shapeStore = new ShapeStore();
+  const polygon = new PolygonShape({
+    id: 'polygon-1',
+    pointsWorld: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 }],
+    fillColor: '#ff00aa',
+    fillAlpha: 0.4,
+  });
+  shapeStore.addShape(polygon);
+
+  const appState = {
+    enableFill: true,
+    currentStyle: { fillColor: '#00ff88', fillOpacity: 0.75 },
+    setSelection(ids = [], type = null, lastId = null) {
+      this.selectedIds = new Set(ids);
+      this.selectedType = type;
+      this.lastSelectedId = lastId;
+    },
+    notifyStatus() {},
+  };
+
+  let historyPushes = 0;
+  const fillTool = new FillTool({
+    shapeStore,
+    appState,
+    camera: { zoom: 1, screenToWorld: (p) => p },
+    pushHistoryState() { historyPushes += 1; },
+  });
+
+  fillTool.onMouseDown({ event: { button: 0 }, worldPoint: { x: 10, y: 10 }, screenPoint: { x: 10, y: 10 } });
+
+  const converted = shapeStore.getShapeById('polygon-1');
+  assert.equal(converted?.type, 'face');
+  assert.equal(converted?.fillColor, '#00ff88');
+  assert.ok(Math.abs((converted?.fillAlpha ?? 0) - 0.75) < 1e-6);
+  assert.equal(appState.selectedType, 'face');
+  assert.equal(appState.lastSelectedId, 'polygon-1');
+  assert.equal(historyPushes, 1);
+});
 
 test('line selection and line erase still work', () => {
   const shapeStore = new ShapeStore();
@@ -121,6 +166,200 @@ test('selecting an object child resolves to object root', () => {
 
   assert.equal(selectTool.context.appState.selectedType, 'object');
   assert.deepEqual([...selectTool.context.appState.selectedIds], [objectId]);
+});
+
+
+test('clicking a filled child inside an object selects the fill itself', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const fill = new FillRegion({
+    id: 'fill-1',
+    regionId: 'region-1',
+    uvCycle: [{ u: 0, v: 0 }, { u: 2, v: 0 }, { u: 1, v: 1 }],
+  });
+  shapeStore.addShape(line);
+  shapeStore.addShape(fill);
+  const objectId = shapeStore.createObjectFromIds([line.id, fill.id], { name: 'Object 1' });
+
+  const selectTool = new SelectTool(makeSelectContext(shapeStore));
+  const insideFill = isoUVToWorld(1, 0.4);
+  selectTool.onMouseDown({ worldPoint: insideFill, screenPoint: { x: 0, y: 0 } });
+
+  assert.equal(selectTool.context.appState.selectedType, 'fillRegion');
+  assert.deepEqual([...selectTool.context.appState.selectedIds], [fill.id]);
+  assert.notEqual(objectId, null);
+});
+
+
+test('dragging selected fill child does not move parent object or sibling lines', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'line-1', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const fill = new FillRegion({
+    id: 'fill-1',
+    regionId: 'region-1',
+    uvCycle: [{ u: 0, v: 0 }, { u: 2, v: 0 }, { u: 1, v: 1 }],
+  });
+  shapeStore.addShape(line);
+  shapeStore.addShape(fill);
+  const objectId = shapeStore.createObjectFromIds([line.id, fill.id], { name: 'Object 1' });
+
+  let historyPushes = 0;
+  const selectContext = makeSelectContext(shapeStore);
+  selectContext.pushHistoryState = () => { historyPushes += 1; };
+  const selectTool = new SelectTool(selectContext);
+  const lineBefore = shapeStore.getShapeById(line.id);
+
+  const insideFill = isoUVToWorld(1, 0.4);
+  selectTool.onMouseDown({ worldPoint: insideFill, screenPoint: { x: 0, y: 0 } });
+  selectTool.onMouseMove({
+    worldPoint: { x: insideFill.x + 12, y: insideFill.y + 6 },
+    screenPoint: { x: 12, y: 6 },
+  });
+  selectTool.onMouseUp({
+    worldPoint: { x: insideFill.x + 12, y: insideFill.y + 6 },
+    screenPoint: { x: 12, y: 6 },
+  });
+
+  const lineAfter = shapeStore.getShapeById(line.id);
+  const objectNode = shapeStore.getNodeById(objectId);
+
+  assert.equal(historyPushes, 1);
+  assert.ok(Math.abs(lineAfter.start.x - lineBefore.start.x) < 1e-6);
+  assert.ok(Math.abs(lineAfter.start.y - lineBefore.start.y) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.x) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.y) < 1e-6);
+});
+
+
+
+test('dragging a face auto-snaps movement to grid lines', () => {
+  const shapeStore = new ShapeStore();
+
+  const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
+  const lineC = new Line({ id: 'line-c', start: isoUVToWorld(2, 2), end: isoUVToWorld(0, 2) });
+  const lineD = new Line({ id: 'line-d', start: isoUVToWorld(0, 2), end: isoUVToWorld(0, 0) });
+  shapeStore.addShape(lineA);
+  shapeStore.addShape(lineB);
+  shapeStore.addShape(lineC);
+  shapeStore.addShape(lineD);
+
+  const region = shapeStore.getComputedRegions()[0];
+  const faceId = shapeStore.createFaceFromRegion(region, { color: '#66ccff', alpha: 0.8 });
+  assert.ok(faceId);
+
+  const selectContext = makeSelectContext(shapeStore);
+  selectContext.appState.snapToGrid = false;
+  const selectTool = new SelectTool(selectContext);
+
+  const faceBefore = shapeStore.getShapeById(faceId);
+  const lineBefore = shapeStore.getShapeById('line-a');
+  const anchor = {
+    x: (faceBefore.pointsWorld[0].x + faceBefore.pointsWorld[2].x) / 2,
+    y: (faceBefore.pointsWorld[0].y + faceBefore.pointsWorld[2].y) / 2,
+  };
+
+  selectTool.onMouseDown({ worldPoint: anchor, screenPoint: { x: 0, y: 0 } });
+  assert.equal(selectTool.context.appState.selectedType, 'face');
+
+  selectTool.onMouseMove({
+    worldPoint: { x: anchor.x + 3, y: anchor.y + 2 },
+    screenPoint: { x: 3, y: 2 },
+  });
+  selectTool.onMouseUp({
+    worldPoint: { x: anchor.x + 3, y: anchor.y + 2 },
+    screenPoint: { x: 3, y: 2 },
+  });
+
+  const faceAfter = shapeStore.getShapeById(faceId);
+  const lineAfter = shapeStore.getShapeById('line-a');
+  const faceDx = faceAfter.pointsWorld[0].x - faceBefore.pointsWorld[0].x;
+  const faceDy = faceAfter.pointsWorld[0].y - faceBefore.pointsWorld[0].y;
+  const lineDx = lineAfter.start.x - lineBefore.start.x;
+  const lineDy = lineAfter.start.y - lineBefore.start.y;
+
+  const snapped = snapWorldToIso({ x: anchor.x + 3, y: anchor.y + 2 }).point;
+  const expectedDx = snapped.x - anchor.x;
+  const expectedDy = snapped.y - anchor.y;
+  assert.ok(Math.abs(faceDx - expectedDx) < 1e-6);
+  assert.ok(Math.abs(faceDy - expectedDy) < 1e-6);
+  assert.ok(Math.abs(lineDx - expectedDx) < 1e-6);
+  assert.ok(Math.abs(lineDy - expectedDy) < 1e-6);
+});
+
+test('dragging a face moves the filled section and attached boundary lines together', () => {
+  const shapeStore = new ShapeStore();
+
+  const lineA = new Line({ id: 'line-a', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  const lineB = new Line({ id: 'line-b', start: isoUVToWorld(2, 0), end: isoUVToWorld(2, 2) });
+  const lineC = new Line({ id: 'line-c', start: isoUVToWorld(2, 2), end: isoUVToWorld(0, 2) });
+  const lineD = new Line({ id: 'line-d', start: isoUVToWorld(0, 2), end: isoUVToWorld(0, 0) });
+  shapeStore.addShape(lineA);
+  shapeStore.addShape(lineB);
+  shapeStore.addShape(lineC);
+  shapeStore.addShape(lineD);
+
+  const region = shapeStore.getComputedRegions()[0];
+  assert.ok(region);
+  const faceId = shapeStore.createFaceFromRegion(region, { color: '#66ccff', alpha: 0.8 });
+  assert.ok(faceId);
+
+  const selectTool = new SelectTool(makeSelectContext(shapeStore));
+  const faceBefore = shapeStore.getShapeById(faceId);
+  const lineBefore = shapeStore.getShapeById('line-a');
+  const anchor = {
+    x: (faceBefore.pointsWorld[0].x + faceBefore.pointsWorld[2].x) / 2,
+    y: (faceBefore.pointsWorld[0].y + faceBefore.pointsWorld[2].y) / 2,
+  };
+
+  selectTool.onMouseDown({ worldPoint: anchor, screenPoint: { x: 0, y: 0 } });
+  assert.equal(selectTool.context.appState.selectedType, 'face');
+  selectTool.onMouseMove({ worldPoint: { x: anchor.x + 14, y: anchor.y + 7 }, screenPoint: { x: 14, y: 7 } });
+  selectTool.onMouseUp({ worldPoint: { x: anchor.x + 14, y: anchor.y + 7 }, screenPoint: { x: 14, y: 7 } });
+
+  const faceAfter = shapeStore.getShapeById(faceId);
+  const lineAfter = shapeStore.getShapeById('line-a');
+
+  const faceDx = faceAfter.pointsWorld[0].x - faceBefore.pointsWorld[0].x;
+  const faceDy = faceAfter.pointsWorld[0].y - faceBefore.pointsWorld[0].y;
+  const lineDx = lineAfter.start.x - lineBefore.start.x;
+  const lineDy = lineAfter.start.y - lineBefore.start.y;
+
+  const snapped = snapWorldToIso({ x: anchor.x + 14, y: anchor.y + 7 }).point;
+  const expectedDx = snapped.x - anchor.x;
+  const expectedDy = snapped.y - anchor.y;
+  assert.ok(Math.abs(faceDx - expectedDx) < 1e-6);
+  assert.ok(Math.abs(faceDy - expectedDy) < 1e-6);
+  assert.ok(Math.abs(lineDx - expectedDx) < 1e-6);
+  assert.ok(Math.abs(lineDy - expectedDy) < 1e-6);
+});
+
+
+test('dragging object does not auto-snap when snap-to-grid is disabled', () => {
+  const shapeStore = new ShapeStore();
+  const line = new Line({ id: 'child-line', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
+  shapeStore.addShape(line);
+  const objectId = shapeStore.createObjectFromIds([line.id], { name: 'Object 1' });
+
+  const selectContext = makeSelectContext(shapeStore);
+  selectContext.appState.snapToGrid = false;
+  const selectTool = new SelectTool(selectContext);
+  selectTool.context.appState.setSelection([objectId], 'object', objectId);
+
+  const initial = shapeStore.getShapeById(line.id);
+  const anchor = { ...initial.start };
+
+  selectTool.onMouseDown({ worldPoint: anchor, screenPoint: { x: 0, y: 0 } });
+  selectTool.onMouseMove({ worldPoint: { x: anchor.x + 3, y: anchor.y + 2 }, screenPoint: { x: 3, y: 2 } });
+  selectTool.onMouseUp({ worldPoint: { x: anchor.x + 3, y: anchor.y + 2 }, screenPoint: { x: 3, y: 2 } });
+
+  const objectNode = shapeStore.getNodeById(objectId);
+  assert.ok(Math.abs(objectNode.transform.x - 3) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.y - 2) < 1e-6);
+
+  const moved = shapeStore.getShapeById(line.id);
+  assert.ok(Math.abs(moved.start.x - (initial.start.x + 3)) < 1e-6);
+  assert.ok(Math.abs(moved.start.y - (initial.start.y + 2)) < 1e-6);
 });
 
 test('dragging object selection moves object transform and descendants', () => {

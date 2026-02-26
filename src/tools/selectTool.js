@@ -1,7 +1,7 @@
 import { BaseTool } from "./baseTool.js";
 import { snapWorldToIso } from "../core/isoGrid.js";
 
-const MOVABLE_SHAPE_TYPES = new Set(["line", "face", "polygon"]);
+const MOVABLE_SHAPE_TYPES = new Set(["line", "face", "polygon", "fillRegion"]);
 
 function isMovableShape(shape) {
   return !!shape && MOVABLE_SHAPE_TYPES.has(shape.type) && shape.locked !== true;
@@ -40,9 +40,10 @@ function normalizeDragSelection(shapeStore, appState, ids = [], { operation = "m
   const inputIds = [...new Set(ids)];
   const existingIds = inputIds.filter((id) => shapeStore.getNodeById(id));
   const staleCount = inputIds.length - existingIds.length;
-  const normalizedIds = shapeStore.getSelectionRootIds(existingIds);
-  const objectIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "object");
-  const shapeIds = normalizedIds.filter((id) => shapeStore.getNodeById(id)?.kind === "shape");
+  const objectIds = shapeStore
+    .getSelectionRootIds(existingIds)
+    .filter((id) => shapeStore.getNodeById(id)?.kind === "object");
+  const shapeIds = existingIds.filter((id) => shapeStore.getNodeById(id)?.kind === "shape");
 
   if (staleCount > 0) {
     appState.notifyStatus?.(`Recovered from ${staleCount} stale selection item${staleCount === 1 ? "" : "s"}`, 1200);
@@ -133,6 +134,9 @@ export class SelectTool extends BaseTool {
     const { appState } = this.context;
     const chain = this.getAncestorChain(hitShapeId);
     if (!chain.length) return null;
+    const directHitNode = chain[0];
+    if (directHitNode?.kind === "shape" && directHitNode.shapeType === "fillRegion") return directHitNode;
+    if (directHitNode?.kind === "shape" && !isMovableNode(directHitNode)) return directHitNode;
     const movableChain = chain.filter((node) => isMovableNode(node));
     if (!movableChain.length) return chain[0];
 
@@ -232,6 +236,7 @@ export class SelectTool extends BaseTool {
       clickedShapeId: event?.button === 2 ? targetId : null,
       dragIds,
       moveOptions: isDraggingObjects ? {} : { lineOnly: appState.selectedType === "line" },
+      forceGridSnap: !isDraggingObjects && appState.selectedType === "face",
       anchorOriginal: this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint },
       didDrag: false,
       historyCaptured: false,
@@ -275,7 +280,8 @@ export class SelectTool extends BaseTool {
         x: this.dragState.anchorOriginal.x + rawDelta.x,
         y: this.dragState.anchorOriginal.y + rawDelta.y,
       };
-      const anchorSnapped = appState.snapToGrid
+      const forceGridSnap = this.dragState.forceGridSnap === true;
+      const anchorSnapped = (appState.snapToGrid || forceGridSnap)
         ? snapWorldToIso(anchorMoved).point
         : anchorMoved;
       const snappedDelta = {
