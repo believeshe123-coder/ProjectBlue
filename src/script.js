@@ -60,10 +60,7 @@ const selectionStrokeWidth = document.getElementById("selection-stroke-width");
 const selectionFillColor = document.getElementById("selection-fill-color");
 const selectionBar = document.getElementById("selection-bar");
 const selectionBarCountEl = document.getElementById("selection-bar-count");
-const selectionKeepCheckbox = document.getElementById("selection-keep-checkbox");
-const selectionIncludeFacesCheckbox = document.getElementById("selection-include-faces-checkbox");
 const selectionGroupButton = document.getElementById("btnGroup");
-const selectionDoneButton = document.getElementById("selection-done-btn");
 const selectionDeleteButton = document.getElementById("selection-delete-btn");
 const zOrderMenu = document.getElementById("z-order-context-menu");
 const zOrderFrontButton = document.getElementById("z-order-front-btn");
@@ -86,7 +83,6 @@ const menuSettingsDropdown = document.getElementById("menuSettingsDropdown");
 const menuEditButton = document.getElementById("menuEditBtn");
 const menuEditDropdown = document.getElementById("menuEditDropdown");
 const clearGroupsButton = document.getElementById("clear-groups-btn");
-const duplicateSelectionButton = document.getElementById("duplicate-selection-btn");
 const layerListEl = document.getElementById("layer-list");
 const layerAddButton = document.getElementById("layer-add-btn");
 const layerMoveSelectionButton = document.getElementById("layer-move-selection-btn");
@@ -835,8 +831,24 @@ function isSingleSelectedObject() {
   return shapeStore.getNodeById(objectId)?.kind === "object";
 }
 
-function canGroupSelection() {
-  return appState.enableGrouping && appState.selectedType === "line" && appState.selectedIds.size >= 2;
+function getSelectionGroupingAction() {
+  if (!appState.enableGrouping) return null;
+  const count = appState.selectedIds.size;
+  if (!count) return null;
+
+  if (appState.selectedType === "line") {
+    const selectionBounds = shapeStore.getSelectionBoundsFromIds([...appState.selectedIds]);
+    const enclosedFillCount = selectionBounds ? shapeStore.getFilledRegionCountInBounds(selectionBounds) : 0;
+    if (enclosedFillCount > 0) return { kind: "make-face", label: "Group as Face" };
+    if (count >= 2) return { kind: "make-object", label: "Group to Object" };
+    return null;
+  }
+
+  if (appState.selectedType === "face" && count >= 2) {
+    return { kind: "make-object", label: "Group to Object" };
+  }
+
+  return null;
 }
 
 function updateSelectionBar() {
@@ -847,9 +859,14 @@ function updateSelectionBar() {
   selectionBar.hidden = false;
   selectionBar.classList.toggle("is-visible", shouldShow);
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.size})`;
-  if (selectionKeepCheckbox) selectionKeepCheckbox.checked = appState.keepSelecting === true;
-  if (selectionIncludeFacesCheckbox) selectionIncludeFacesCheckbox.checked = appState.includeEnclosedFacesInObjectAssembly === true;
-  if (selectionGroupButton) selectionGroupButton.disabled = !canGroupSelection();
+
+  if (selectionGroupButton) {
+    const action = getSelectionGroupingAction();
+    selectionGroupButton.hidden = !action;
+    selectionGroupButton.disabled = !action;
+    selectionGroupButton.textContent = action?.label ?? "Group";
+    selectionGroupButton.dataset.groupAction = action?.kind ?? "";
+  }
 }
 
 appState.updateSelectionBar = updateSelectionBar;
@@ -1170,16 +1187,20 @@ function applyToSelected(updater) {
   for (const shape of selectedShapes) updater(shape);
 }
 
-function createGroupFromSelection() {
-  if (!appState.enableGrouping) return;
-  if (appState.selectedType !== "line" || appState.selectedIds.size < 2) return;
-  const selectedLineIds = [...appState.selectedIds];
+function createFacesFromSelection() {
+  const selectionBounds = shapeStore.getSelectionBoundsFromIds([...appState.selectedIds]);
+  if (!selectionBounds) {
+    appState.notifyStatus?.("No enclosed fill in selection", 1500);
+    return;
+  }
   pushHistoryState();
-  const objectId = shapeStore.createObjectFromIds(selectedLineIds, { name: "Object" });
-  if (!objectId) return;
-  setSelection([objectId], "object", objectId);
-  appState.notifyStatus?.(`Object created from ${selectedLineIds.length} lines`, 1200);
-  console.log(`[OBJECT] Created from ${selectedLineIds.length} lines -> ${objectId}`);
+  const capturedFaceIds = shapeStore.captureFilledRegionsAsFacesInBounds(selectionBounds);
+  if (!capturedFaceIds.length) {
+    appState.notifyStatus?.("No enclosed fill in selection", 1500);
+    return;
+  }
+  setSelection(capturedFaceIds, "face", capturedFaceIds[capturedFaceIds.length - 1] ?? null);
+  appState.notifyStatus?.(`Created ${capturedFaceIds.length} face${capturedFaceIds.length === 1 ? "" : "s"} from selection`, 1700);
 }
 
 function makeObjectFromSelection() {
@@ -1245,12 +1266,28 @@ function makeObjectFromSelection() {
     return;
   }
 
-  let capturedFaceIds = [];
-  if (appState.includeEnclosedFacesInObjectAssembly) {
-    capturedFaceIds = shapeStore.captureFilledRegionsAsFacesInBounds(selectionBounds);
-  }
+  const capturedFaceIds = [];
 
-  const childIds = [...new Set([...selectedLineIds, ...selectedFaceIds, ...capturedFaceIds])];
+  const autoFaceIdsFromLines = selectedLineIds
+    .flatMap((lineId) => {
+      const node = shapeStore.getNodeById(lineId);
+      return node?.kind === "shape" && node.shapeType === "line"
+        ? [...new Set(node.localGeom?.ownedByFaceIds ?? [])]
+        : [];
+    })
+    .filter((faceId) => shapeStore.getNodeById(faceId)?.kind === "shape" && shapeStore.getNodeById(faceId)?.shapeType === "face");
+
+  const faceSeedIds = [...new Set([...selectedFaceIds, ...capturedFaceIds, ...autoFaceIdsFromLines])];
+  const autoLineIdsFromFaces = faceSeedIds
+    .flatMap((faceId) => {
+      const node = shapeStore.getNodeById(faceId);
+      if (!node || node.kind !== "shape" || node.shapeType !== "face") return [];
+      const sourceLineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
+      return [...new Set(sourceLineIds)];
+    })
+    .filter((lineId) => shapeStore.getNodeById(lineId)?.kind === "shape" && shapeStore.getNodeById(lineId)?.shapeType === "line");
+
+  const childIds = [...new Set([...selectedLineIds, ...autoLineIdsFromFaces, ...faceSeedIds])];
   const childNodes = childIds.map((id) => shapeStore.getNodeById(id)).filter(Boolean);
   const validShapeChildIds = childNodes
     .filter((node) => node.kind === "shape" && (node.shapeType === "line" || node.shapeType === "face"))
@@ -1288,9 +1325,14 @@ function makeObjectFromSelection() {
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
   setSelection([objectId], "object", objectId);
-  const lineCount = selectedLineIds.length;
-  const faceCount = [...new Set([...selectedFaceIds, ...capturedFaceIds])].length;
-  appState.notifyStatus?.(`Object created (${lineCount} lines, ${faceCount} faces)`, 1800);
+  const allFaceIds = [...new Set([...selectedFaceIds, ...capturedFaceIds, ...autoFaceIdsFromLines])];
+  const allLineIds = [...new Set([...selectedLineIds, ...autoLineIdsFromFaces])];
+  const autoLineCount = Math.max(0, allLineIds.length - selectedLineIds.length);
+  const autoFaceCount = Math.max(0, allFaceIds.length - selectedFaceIds.length - capturedFaceIds.length);
+  const autoSummary = (autoLineCount || autoFaceCount)
+    ? ` (+${autoLineCount} linked lines, +${autoFaceCount} linked faces)`
+    : "";
+  appState.notifyStatus?.(`Object created (${allLineIds.length} lines, ${allFaceIds.length} faces)${autoSummary}`, 2000);
 }
 
 function ungroupSelection() {
@@ -2037,11 +2079,6 @@ layerMoveSelectionButton?.addEventListener("click", () => {
   appState.notifyStatus?.(`Moved ${moved.length} item${moved.length === 1 ? "" : "s"} to active layer`, 1500);
 });
 
-duplicateSelectionButton?.addEventListener("click", () => {
-  duplicateSelection();
-  updateSelectionBar();
-  renderLayerList();
-});
 
 document.addEventListener("click", () => {
   if (!appState.ui.fileOpen && !appState.ui.editOpen && !appState.ui.settingsOpen) return;
@@ -2174,27 +2211,12 @@ selectionFillColor?.addEventListener("change", () => pushHistoryState());
 
 
 
-selectionKeepCheckbox?.addEventListener("change", (event) => {
-  appState.keepSelecting = event.target.checked;
-  updateSelectionBar();
-  renderLayerList();
-});
-
-selectionIncludeFacesCheckbox?.addEventListener("change", (event) => {
-  appState.includeEnclosedFacesInObjectAssembly = event.target.checked;
-  const status = appState.includeEnclosedFacesInObjectAssembly ? "on" : "off";
-  appState.notifyStatus?.(`Include enclosed faces: ${status}`, 1500);
-  updateSelectionBar();
-  renderLayerList();
-});
-
 selectionGroupButton?.addEventListener("click", () => {
-  createGroupFromSelection();
+  const action = selectionGroupButton.dataset.groupAction;
+  if (action === "make-face") createFacesFromSelection();
+  if (action === "make-object") makeObjectFromSelection();
   updateSelectionBar();
   renderLayerList();
-});
-selectionDoneButton?.addEventListener("click", () => {
-  clearSelectionState();
 });
 selectionDeleteButton?.addEventListener("click", () => {
   deleteSelection();
