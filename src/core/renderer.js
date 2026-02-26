@@ -254,16 +254,23 @@ export class Renderer {
     let computedRegions = [];
 
     if (disableSceneGraph) {
-      const lines = this.shapeStore
+      const shapes = this.shapeStore
         .getShapes()
-        .filter((shape) => shape.type === "line" && shape.visible !== false);
+        .filter((shape) => shape.visible !== false);
+      const lines = shapes.filter((shape) => shape.type === "line");
+      const faces = shapes.filter((shape) => shape.type === "face");
       const fillRegions = this.shapeStore.getFillRegions();
       if (fillRegions?.length) console.log("[RENDER] fillRegions", fillRegions.length);
       computedRegions = this.shapeStore.getComputedRegions();
       if (this.appState.enableFill) {
         for (const fillRegion of fillRegions) fillRegion.drawFill?.(this.ctx, this.camera, this.appState);
       }
+      for (const face of faces) drawFace(this.ctx, this.camera, face, selectionSet.has(face.id));
       for (const line of lines) drawLine(this.ctx, this.camera, line, selectionSet.has(line.id));
+      for (const face of faces) {
+        if (!selectionSet.has(face.id)) continue;
+        drawFaceSelectionOutline(this.ctx, this.camera, face);
+      }
 
       if (this.appState.selectedRegionKey) {
         const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
