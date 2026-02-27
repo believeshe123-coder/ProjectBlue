@@ -857,6 +857,29 @@ function getSelectionGroupingAction() {
   });
 }
 
+function getSelectionStyleSummary() {
+  const selectedShapes = getSelectedShapes();
+  const styleTargets = selectedShapes.filter((shape) => shape && ("strokeColor" in shape || "strokeWidth" in shape));
+  if (!styleTargets.length) {
+    return {
+      supportsColor: false,
+      supportsStrokeWidth: false,
+      color: appState.currentStyle.strokeColor,
+      strokeWidth: appState.currentStyle.strokeWidth,
+    };
+  }
+
+  const colorTarget = styleTargets.find((shape) => "strokeColor" in shape);
+  const strokeTarget = styleTargets.find((shape) => "strokeWidth" in shape);
+
+  return {
+    supportsColor: !!colorTarget,
+    supportsStrokeWidth: !!strokeTarget,
+    color: colorTarget?.strokeColor ?? appState.currentStyle.strokeColor,
+    strokeWidth: strokeTarget?.strokeWidth ?? appState.currentStyle.strokeWidth,
+  };
+}
+
 function updateSelectionBar() {
   if (!selectionBar) return;
   const hasSelection = appState.selectedType !== null && appState.selectedIds.size > 0;
@@ -865,6 +888,20 @@ function updateSelectionBar() {
   selectionBar.hidden = false;
   selectionBar.classList.toggle("is-visible", shouldShow);
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.size})`;
+
+  const selectionStyle = getSelectionStyleSummary();
+  if (selectionLineColor) {
+    selectionLineColor.value = selectionStyle.color;
+    selectionLineColor.disabled = !selectionStyle.supportsColor;
+    selectionLineColor.title = selectionStyle.supportsColor ? "Set selected color" : "Color not supported for this selection";
+  }
+  if (selectionStrokeWidth) {
+    selectionStrokeWidth.value = String(selectionStyle.strokeWidth);
+    selectionStrokeWidth.disabled = !selectionStyle.supportsStrokeWidth;
+    selectionStrokeWidth.title = selectionStyle.supportsStrokeWidth
+      ? "Set selected stroke width"
+      : "Stroke width not supported for this selection";
+  }
 
   if (selectionGroupButton) {
     const action = getSelectionGroupingAction();
@@ -2196,14 +2233,23 @@ strokeWidthInput.addEventListener("change", (event) => {
 
 selectionLineColor?.addEventListener("input", (event) => {
   const value = event.target.value;
-  applyToSelected((shape) => { if ("strokeColor" in shape) shape.strokeColor = value; });
+  setUnifiedColor(value);
+  applyToSelected((shape) => {
+    if ("strokeColor" in shape) shape.strokeColor = value;
+    if ("fillColor" in shape && shape.type === "face") shape.fillColor = value;
+  });
+  refreshStyleUI();
+  updateSelectionBar();
 });
 selectionLineColor?.addEventListener("change", () => pushHistoryState());
 
 selectionStrokeWidth?.addEventListener("input", (event) => {
   const value = Number.parseInt(event.target.value, 10);
   if (!Number.isFinite(value)) return;
+  appState.currentStyle.strokeWidth = value;
   applyToSelected((shape) => { if ("strokeWidth" in shape) shape.strokeWidth = value; });
+  refreshStyleUI();
+  updateSelectionBar();
 });
 selectionStrokeWidth?.addEventListener("change", () => pushHistoryState());
 
