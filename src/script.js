@@ -13,7 +13,6 @@ import { isoUVToWorld } from "./core/isoGrid.js";
 import { normalizeEraseMode } from "./state/eraseMode.js";
 import { resolveSelectionGroupingAction } from "./utils/selectionGrouping.js";
 import {
-  applySelectionDraftToShapes,
   getSelectionApplyDisabledState,
   getSelectionStyleSummaryFromShapes,
 } from "./utils/selectionStyleDraft.js";
@@ -919,7 +918,7 @@ function updateSelectionBar() {
       : "Stroke width not supported for this selection";
   }
   if (selectionApplyButton) {
-    selectionApplyButton.disabled = getSelectionApplyDisabledState(selectionStyle);
+    selectionApplyButton.disabled = getSelectionApplyDisabledState(selectionStyleDraft);
   }
 
   if (selectionGroupButton) {
@@ -1243,10 +1242,24 @@ function duplicateSelection() {
 }
 
 
-function applyToSelected(updater) {
-  const selectedShapes = getSelectedShapes();
-  if (!selectedShapes.length) return;
-  for (const shape of selectedShapes) updater(shape);
+function applyStyleToNodeAndDescendants(node, updater) {
+  if (!node) return;
+  if (node.kind === "shape") {
+    updater(node);
+    return;
+  }
+  if (node.kind !== "object") return;
+  for (const childId of node.children ?? []) {
+    applyStyleToNodeAndDescendants(shapeStore.getNodeById(childId), updater);
+  }
+}
+
+function applyStyleToSelectedNodes(updater) {
+  for (const rootId of appState.selectedIds) {
+    const rootNode = shapeStore.getNodeById(rootId);
+    if (!rootNode) continue;
+    applyStyleToNodeAndDescendants(rootNode, updater);
+  }
 }
 
 function createFacesFromSelection() {
@@ -2162,13 +2175,16 @@ strokeWidthInput.addEventListener("change", (event) => {
   if (!Number.isFinite(value)) return;
   pushHistoryState();
   appState.currentStyle.strokeWidth = value;
-  applyToSelected((shape) => { if ("strokeWidth" in shape) shape.strokeWidth = value; });
+  applyStyleToSelectedNodes((node) => {
+    if (typeof node.style?.strokeWidth === "number") node.style.strokeWidth = value;
+  });
   refreshStyleUI();
 });
 
 selectionLineColor?.addEventListener("input", (event) => {
   selectionStyleDraft.color = event.target.value;
   selectionStyleDraft.dirty = true;
+  updateSelectionBar();
 });
 
 selectionStrokeWidth?.addEventListener("input", (event) => {
@@ -2176,12 +2192,21 @@ selectionStrokeWidth?.addEventListener("input", (event) => {
   if (!Number.isFinite(value)) return;
   selectionStyleDraft.strokeWidth = value;
   selectionStyleDraft.dirty = true;
+  updateSelectionBar();
 });
 
 selectionApplyButton?.addEventListener("click", () => {
   if (getSelectionApplyDisabledState(selectionStyleDraft)) return;
   pushHistoryState();
-  applySelectionDraftToShapes(getSelectedShapes(), selectionStyleDraft);
+  applyStyleToSelectedNodes((node) => {
+    if (selectionStyleDraft.supportsColor) {
+      if (typeof node.style?.strokeColor === "string") node.style.strokeColor = selectionStyleDraft.color;
+      if (node.shapeType === "face" && typeof node.style?.fillColor === "string") node.style.fillColor = selectionStyleDraft.color;
+    }
+    if (selectionStyleDraft.supportsStrokeWidth && typeof node.style?.strokeWidth === "number") {
+      node.style.strokeWidth = selectionStyleDraft.strokeWidth;
+    }
+  });
   setUnifiedColor(selectionStyleDraft.color);
   appState.currentStyle.strokeWidth = selectionStyleDraft.strokeWidth;
   selectionStyleDraft.dirty = false;
@@ -2191,11 +2216,13 @@ selectionApplyButton?.addEventListener("click", () => {
 
 selectionFillColor?.addEventListener("input", (event) => {
   const value = event.target.value;
-  applyToSelected((shape) => {
-    shape.fillColor = value;
+  pushHistoryState();
+  applyStyleToSelectedNodes((node) => {
+    if (node.shapeType === "face" && typeof node.style?.fillColor === "string") node.style.fillColor = value;
   });
+  refreshStyleUI();
+  updateSelectionBar();
 });
-selectionFillColor?.addEventListener("change", () => pushHistoryState());
 
 
 
