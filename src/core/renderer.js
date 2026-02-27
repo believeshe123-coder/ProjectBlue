@@ -173,6 +173,26 @@ export function drawCursorMagnifier(ctx, camera, canvasCssW, canvasCssH, cursorP
   ctx.restore();
 }
 
+function drawObjectSelectionBounds(ctx, camera, bounds) {
+  if (!bounds) return;
+  const topLeft = camera.worldToScreen({ x: bounds.minX, y: bounds.minY });
+  const topRight = camera.worldToScreen({ x: bounds.maxX, y: bounds.minY });
+  const bottomRight = camera.worldToScreen({ x: bounds.maxX, y: bounds.maxY });
+  const bottomLeft = camera.worldToScreen({ x: bounds.minX, y: bounds.maxY });
+  ctx.save();
+  ctx.strokeStyle = "#ffd166";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 6]);
+  ctx.beginPath();
+  ctx.moveTo(topLeft.x, topLeft.y);
+  ctx.lineTo(topRight.x, topRight.y);
+  ctx.lineTo(bottomRight.x, bottomRight.y);
+  ctx.lineTo(bottomLeft.x, bottomLeft.y);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawLine(ctx, camera, line, selected) {
   const s = camera.worldToScreen(line.start);
   const e = camera.worldToScreen(line.end);
@@ -295,6 +315,27 @@ export class Renderer {
       if (this.appState.selectedRegionKey) {
         const selectedRegion = computedRegions.find((region) => region.id === this.appState.selectedRegionKey);
         drawSelectedRegionOutline(this.ctx, this.camera, selectedRegion);
+      }
+    }
+
+    if (this.appState.selectedType === "object" && selectedIds.length && this.shapeStore.getDescendantIds && this.shapeStore.getShapeBounds && this.shapeStore.toShapeView) {
+      const shapeDescendantIds = [];
+      for (const objectId of selectedIds) {
+        for (const childId of this.shapeStore.getDescendantIds(objectId) ?? []) {
+          const node = this.shapeStore.getNodeById?.(childId);
+          if (node?.kind === "shape") shapeDescendantIds.push(childId);
+        }
+      }
+      const shapeBounds = shapeDescendantIds
+        .map((id) => this.shapeStore.getShapeBounds(this.shapeStore.toShapeView(id)))
+        .filter(Boolean);
+      if (shapeBounds.length) {
+        drawObjectSelectionBounds(this.ctx, this.camera, {
+          minX: Math.min(...shapeBounds.map((b) => b.minX)),
+          minY: Math.min(...shapeBounds.map((b) => b.minY)),
+          maxX: Math.max(...shapeBounds.map((b) => b.maxX)),
+          maxY: Math.max(...shapeBounds.map((b) => b.maxY)),
+        });
       }
     }
 

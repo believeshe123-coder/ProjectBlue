@@ -1218,127 +1218,43 @@ function makeObjectFromSelection() {
   const hasSelectionBox = !!appState.selectionBoxWorld;
   if (!hasSelection && !hasSelectionBox) return;
 
-  const resolveIdsFromSelectionBounds = (selectionBounds) => {
+  const resolveFaceIdsFromSelectionBounds = (selectionBounds) => {
     if (!selectionBounds) return [];
     const hitShapes = shapeStore.getShapesIntersectingRect(selectionBounds);
     return [...new Set(hitShapes
-      .map((shape) => {
-        let currentId = shape.id;
-        let parentId = shapeStore.parentById[currentId];
-        while (parentId) {
-          const parentNode = shapeStore.getNodeById(parentId);
-          if (parentNode?.kind === "object") currentId = parentId;
-          parentId = shapeStore.parentById[parentId];
-        }
-        return currentId;
-      })
+      .filter((shape) => shape.type === "face")
+      .map((shape) => shape.id)
       .filter(Boolean))];
   };
 
   let selectedIds = [...appState.selectedIds].filter((id) => shapeStore.getNodeById(id));
   if (!selectedIds.length && hasSelectionBox) {
-    selectedIds = resolveIdsFromSelectionBounds(appState.selectionBoxWorld);
-    if (selectedIds.length) {
-      const firstNode = shapeStore.getNodeById(selectedIds[0]);
-      const selectionType = firstNode?.kind === "object"
-        ? "object"
-        : (firstNode?.shapeType === "face" ? "face" : "line");
-      setSelection(selectedIds, selectionType, selectedIds[selectedIds.length - 1] ?? null);
-    }
+    selectedIds = resolveFaceIdsFromSelectionBounds(appState.selectionBoxWorld);
+    if (selectedIds.length) setSelection(selectedIds, "face", selectedIds[selectedIds.length - 1] ?? null);
   }
 
-  const selectionBounds = appState.selectionBoxWorld
-    ?? shapeStore.getSelectionBoundsFromIds(selectedIds);
-  if (!selectionBounds) {
-    appState.notifyStatus?.("No selection bounds", 1200);
-    return;
-  }
-
-  const selectedNodes = selectedIds
+  const selectedFaceIds = selectedIds
     .map((id) => shapeStore.getNodeById(id))
-    .filter(Boolean);
-  const selectedLineIds = selectedNodes
-    .filter((node) => node.kind === "shape" && node.shapeType === "line")
-    .map((node) => node.id);
-  const selectedFaceIds = selectedNodes
-    .filter((node) => node.kind === "shape" && node.shapeType === "face")
-    .map((node) => node.id);
-  const selectedObjectIds = selectedNodes
-    .filter((node) => node.kind === "object")
+    .filter((node) => node?.kind === "shape" && node.shapeType === "face")
     .map((node) => node.id);
 
-  if (!selectedLineIds.length && !selectedFaceIds.length && selectedObjectIds.length) {
-    appState.notifyStatus?.("Select lines/faces instead of objects to create a new object", 1800);
-    return;
-  }
-
-  const capturedFaceIds = [];
-
-  const autoFaceIdsFromLines = selectedLineIds
-    .flatMap((lineId) => {
-      const node = shapeStore.getNodeById(lineId);
-      return node?.kind === "shape" && node.shapeType === "line"
-        ? [...new Set(node.localGeom?.ownedByFaceIds ?? [])]
-        : [];
-    })
-    .filter((faceId) => shapeStore.getNodeById(faceId)?.kind === "shape" && shapeStore.getNodeById(faceId)?.shapeType === "face");
-
-  const faceSeedIds = [...new Set([...selectedFaceIds, ...capturedFaceIds, ...autoFaceIdsFromLines])];
-  const autoLineIdsFromFaces = faceSeedIds
-    .flatMap((faceId) => {
-      const node = shapeStore.getNodeById(faceId);
-      if (!node || node.kind !== "shape" || node.shapeType !== "face") return [];
-      const sourceLineIds = node.meta?.sourceLineIds ?? node.style?.sourceLineIds ?? [];
-      return [...new Set(sourceLineIds)];
-    })
-    .filter((lineId) => shapeStore.getNodeById(lineId)?.kind === "shape" && shapeStore.getNodeById(lineId)?.shapeType === "line");
-
-  const childIds = [...new Set([...selectedLineIds, ...autoLineIdsFromFaces, ...faceSeedIds])];
-  const childNodes = childIds.map((id) => shapeStore.getNodeById(id)).filter(Boolean);
-  const validShapeChildIds = childNodes
-    .filter((node) => node.kind === "shape" && (node.shapeType === "line" || node.shapeType === "face"))
-    .map((node) => node.id);
-
-  if (!validShapeChildIds.length) {
-    appState.notifyStatus?.("No valid lines/faces in selection", 1500);
-    return;
-  }
-
-  const validShapeChildIdSet = new Set(validShapeChildIds);
-  const hasSelfReference = validShapeChildIds.some((id) => {
-    let parentId = shapeStore.parentById[id];
-    const visited = new Set();
-    while (parentId && !visited.has(parentId)) {
-      visited.add(parentId);
-      if (validShapeChildIdSet.has(parentId)) return true;
-      parentId = shapeStore.parentById[parentId];
-    }
-    return false;
-  });
-  if (hasSelfReference) {
-    appState.notifyStatus?.("Selection has nested/self-referential children; refine selection", 1800);
+  if (!selectedFaceIds.length) {
+    appState.notifyStatus?.("Only faces can be grouped into an object", 1800);
     return;
   }
 
   pushHistoryState();
 
-  const objectId = shapeStore.createObjectFromIds(validShapeChildIds, { name: "Object" });
+  const objectId = shapeStore.createObjectFromIds(selectedFaceIds, { name: "Object" });
   if (!objectId) {
-    appState.notifyStatus?.("Unable to create object from selection", 1500);
+    appState.notifyStatus?.("Unable to create object from selected faces", 1500);
     return;
   }
 
   appState.keepSelecting = false;
   appState.selectionBoxWorld = null;
   setSelection([objectId], "object", objectId);
-  const allFaceIds = [...new Set([...selectedFaceIds, ...capturedFaceIds, ...autoFaceIdsFromLines])];
-  const allLineIds = [...new Set([...selectedLineIds, ...autoLineIdsFromFaces])];
-  const autoLineCount = Math.max(0, allLineIds.length - selectedLineIds.length);
-  const autoFaceCount = Math.max(0, allFaceIds.length - selectedFaceIds.length - capturedFaceIds.length);
-  const autoSummary = (autoLineCount || autoFaceCount)
-    ? ` (+${autoLineCount} linked lines, +${autoFaceCount} linked faces)`
-    : "";
-  appState.notifyStatus?.(`Object created (${allLineIds.length} lines, ${allFaceIds.length} faces)${autoSummary}`, 2000);
+  appState.notifyStatus?.(`Object created (${selectedFaceIds.length} face${selectedFaceIds.length === 1 ? "" : "s"})`, 2000);
 }
 
 function ungroupSelection() {

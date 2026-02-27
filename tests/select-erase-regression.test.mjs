@@ -789,7 +789,7 @@ test('dragging a face moves the filled section and attached boundary lines toget
 });
 
 
-test('dragging object does not auto-snap when snap-to-grid is disabled', () => {
+test('dragging object auto-snaps to grid even when snap-to-grid toggle is disabled', () => {
   const shapeStore = new ShapeStore();
   const line = new Line({ id: 'child-line', start: isoUVToWorld(0, 0), end: isoUVToWorld(2, 0) });
   shapeStore.addShape(line);
@@ -807,13 +807,17 @@ test('dragging object does not auto-snap when snap-to-grid is disabled', () => {
   selectTool.onMouseMove({ worldPoint: { x: anchor.x + 3, y: anchor.y + 2 }, screenPoint: { x: 3, y: 2 } });
   selectTool.onMouseUp({ worldPoint: { x: anchor.x + 3, y: anchor.y + 2 }, screenPoint: { x: 3, y: 2 } });
 
+  const snapped = snapWorldToIso({ x: anchor.x + 3, y: anchor.y + 2 }).point;
+  const expectedDx = snapped.x - anchor.x;
+  const expectedDy = snapped.y - anchor.y;
+
   const objectNode = shapeStore.getNodeById(objectId);
-  assert.ok(Math.abs(objectNode.transform.x - 3) < 1e-6);
-  assert.ok(Math.abs(objectNode.transform.y - 2) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.x - expectedDx) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.y - expectedDy) < 1e-6);
 
   const moved = shapeStore.getShapeById(line.id);
-  assert.ok(Math.abs(moved.start.x - (initial.start.x + 3)) < 1e-6);
-  assert.ok(Math.abs(moved.start.y - (initial.start.y + 2)) < 1e-6);
+  assert.ok(Math.abs(moved.start.x - (initial.start.x + expectedDx)) < 1e-6);
+  assert.ok(Math.abs(moved.start.y - (initial.start.y + expectedDy)) < 1e-6);
 });
 
 test('dragging object selection moves object transform and descendants', () => {
@@ -832,13 +836,17 @@ test('dragging object selection moves object transform and descendants', () => {
   selectTool.onMouseMove({ worldPoint: { x: anchor.x + 10, y: anchor.y + 5 }, screenPoint: { x: 10, y: 5 } });
   selectTool.onMouseUp({ worldPoint: { x: anchor.x + 10, y: anchor.y + 5 }, screenPoint: { x: 10, y: 5 } });
 
+  const snapped = snapWorldToIso({ x: anchor.x + 10, y: anchor.y + 5 }).point;
+  const expectedDx = snapped.x - anchor.x;
+  const expectedDy = snapped.y - anchor.y;
+
   const objectNode = shapeStore.getNodeById(objectId);
-  assert.ok(Math.abs(objectNode.transform.x - 10) < 1e-6);
-  assert.ok(Math.abs(objectNode.transform.y - 5) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.x - expectedDx) < 1e-6);
+  assert.ok(Math.abs(objectNode.transform.y - expectedDy) < 1e-6);
 
   const moved = shapeStore.getShapeById(line.id);
-  assert.ok(Math.abs(moved.start.x - (initial.start.x + 10)) < 1e-6);
-  assert.ok(Math.abs(moved.start.y - (initial.start.y + 5)) < 1e-6);
+  assert.ok(Math.abs(moved.start.x - (initial.start.x + expectedDx)) < 1e-6);
+  assert.ok(Math.abs(moved.start.y - (initial.start.y + expectedDy)) < 1e-6);
 });
 
 test('left-click mouseup does not open context menu, right-click mouseup does', () => {
