@@ -12,6 +12,11 @@ import { FillTool } from "./tools/fillTool.js";
 import { isoUVToWorld } from "./core/isoGrid.js";
 import { normalizeEraseMode } from "./state/eraseMode.js";
 import { resolveSelectionGroupingAction } from "./utils/selectionGrouping.js";
+import {
+  applySelectionDraftToShapes,
+  getSelectionApplyDisabledState,
+  getSelectionStyleSummaryFromShapes,
+} from "./utils/selectionStyleDraft.js";
 
 const DISABLE_SCENE_GRAPH = true;
 const ENABLE_GROUPING = true;
@@ -63,6 +68,7 @@ const selectionBar = document.getElementById("selection-bar");
 const selectionBarCountEl = document.getElementById("selection-bar-count");
 const selectionGroupButton = document.getElementById("btnGroup");
 const selectionDeleteButton = document.getElementById("selection-delete-btn");
+const selectionApplyButton = document.getElementById("selection-apply-btn");
 const zOrderMenu = document.getElementById("z-order-context-menu");
 const zOrderFrontButton = document.getElementById("z-order-front-btn");
 const zOrderForwardButton = document.getElementById("z-order-forward-btn");
@@ -103,6 +109,15 @@ const onboardingDismissButton = document.getElementById("onboarding-dismiss-btn"
 
 let recentColors = [];
 const RECENT_COLOR_LIMIT = 5;
+
+const selectionStyleDraft = {
+  color: "#4aa3ff",
+  strokeWidth: 2,
+  supportsColor: false,
+  supportsStrokeWidth: false,
+  selectionSignature: "",
+  dirty: false,
+};
 
 const STORAGE_KEYS = {
   savedThemes: "bp_savedThemes",
@@ -858,26 +873,22 @@ function getSelectionGroupingAction() {
 }
 
 function getSelectionStyleSummary() {
-  const selectedShapes = getSelectedShapes();
-  const styleTargets = selectedShapes.filter((shape) => shape && ("strokeColor" in shape || "strokeWidth" in shape));
-  if (!styleTargets.length) {
-    return {
-      supportsColor: false,
-      supportsStrokeWidth: false,
-      color: appState.currentStyle.strokeColor,
-      strokeWidth: appState.currentStyle.strokeWidth,
-    };
-  }
+  return getSelectionStyleSummaryFromShapes(getSelectedShapes(), appState.currentStyle);
+}
 
-  const colorTarget = styleTargets.find((shape) => "strokeColor" in shape);
-  const strokeTarget = styleTargets.find((shape) => "strokeWidth" in shape);
+function getSelectionSignature() {
+  const ids = [...appState.selectedIds].sort();
+  return `${appState.selectedType || "none"}:${ids.join(",")}`;
+}
 
-  return {
-    supportsColor: !!colorTarget,
-    supportsStrokeWidth: !!strokeTarget,
-    color: colorTarget?.strokeColor ?? appState.currentStyle.strokeColor,
-    strokeWidth: strokeTarget?.strokeWidth ?? appState.currentStyle.strokeWidth,
-  };
+function syncSelectionDraftFromSummary(selectionStyle, { force = false } = {}) {
+  const nextSignature = getSelectionSignature();
+  const selectionChanged = selectionStyleDraft.selectionSignature !== nextSignature;
+  if (!force && selectionStyleDraft.dirty && !selectionChanged) return;
+  selectionStyleDraft.selectionSignature = nextSignature;
+  selectionStyleDraft.dirty = false;
+  selectionStyleDraft.color = selectionStyle.color;
+  selectionStyleDraft.strokeWidth = selectionStyle.strokeWidth;
 }
 
 function updateSelectionBar() {
@@ -890,17 +901,25 @@ function updateSelectionBar() {
   if (selectionBarCountEl) selectionBarCountEl.textContent = `Selection (${appState.selectedIds.size})`;
 
   const selectionStyle = getSelectionStyleSummary();
+  // UX note: controls are editable drafts; selected shapes are mutated only when Apply is clicked.
+  syncSelectionDraftFromSummary(selectionStyle);
+  selectionStyleDraft.supportsColor = selectionStyle.supportsColor;
+  selectionStyleDraft.supportsStrokeWidth = selectionStyle.supportsStrokeWidth;
+
   if (selectionLineColor) {
-    selectionLineColor.value = selectionStyle.color;
+    selectionLineColor.value = selectionStyleDraft.color;
     selectionLineColor.disabled = !selectionStyle.supportsColor;
     selectionLineColor.title = selectionStyle.supportsColor ? "Set selected color" : "Color not supported for this selection";
   }
   if (selectionStrokeWidth) {
-    selectionStrokeWidth.value = String(selectionStyle.strokeWidth);
+    selectionStrokeWidth.value = String(selectionStyleDraft.strokeWidth);
     selectionStrokeWidth.disabled = !selectionStyle.supportsStrokeWidth;
     selectionStrokeWidth.title = selectionStyle.supportsStrokeWidth
       ? "Set selected stroke width"
       : "Stroke width not supported for this selection";
+  }
+  if (selectionApplyButton) {
+    selectionApplyButton.disabled = getSelectionApplyDisabledState(selectionStyle);
   }
 
   if (selectionGroupButton) {
@@ -2148,26 +2167,27 @@ strokeWidthInput.addEventListener("change", (event) => {
 });
 
 selectionLineColor?.addEventListener("input", (event) => {
-  const value = event.target.value;
-  setUnifiedColor(value);
-  applyToSelected((shape) => {
-    if ("strokeColor" in shape) shape.strokeColor = value;
-    if ("fillColor" in shape && shape.type === "face") shape.fillColor = value;
-  });
-  refreshStyleUI();
-  updateSelectionBar();
+  selectionStyleDraft.color = event.target.value;
+  selectionStyleDraft.dirty = true;
 });
-selectionLineColor?.addEventListener("change", () => pushHistoryState());
 
 selectionStrokeWidth?.addEventListener("input", (event) => {
   const value = Number.parseInt(event.target.value, 10);
   if (!Number.isFinite(value)) return;
-  appState.currentStyle.strokeWidth = value;
-  applyToSelected((shape) => { if ("strokeWidth" in shape) shape.strokeWidth = value; });
+  selectionStyleDraft.strokeWidth = value;
+  selectionStyleDraft.dirty = true;
+});
+
+selectionApplyButton?.addEventListener("click", () => {
+  if (getSelectionApplyDisabledState(selectionStyleDraft)) return;
+  pushHistoryState();
+  applySelectionDraftToShapes(getSelectedShapes(), selectionStyleDraft);
+  setUnifiedColor(selectionStyleDraft.color);
+  appState.currentStyle.strokeWidth = selectionStyleDraft.strokeWidth;
+  selectionStyleDraft.dirty = false;
   refreshStyleUI();
   updateSelectionBar();
 });
-selectionStrokeWidth?.addEventListener("change", () => pushHistoryState());
 
 selectionFillColor?.addEventListener("input", (event) => {
   const value = event.target.value;
