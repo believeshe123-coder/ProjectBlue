@@ -239,7 +239,7 @@ export class SelectTool extends BaseTool {
       clickedShapeId: event?.button === 2 ? targetId : null,
       dragIds,
       moveOptions: isDraggingObjects ? {} : { lineOnly: appState.selectedType === "line" },
-      forceGridSnap: !isDraggingObjects && targetNode?.kind === "shape" && targetNode.shapeType === "face",
+      forceGridSnap: isDraggingObjects || (targetNode?.kind === "shape" && targetNode.shapeType === "face"),
       anchorOriginal: this.getAnchorWorld(dragIds[0]) ?? { ...worldPoint },
       didDrag: false,
       historyCaptured: false,

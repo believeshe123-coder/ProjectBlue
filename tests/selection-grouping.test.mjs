@@ -33,3 +33,15 @@ test('single face does not show grouping action', () => {
 
   assert.equal(action, null);
 });
+
+
+test('line selection without enclosed fill does not show group to object action', () => {
+  const action = resolveSelectionGroupingAction({
+    enableGrouping: true,
+    selectedType: 'line',
+    selectedCount: 4,
+    enclosedFillCount: 0,
+  });
+
+  assert.equal(action, null);
+});

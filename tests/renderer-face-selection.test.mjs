@@ -146,3 +146,76 @@ test('disableSceneGraph mode still renders faces for compatibility', () => {
   const fillCount = ctx.ops.filter((op) => op[0] === 'fill').length;
   assert.ok(fillCount >= 1, 'expected face fill to render in disableSceneGraph compatibility mode');
 });
+
+
+test('selected object renders a bounds outline around selected area', () => {
+  const ctx = makeMockContext();
+  const camera = { worldToScreen: (p) => p, screenToWorld: (p) => p };
+
+  const shapeStore = {
+    getFillRegions() { return []; },
+    getComputedRegions() { return []; },
+    getRenderableShapesSorted() {
+      return [
+        {
+          id: 'face-1',
+          type: 'face',
+          pointsWorld: [
+            { x: 10, y: 10 },
+            { x: 30, y: 10 },
+            { x: 30, y: 30 },
+          ],
+          fillColor: '#4aa3ff',
+          fillAlpha: 1,
+          visible: true,
+        },
+      ];
+    },
+    getDescendantIds() { return ['face-1']; },
+    getNodeById(id) {
+      if (id === 'face-1') return { id, kind: 'shape', shapeType: 'face' };
+      return { id, kind: 'object' };
+    },
+    toShapeView(id) {
+      if (id !== 'face-1') return null;
+      return {
+        id: 'face-1',
+        type: 'face',
+        pointsWorld: [
+          { x: 10, y: 10 },
+          { x: 30, y: 10 },
+          { x: 30, y: 30 },
+        ],
+      };
+    },
+    getShapeBounds(shape) {
+      const xs = shape.pointsWorld.map((p) => p.x);
+      const ys = shape.pointsWorld.map((p) => p.y);
+      return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+    },
+  };
+
+  const appState = {
+    selectedIds: new Set(['object-1']),
+    selectedType: 'object',
+    disableSceneGraph: false,
+    enableFill: true,
+    debugRegions: false,
+  };
+
+  const renderer = new Renderer({
+    ctx,
+    camera,
+    shapeStore,
+    appState,
+    getCanvasMetrics: () => ({ canvasCssW: 200, canvasCssH: 200, currentDpr: 1 }),
+    ensureCanvasSize: () => {},
+  });
+
+  renderer.renderFrame();
+
+  const moveToOps = ctx.ops.filter((op) => op[0] === 'moveTo');
+  const lineToOps = ctx.ops.filter((op) => op[0] === 'lineTo');
+  assert.ok(moveToOps.some((op) => op[1] === 10 && op[2] === 10), 'expected bounds outline to start at top-left corner');
+  assert.ok(lineToOps.some((op) => op[1] === 30 && op[2] === 30), 'expected bounds outline to include bottom-right corner');
+});
