@@ -1260,6 +1260,9 @@ export class ShapeStore {
   resolveFaceBoundaryLineIds(uvCycle, faceId) {
     if (!Array.isArray(uvCycle) || uvCycle.length < 3) return [];
     const candidateLineIds = this.getBoundaryLineIdsForRegion(uvCycle);
+    const fallbackTemplateNode = candidateLineIds
+      .map((lineId) => this.nodes[lineId])
+      .find((node) => node?.kind === "shape" && node.shapeType === "line");
     const resolvedIds = [];
 
     for (let i = 0; i < uvCycle.length; i += 1) {
@@ -1274,7 +1277,14 @@ export class ShapeStore {
       });
 
       if (!matchingLineId) {
-        const createdLineId = this.createFaceBoundaryLine({ start, end, startUV, endUV, faceId });
+        const createdLineId = this.createFaceBoundaryLine({
+          start,
+          end,
+          startUV,
+          endUV,
+          faceId,
+          templateNode: fallbackTemplateNode,
+        });
         if (createdLineId) resolvedIds.push(createdLineId);
         continue;
       }
